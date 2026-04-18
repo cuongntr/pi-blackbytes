@@ -45,3 +45,6 @@ __pycache__/
 
 # Documentation build
 docs/_build/
+
+# bv (beads viewer) local config and caches
+.bv/

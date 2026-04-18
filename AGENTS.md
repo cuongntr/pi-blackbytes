@@ -1,5 +1,75 @@
+# pi-blackbytes
 
+Pi coding-agent extension that replaces MCP servers (websearch, context7, grep.app) with direct HTTP calls, adds local tools (hashline_edit, ast-grep, grep, glob), and provides sub-agent delegation (explore, oracle, librarian, general).
 
+## Commands
+
+```bash
+npm run build          # tsc → dist/
+npm test               # node --import tsx --test 'src/**/*.test.ts'
+npm run lint           # biome check src/
+npm run lint:fix       # biome check --fix src/
+npm run format         # biome format --write src/
+npm run bench:startup  # Startup latency benchmark
+npm run bench:tool-result  # Tool result processing benchmark
+npm run check:size     # Package must be < 500KB gzipped
+```
+
+Run in order: `lint → build → test`. Tests use Node's built-in test runner (`node:test`), not Jest/Vitest.
+
+## Architecture
+
+```
+src/index.ts → bootstrap(pi) → wires 8 event handlers:
+  session_start     → loads config, registers ALL tools + sub-agents
+  before_agent_start → injects <available_resources> into system prompt
+  before_provider_request → maps reasoning effort per model family
+  model_select      → tracks current model family
+  tool_result       → rewrites hashline_edit tool results
+  tool_call         → (TODO)
+  resources_discover → (TODO)
+  session_shutdown   → flushes logger
+```
+
+### Registration flow (critical)
+All tools and sub-agents MUST be registered in `handleSessionStart()` (`src/handlers/index.ts`). If you add a new tool, you must:
+1. Create the register function in `src/tools/<name>/index.ts`
+2. Import and call it in `handleSessionStart()`
+3. Add the tool name to `DEFAULT_TOOLS` in `src/config/enabled-set.ts`
+4. Add it to `MCP_SERVERS` or `BUNDLED_TOOLS` in `src/handlers/before-agent-start.ts` so it appears in `<available_resources>`
+
+### Tool name conventions
+Tool names use `snake_case` everywhere (e.g., `websearch_search`, `context7_resolve_library_id`, `grep_app_search_github`). The names in `enabled-set.ts`, `before-agent-start.ts`, and the `registerXxxTool()` functions must all match exactly.
+
+### Config
+Config lives in `~/.pi/agent/settings.json` (or `$PI_AGENT_DIR/settings.json`) under a `"blackbytes"` key. Schema: `src/config/schema.ts`. Config controls:
+- `disabled_tools` / `disabled_sub_agents` — disable specific tools or agents
+- `hashline_edit` — enable/disable hashline rewriting (default: true)
+- `copilot_initiator_header` — enable/disable copilot header (default: true)
+- `websearch.provider` — `"exa"` or `"tavily"` with corresponding API key
+- `sub_agents.<name>.model` — override model per sub-agent
+
+### Sub-agents
+Sub-agents spawn `pi -p` subprocesses via `src/sub-agents/runner.ts`. Each delegate tool (explore, oracle, librarian, general) is registered as a regular tool that invokes the runner. The runner passes `reasoningEffort` via `BLACKBYTES_REASONING_EFFORT` env var.
+
+## Code style
+
+- Biome: 2-space indent, double quotes, semicolons, 100-char line width
+- `noExplicitAny: off` in biome config — `any` is tolerated but should be avoided
+- ESM only (`"type": "module"`), Node16 module resolution
+- All imports use `.js` extension (required by Node16 moduleResolution)
+- Tests: `src/**/*.test.ts`, colocated next to source. Use `describe`/`it` from `node:test` and `assert` from `node:assert/strict`
+- Test helpers in `src/test-utils/`
+
+## Key constraints
+
+- Peer dependency: `@mariozechner/pi-coding-agent@^0.67` — the `ExtensionAPI` type comes from there (`src/types/pi.ts` has a local declaration)
+- Package budget: < 500KB gzipped (enforced in CI)
+- Node >= 20 required
+- Dependencies are minimal: `zod` (config validation), `@sinclair/typebox` (JSON schema for tool params), `fast-glob` (glob tool)
+- `processToolResult` in `src/handlers/tool-result.ts` creates a new object — must apply `modified.content` back to the mutable event in the handler
+
+---
 <!-- bv-agent-instructions-v2 -->
 
 ---

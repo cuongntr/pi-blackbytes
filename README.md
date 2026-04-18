@@ -5,7 +5,7 @@ Pi coding-agent extension providing local search, web research, documentation lo
 ## Installation
 
 ```
-pi install npm:@blackbytes/pi-blackbytes
+pi install bun:@blackbytes/pi-blackbytes
 ```
 
 ## Quick Start

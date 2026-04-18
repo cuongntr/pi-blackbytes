@@ -5,17 +5,17 @@ Pi coding-agent extension that replaces MCP servers (websearch, context7, grep.a
 ## Commands
 
 ```bash
-npm run build          # tsc → dist/
-npm test               # node --import tsx --test 'src/**/*.test.ts'
-npm run lint           # biome check src/
-npm run lint:fix       # biome check --fix src/
-npm run format         # biome format --write src/
-npm run bench:startup  # Startup latency benchmark
-npm run bench:tool-result  # Tool result processing benchmark
-npm run check:size     # Package must be < 500KB gzipped
+bun run build          # tsc → dist/
+bun run test           # node --import tsx --test 'src/**/*.test.ts'
+bun run lint           # biome check src/
+bun run lint:fix       # biome check --fix src/
+bun run format         # biome format --write src/
+bun run bench:startup  # Startup latency benchmark
+bun run bench:tool-result  # Tool result processing benchmark
+bun run check:size     # Package must be < 500KB gzipped
 ```
 
-Run in order: `lint → build → test`. Tests use Node's built-in test runner (`node:test`), not Jest/Vitest.
+Run in order: `lint → build → test`. Tests use Node's built-in test runner (`node:test`), not Jest/Vitest or bun's test runner.
 
 ## Architecture
 

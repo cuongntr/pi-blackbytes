@@ -64,10 +64,10 @@ Khác biệt then chốt so OpenCode:
 
 | # | Tính năng oc-blackbytes | Cách port sang Pi | Mức độ parity |
 |---|---|---|---|
-| G1 | 5 sub-agents (bytes, explore, oracle, librarian, general) | **Sub-agent tools**: mỗi agent thành 1 custom tool `delegate_bytes`, `delegate_explore`, `delegate_oracle`, `delegate_librarian`, `delegate_general` — spawn Pi session con (`pi -p` / programmatic `AgentSession`) với system prompt riêng và model riêng. | 95% |
+| G1 | 5 agent personas (bytes, explore, oracle, librarian, general) | `bytes` là main agent prompt được inject toàn cục; 4 persona còn lại được expose thành custom tools `delegate_explore`, `delegate_oracle`, `delegate_librarian`, `delegate_general` — spawn Pi session con (`pi -p` / programmatic `AgentSession`) với system prompt riêng, model riêng, và tool set bị giới hạn theo từng persona. | 95% |
 | G2 | 5 bundled tools (hashline_edit, ast_grep_search, ast_grep_replace, grep, glob) | Port 1:1 qua `pi.registerTool` — reuse code TypeScript hiện tại trong `src/extensions/tools/**`, chỉ đổi runtime adapter. | 100% |
-| G3 | 3 MCPs (websearch Exa/Tavily, context7, grep_app) | Thành custom tools: `websearch_search`, `websearch_fetch`, `context7_resolve`, `context7_docs`, `grep_app_search`. Gọi HTTP trực tiếp. | 100% functional parity |
-| G4 | Hashline edit post-processing (`LINE#ID` trên read, line-count normalize trên write) | Subscribe `tool_result` với `event.toolName === "read"` / `"write"` / `"edit"`, rewrite `content`. Opt-in qua setting `hashline_edit`. Default `true`. | 100% |
+| G3 | 3 MCPs (websearch Exa/Tavily, context7, grep_app) | Thành custom tools với **canonical names** dùng xuyên suốt plan và codebase: `websearch_search`, `websearch_fetch`, `context7_resolve_library_id`, `context7_query_docs`, `grep_app_search_github`. Gọi HTTP trực tiếp. | 100% functional parity |
+| G4 | Hashline edit post-processing (`LINE#ID` trên read, line-count normalize trên write) | Subscribe `tool_result` với `event.toolName === "read"` / `"write"`, rewrite `content`. Opt-in qua setting `hashline_edit`. Default `true`. | 100% |
 | G5 | `x-initiator: agent` header cho Copilot | Subscribe `before_provider_request`, detect provider là GitHub Copilot (qua `ctx.model.provider`), mutate payload headers. | 100% |
 | G6 | chat.params model-family adaptation (reasoningEffort → thinking) | Subscribe `model_select` + `before_provider_request`. Map reasoning config theo model family hiện hành. | 90% — Pi có thể đã tự map một phần; chỉ can thiệp phần Pi chưa hỗ trợ. |
 | G7 | `<available_resources>` prompt injection | Subscribe `before_agent_start`, append block liệt kê tools/skills enabled vào `systemPrompt`. | 100% |
@@ -122,7 +122,7 @@ pi-blackbytes/
 │   ├── handlers/
 │   │   ├── before-agent-start.ts  # <available_resources> injection
 │   │   ├── before-provider-request.ts  # x-initiator header + thinking params
-│   │   ├── tool-result.ts         # hashline rewrite cho read/write/edit
+│   │   ├── tool-result.ts         # hashline rewrite cho read/write
 │   │   └── model-select.ts        # track active model family
 │   ├── tools/                     # ported 1:1 từ src/extensions/tools/**
 │   │   ├── hashline-edit/
@@ -132,9 +132,8 @@ pi-blackbytes/
 │   │   ├── websearch/             # Exa + Tavily custom tool
 │   │   ├── context7/              # 2 tools: resolve + docs
 │   │   └── grep-app/              # grep.app API tool
-│   ├── sub-agents/                # delegate_* tools cho bytes/explore/oracle/librarian/general
+│   ├── sub-agents/                # delegate_* tools cho explore/oracle/librarian/general
 │   │   ├── runner.ts              # spawn Pi session helper
-│   │   ├── bytes.ts
 │   │   ├── explore.ts
 │   │   ├── oracle.ts
 │   │   ├── librarian.ts
@@ -200,7 +199,20 @@ export default function (pi: ExtensionAPI) {
 
 ### 4.4 Sub-agent delegation (G1)
 
-Mỗi sub-agent (`explore`, `oracle`, `librarian`, `general`) được expose thành 1 tool. `bytes` không cần vì chính nó là main agent (ta inject prompt bytes qua `before_agent_start`).
+`bytes` là main agent persona của extension; không expose thành delegate tool trong MVP. Mỗi sub-agent còn lại (`explore`, `oracle`, `librarian`, `general`) được expose thành 1 tool và chạy trong Pi session con với tool allowlist tương ứng, không chỉ dựa vào prompt instruction.
+
+**Capability matrix cho nested sessions:**
+- `delegate_explore`: read/search only; không write; không shell/command execution.
+- `delegate_oracle`: read-only consultation; không write; không shell; chỉ dùng web/docs tools nếu được bật rõ ràng trong config.
+- `delegate_librarian`: read/search/docs/web only; không write; không local command execution.
+- `delegate_general`: full implementation agent; có thể write và dùng command/tool theo policy của session cha.
+
+**Execution contract cho MVP:**
+- Nested delegation bị giới hạn `maxDepth = 1`; sub-agent không được gọi tiếp `delegate_*` tools khác.
+- Mỗi `delegate_*` tool phải có timeout mặc định, propagate cancellation từ session cha, và normalize mọi failure thành structured text result + machine-readable `details`.
+- `cwd` kế thừa từ session cha; environment chỉ inherit allowlisted variables cần thiết cho provider/tool execution.
+- Tool allowlist phải được enforce ở runtime, không chỉ qua prompt. Nếu execution path không enforce được allowlist thì path đó không được dùng cho persona tương ứng trong MVP.
+- Streaming là optional; nếu unsupported phải buffer rồi trả 1 kết quả cuối cùng theo cùng output schema.
 
 ```typescript
 // src/sub-agents/oracle.ts (pseudo)
@@ -218,6 +230,7 @@ pi.registerTool({
       userPrompt: buildPrompt(params),
       model: cfg.agents.oracle?.model ?? "openai/gpt-5.4",
       reasoningEffort: "high",
+      allowedTools: buildAllowedToolsForPersona("oracle", cfg),
       cwd: ctx.cwd,
       signal,
       onUpdate,
@@ -227,7 +240,7 @@ pi.registerTool({
 });
 ```
 
-`runNestedPi` gọi `@mariozechner/pi-agent-core` API hoặc `execa` subprocess `pi -p --system-prompt-file ... --model ...`. Chọn programmatic nếu Pi export `AgentSession`; fallback subprocess.
+`runNestedPi` gọi `@mariozechner/pi-agent-core` API hoặc `execa` subprocess `pi -p --system-prompt-file ... --model ...`. Chọn programmatic nếu Pi export `AgentSession`; fallback subprocess. Kết quả M0 phải chốt chiến lược này trước khi vào milestone sub-agent.
 
 ### 4.5 Hashline post-processing (G4)
 
@@ -317,6 +330,8 @@ export const BlackbytesConfigSchema = z.object({
 
 ### 5.1 Tools to register
 
+Tool names trong bảng dưới đây là **public contract duy nhất của MVP**; prompts, skills, `<available_resources>`, docs, và tests phải dùng đúng các tên này.
+
 | Tool name | Source | Notes |
 |---|---|---|
 | `hashline_edit` | Port `src/extensions/tools/hashline-edit/` | Dùng chung helper parse LINE#ID |
@@ -324,32 +339,38 @@ export const BlackbytesConfigSchema = z.object({
 | `ast_grep_replace` | Port trên | |
 | `grep` | Port `src/extensions/tools/grep/` | Dùng ripgrep nếu có, fallback Node |
 | `glob` | Port `src/extensions/tools/glob/` | `fast-glob` |
-| `websearch_search` | New — gọi Exa `search` hoặc Tavily | Tên tool match MCP cũ để skill không vỡ |
-| `websearch_fetch` | New — fetch URL | |
-| `context7_resolve_library_id` | HTTP Context7 API | |
-| `context7_query_docs` | HTTP Context7 API | |
-| `grep_app_search_github` | HTTP grep.app API | |
-| `delegate_explore` | Sub-agent runner | |
-| `delegate_oracle` | Sub-agent runner | |
-| `delegate_librarian` | Sub-agent runner | |
-| `delegate_general` | Sub-agent runner | |
+| `websearch_search` | New — gọi Exa `search` hoặc Tavily | Canonical name cho search parity |
+| `websearch_fetch` | New — fetch URL | Canonical name cho fetch parity |
+| `context7_resolve_library_id` | HTTP Context7 API | Canonical name dùng trong prompts/skills/tests |
+| `context7_query_docs` | HTTP Context7 API | Canonical name dùng trong prompts/skills/tests |
+| `grep_app_search_github` | HTTP grep.app API | Canonical name dùng trong prompts/skills/tests |
+| `delegate_explore` | Sub-agent runner | Read/search only |
+| `delegate_oracle` | Sub-agent runner | Read-only consultation |
+| `delegate_librarian` | Sub-agent runner | Docs/web research only |
+| `delegate_general` | Sub-agent runner | Full implementation agent |
 
 Tất cả tools respect `disabled_tools` config.
 
+**Activation semantics:**
+- `disabled_tools` áp dụng cho bundled tools và HTTP tools theo exact public tool name.
+- `disabled_sub_agents` áp dụng riêng cho `delegate_*` tools.
+- `before_agent_start`, `resources_discover`, `/blackbytes-status`, và mọi capability listing khác phải dùng cùng một computed enabled-set; không được liệt kê resource đã bị disable.
+- Nếu Pi không hỗ trợ unregister động, extension phải compute enabled-set tại `session_start` và chỉ expose/activate đúng tập đó cho toàn bộ session.
+
 ### 5.2 Event handlers
 
-1. **`session_start`** — load config, log version, initial state; call `pi.setActiveTools` để lọc theo `disabled_tools`.
-2. **`resources_discover`** — return `skillPaths` trỏ tới `skills/` của package.
-3. **`before_agent_start`** — inject `<available_resources>` + language-matching block vào system prompt.
+1. **`session_start`** — load config, log version, initial state, compute enabled-set duy nhất cho tools/sub-agents/skills, rồi call `pi.setActiveTools` để lọc theo capability graph đã resolve.
+2. **`resources_discover`** — return `skillPaths` trỏ tới `skills/` của package, nhưng chỉ expose resources phù hợp với enabled-set hiện hành.
+3. **`before_agent_start`** — inject `<available_resources>` + language-matching block vào system prompt; phải detect block đã tồn tại để tránh append lặp qua nhiều turn.
 4. **`before_provider_request`** — thêm `x-initiator: agent` nếu provider là Copilot; map reasoning params nếu Pi chưa tự làm.
 5. **`model_select`** — cache model family để handler khác dùng.
 6. **`tool_call`** (optional) — gate lệnh nguy hiểm (disabled mặc định, opt-in).
-7. **`tool_result`** — hashline rewrite cho `read`/`write` khi bật.
+7. **`tool_result`** — hashline rewrite cho `read`/`write` khi bật; skip non-text payloads, preserve `isError`, và guard input/payload không đúng format mong đợi.
 8. **`session_shutdown`** — flush logger buffer.
 
 ### 5.3 Commands
 
-- `/setup-models` — wizard như oc-blackbytes: detect providers, ask defaults, recommend reasoning, ghi settings. Dùng `ctx.ui.select/input/confirm`, write với `JSON.stringify` + `fs.writeFile` (KHÔNG dùng JSONC).
+- `/setup-models` — wizard như oc-blackbytes: detect providers, ask defaults, recommend reasoning, ghi settings. Dùng `ctx.ui.select/input/confirm`, write với `JSON.stringify` + `fs.writeFile` (KHÔNG dùng JSONC). Phải preserve mọi keys không liên quan, de-duplicate `packages`, validate JSON trước khi ghi, không log secret values, và yêu cầu confirm trước khi overwrite giá trị `blackbytes` đã tồn tại.
 - `/blackbytes-status` (optional, nice-to-have) — hiện enabled tools/sub-agents/config.
 
 ### 5.4 Skills bundled
@@ -370,7 +391,13 @@ Tất cả tools respect `disabled_tools` config.
 - **Node runtime:** Node ≥ 20.
 - **Logging:** file log rotate theo ngày, max 10MB.
 - **Error handling:** handler failure KHÔNG crash Pi — bắt toàn bộ, log, `ctx.ui.notify("error", ...)`.
+- **Config safety:** `/setup-models` không được làm mất settings hiện có, không được ghi JSON invalid, và phải xử lý rõ các case file thiếu / malformed / concurrent update.
 - **Security:** không thực thi lệnh hệ thống ngoài các tool bundled; API keys đọc từ settings không log.
+- **Validation:** có integration tests cho `before_agent_start`, `before_provider_request`, `tool_result`, nested sub-agent runner, và config loading; mỗi test phải cover cả success path lẫn error path.
+- **Output safety:** hashline rewrite phải skip non-text payloads, preserve `isError` responses, và không duplicate prompt/resource blocks qua nhiều turn.
+- **HTTP resilience:** mọi HTTP-backed tool phải có timeout mặc định, error normalization nhất quán, redaction của secrets/headers, và retry policy rõ ràng hoặc explicit no-retry policy theo provider.
+- **Prompt/idempotency safety:** `<available_resources>` injection phải detect block đã tồn tại để không append lặp; hashline rewrite phải có guard cho large payloads, binary/non-text responses, và input không đúng format mong đợi.
+- **Observability:** logs phải đủ để debug provider/tool failure nhưng không dump full third-party payload hoặc secret-bearing headers/query params.
 
 ---
 
@@ -391,22 +418,23 @@ Tất cả tools respect `disabled_tools` config.
 
 | M | Scope | Duration |
 |---|---|---|
-| **M1 — Skeleton** | Package layout, entry point, config loader, `session_start` handler, logger | 1 tuần |
+| **M0 — Feasibility spike** | Verify nested Pi session strategy (`AgentSession` vs subprocess), `before_provider_request` header mutation cho Copilot, dynamic tool activation semantics, prompt mutation hooks, và nested-session tool restriction path. M0 phải xuất ra decision record chốt: execution path mặc định, fallback path, tool-allowlist enforcement, timeout/cancellation semantics, result transport contract, và recursion guard cho nested sessions. M1/M4 không bắt đầu nếu các quyết định này chưa được ghi lại. | 0.5 tuần |
+| **M1 — Skeleton** | Package layout, entry point, config loader, `session_start` handler, logger, và integration path đã được chốt từ M0 | 1 tuần |
 | **M2 — Tools parity** | Port 5 bundled tools + 5 MCP-replacement tools + unit tests | 1.5 tuần |
 | **M3 — Post-processing & injection** | Hashline `tool_result`, `<available_resources>`, Copilot header | 1 tuần |
-| **M4 — Sub-agents** | Delegate_* tools + nested Pi runner + prompts bundled | 1.5 tuần |
+| **M4 — Sub-agents** | Delegate_* tools + nested Pi runner + prompts bundled + allowlist enforcement theo persona | 1.5 tuần |
 | **M5 — UX** | `/setup-models` wizard, skills, README, examples | 1 tuần |
 | **M6 — QA & release** | E2E tests, docs site, npm publish v0.1.0 | 1 tuần |
 
-**Total estimate:** ~7 tuần cho MVP.
+**Total estimate:** ~7.5 tuần cho MVP.
 
 ---
 
 ## 9. Open Questions
 
-1. Pi có export `AgentSession` programmatic API để spawn sub-agent không, hay phải dùng subprocess? — cần verify trong `@mariozechner/pi-agent-core`.
-2. `before_provider_request` có cho phép thêm custom HTTP headers vào payload hay chỉ body? — cần test cụ thể cho Copilot provider.
-3. `pi.setActiveTools` có dynamic được sau `session_start` không? — doc nói YES nhưng verify edge-case.
+1. Pi có export `AgentSession` programmatic API để spawn sub-agent không, hay phải dùng subprocess? — **M0 phải chốt trước khi vào M4**.
+2. `before_provider_request` có cho phép thêm custom HTTP headers vào payload hay chỉ body? — **M0 phải chốt trước khi triển khai G5**.
+3. `pi.setActiveTools` có dynamic được sau `session_start` không? — **M0 phải chốt trước khi triển khai filtering tool/sub-agent**.
 4. Model fallback chain có nên port ở MVP không hay để v2?
 5. Có nên bundle thêm agent `bytes` dưới dạng skill-first thay vì inject system prompt toàn cục? (tác động lớn tới UX).
 

@@ -5,7 +5,7 @@ export interface ToolMeta {
   readonly name: string;
 }
 
-export interface McpServerMeta {
+export interface ToolGroupMeta {
   readonly name: string;
   readonly description: string;
   readonly tools: readonly string[];
@@ -24,7 +24,7 @@ export const BUNDLED_TOOLS: readonly ToolMeta[] = [
   { name: "glob" },
 ];
 
-export const MCP_SERVERS: readonly McpServerMeta[] = [
+export const TOOL_GROUPS: readonly ToolGroupMeta[] = [
   {
     name: "websearch",
     description: "web search and page fetching",
@@ -64,7 +64,7 @@ export const DEFAULT_SKILLS: readonly string[] = [
 // Derived lists for enabled-set filtering
 export const ALL_TOOL_NAMES: readonly string[] = [
   ...BUNDLED_TOOLS.map((t) => t.name),
-  ...MCP_SERVERS.flatMap((s) => s.tools),
+  ...TOOL_GROUPS.flatMap((s) => s.tools),
 ];
 
 export const ALL_SUB_AGENT_NAMES: readonly string[] = SUB_AGENTS.map((a) => a.name);

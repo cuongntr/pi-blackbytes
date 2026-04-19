@@ -34,7 +34,7 @@ export async function handleSessionStart(pi: ExtensionAPI, ..._args: any[]): Pro
   registerAstGrepReplaceTool(pi);
   registerGlobTool(pi);
   registerGrepTool(pi);
-  // HTTP tools (MCP replacements)
+  // HTTP-based tool groups
   registerWebsearchSearchTool(pi);
   registerWebsearchFetchTool(pi);
   registerResolveLibraryIdTool(pi);

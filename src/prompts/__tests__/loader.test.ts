@@ -11,19 +11,19 @@ describe("loadBytesPrompt", () => {
   it("loads default variant for claude family", () => {
     setModelFamily("claude-sonnet-4-20250514");
     const prompt = loadBytesPrompt();
-    assert.ok(prompt.includes("Bytes"));
+    assert.ok(prompt.includes("Simple-first"));
     assert.ok(prompt.length > 0);
   });
 
   it("loads gpt variant for GPT family", () => {
     const prompt = loadBytesPrompt("gpt");
-    assert.ok(prompt.includes("Bytes"));
+    assert.ok(prompt.includes("Simple-first"));
     assert.ok(prompt.length > 0);
   });
 
   it("loads gemini variant for Gemini family", () => {
     const prompt = loadBytesPrompt("gemini");
-    assert.ok(prompt.includes("Bytes"));
+    assert.ok(prompt.includes("Simple-first"));
     assert.ok(prompt.length > 0);
   });
 

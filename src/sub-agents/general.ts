@@ -18,7 +18,7 @@ export function registerDelegateGeneralTool(pi: ExtensionAPI, spawnFn?: SpawnFn)
       "productive engineer that executes well-defined work end-to-end. Use when you " +
       "need to offload coding, refactoring, debugging, or multi-file changes. " +
       "Full write access: the sub-agent receives all enabled extension tools " +
-      "(read, write, bash, search, MCP tools, bundled tools) except delegate_* tools " +
+      "(read, write, bash, search, extension tools) except delegate_* tools " +
       "to prevent recursive sub-agent delegation.",
     parameters: Type.Object({
       task: Type.String({

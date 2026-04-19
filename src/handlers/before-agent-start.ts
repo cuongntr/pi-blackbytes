@@ -1,5 +1,5 @@
 import { getEnabledSet } from "../config/enabled-set.js";
-import { BUNDLED_TOOLS, MCP_SERVERS, SUB_AGENTS } from "../config/resource-metadata.js";
+import { BUNDLED_TOOLS, SUB_AGENTS, TOOL_GROUPS } from "../config/resource-metadata.js";
 import { loadBytesPrompt } from "../prompts/loader.js";
 
 // ---------------------------------------------------------------------------
@@ -18,7 +18,7 @@ function buildResourcesBlock(
   enabledSubAgents: ReadonlySet<string>,
 ): string {
   const lines: string[] = [
-    "You have access to a set of tools you can use to answer the user's question.",
+    "The following resources are enabled in this session. Only reference tools, tool groups, and agents listed here \u2014 others may be disabled or unavailable.",
     "",
   ];
 
@@ -28,12 +28,11 @@ function buildResourcesBlock(
     lines.push(`Bundled tools: ${activeBundled.join(", ")}`);
   }
 
-  // MCP servers
-  for (const server of MCP_SERVERS) {
-    const activeTools = server.tools.filter((t) => enabledTools.has(t));
-    if (activeTools.length === 0) continue;
-    lines.push(`MCP servers: ${server.name} (${server.description})`);
-    lines.push(`MCP tools namespaced as {server}_{tool}: ${activeTools.join(", ")}`);
+  // External tool groups
+  const activeGroups = TOOL_GROUPS.filter((g) => g.tools.some((t) => enabledTools.has(t)));
+  if (activeGroups.length > 0) {
+    const groupList = activeGroups.map((g) => `${g.name} (${g.description})`).join(", ");
+    lines.push(`External tool groups: ${groupList}`);
   }
 
   // Available agents

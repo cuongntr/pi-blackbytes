@@ -1,7 +1,12 @@
 import assert from "node:assert/strict";
 import { beforeEach, describe, it } from "node:test";
 import { _resetEnabledSet, initEnabledSet } from "../../config/enabled-set.js";
-import { ALL_TOOL_NAMES, MCP_SERVERS, SUB_AGENTS } from "../../config/resource-metadata.js";
+import {
+  ALL_TOOL_NAMES,
+  BUNDLED_TOOLS,
+  SUB_AGENTS,
+  TOOL_GROUPS,
+} from "../../config/resource-metadata.js";
 import { parseBlackbytesConfig } from "../../config/schema.js";
 import { injectPromptAugmentation } from "../before-agent-start.js";
 
@@ -28,13 +33,13 @@ describe("injectPromptAugmentation", () => {
     assert.ok(result.includes("hashline_edit"), "bundled tool listed");
   });
 
-  it("includes Bytes prompt guidance in augmentation block", () => {
+  it("includes prompt guidance in augmentation block", () => {
     initEnabledSet(makeConfig());
     const result = injectPromptAugmentation("Base prompt.");
-    assert.ok(result.includes("Bytes"), "Bytes prompt content present");
+    assert.ok(result.includes("Guardrails"), "prompt guidance content present");
     assert.ok(
-      result.indexOf("Bytes") < result.indexOf("<available_resources>"),
-      "Bytes prompt appears before available_resources",
+      result.indexOf("Guardrails") < result.indexOf("<available_resources>"),
+      "prompt guidance appears before available_resources",
     );
   });
 
@@ -51,11 +56,11 @@ describe("injectPromptAugmentation", () => {
     assert.ok(second.startsWith(original), "original text still at start");
   });
 
-  it("disabled tool is excluded from resources block", () => {
+  it("disabled tool group is excluded when all its tools are disabled", () => {
     initEnabledSet(makeConfig({ disabled_tools: ["grep_app_search_github"] }));
     const result = injectPromptAugmentation("prompt");
-    assert.ok(!result.includes("grep_app_search_github"), "disabled tool not listed");
-    assert.ok(result.includes("hashline_edit"), "other tools still present");
+    assert.ok(!result.includes("grep_app"), "disabled tool group not listed");
+    assert.ok(result.includes("hashline_edit"), "bundled tools still present");
   });
 
   it("disabled sub-agent is excluded from resources block", () => {
@@ -65,11 +70,17 @@ describe("injectPromptAugmentation", () => {
     assert.ok(result.includes("explore"), "other agents still present");
   });
 
-  it("resource block lists all enabled tools from shared metadata", () => {
+  it("resource block lists bundled tools and tool group descriptions", () => {
     initEnabledSet(makeConfig());
     const result = injectPromptAugmentation("prompt");
-    for (const name of ALL_TOOL_NAMES) {
-      assert.ok(result.includes(name), `tool ${name} should appear in resources block`);
+    for (const tool of BUNDLED_TOOLS) {
+      assert.ok(result.includes(tool.name), `bundled tool ${tool.name} should appear`);
+    }
+    for (const group of TOOL_GROUPS) {
+      assert.ok(
+        result.includes(group.description),
+        `tool group ${group.name} description should appear`,
+      );
     }
   });
 
@@ -81,17 +92,6 @@ describe("injectPromptAugmentation", () => {
       assert.ok(
         result.includes(agent.description),
         `agent ${agent.name} description should appear`,
-      );
-    }
-  });
-
-  it("resource block lists MCP server descriptions from shared metadata", () => {
-    initEnabledSet(makeConfig());
-    const result = injectPromptAugmentation("prompt");
-    for (const server of MCP_SERVERS) {
-      assert.ok(
-        result.includes(server.description),
-        `MCP server ${server.name} description should appear`,
       );
     }
   });

@@ -10,8 +10,8 @@ import {
   ALL_SUB_AGENT_NAMES,
   ALL_TOOL_NAMES,
   BUNDLED_TOOLS,
-  MCP_SERVERS,
   SUB_AGENTS,
+  TOOL_GROUPS,
   isBundledTool,
 } from "../resource-metadata.js";
 import type { BlackbytesConfig } from "../schema.js";
@@ -79,10 +79,10 @@ describe("enabled-set", () => {
   });
 
   describe("resource-metadata consistency", () => {
-    it("ALL_TOOL_NAMES matches bundled + MCP server tools", () => {
+    it("ALL_TOOL_NAMES matches bundled + tool group tools", () => {
       const expected = [
         ...BUNDLED_TOOLS.map((t) => t.name),
-        ...MCP_SERVERS.flatMap((s) => s.tools),
+        ...TOOL_GROUPS.flatMap((s) => s.tools),
       ];
       assert.deepEqual([...ALL_TOOL_NAMES], expected);
     });
@@ -110,12 +110,12 @@ describe("enabled-set", () => {
       }
     });
 
-    it("isBundledTool correctly identifies bundled vs MCP tools", () => {
+    it("isBundledTool correctly identifies bundled vs tool group tools", () => {
       for (const tool of BUNDLED_TOOLS) {
         assert.ok(isBundledTool(tool.name), `${tool.name} should be bundled`);
       }
-      for (const server of MCP_SERVERS) {
-        for (const toolName of server.tools) {
+      for (const group of TOOL_GROUPS) {
+        for (const toolName of group.tools) {
           assert.ok(!isBundledTool(toolName), `${toolName} should not be bundled`);
         }
       }

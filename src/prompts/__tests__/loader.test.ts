@@ -39,4 +39,25 @@ describe("loadBytesPrompt", () => {
     const gptPrompt = loadBytesPrompt("gpt");
     assert.equal(prompt, gptPrompt);
   });
+
+  it("produces structurally different prompts per family", () => {
+    const claude = loadBytesPrompt("claude");
+    const gpt = loadBytesPrompt("gpt");
+    const gemini = loadBytesPrompt("gemini");
+    // Claude uses XML tags
+    assert.ok(claude.includes("<agency>"));
+    assert.ok(!gpt.includes("<agency>"));
+    assert.ok(!gemini.includes("<agency>"));
+    // GPT uses filler blacklist
+    assert.ok(gpt.includes("NEVER open with filler"));
+    // Gemini uses numbered sections
+    assert.ok(gemini.includes("## 1."));
+  });
+
+  it("conditionally includes hashline workflow", () => {
+    const withHashline = loadBytesPrompt("claude", true);
+    const withoutHashline = loadBytesPrompt("claude", false);
+    assert.ok(withHashline.includes("Hashline Edit Workflow"));
+    assert.ok(!withoutHashline.includes("Hashline Edit Workflow"));
+  });
 });

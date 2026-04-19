@@ -56,7 +56,8 @@ function buildResourcesBlock(
 export function injectPromptAugmentation(systemPrompt: string): string {
   const { tools, subAgents } = getEnabledSet();
   const resourcesInner = buildResourcesBlock(tools, subAgents);
-  const bytesPrompt = loadBytesPrompt();
+  const hashlineEditEnabled = tools.has("hashline_edit");
+  const bytesPrompt = loadBytesPrompt(undefined, hashlineEditEnabled);
 
   const block = [
     SENTINEL_START,

@@ -1,8 +1,5 @@
 import { Type } from "@sinclair/typebox";
-import type { ExtensionAPI } from "../types/pi.js";
 import { defineSubAgent } from "./declaration.js";
-import { registerSubAgent } from "./register.js";
-import type { SpawnFn } from "./runner.js";
 
 const LIBRARIAN_SYSTEM_PROMPT = `# Librarian — Sub-Agent Persona
 
@@ -83,8 +80,3 @@ export const librarianDeclaration = defineSubAgent<{ question: string }>({
   ],
   buildUserPrompt: (p) => p.question,
 });
-
-/** @deprecated Use {@link librarianDeclaration} with `registerSubAgent()`. */
-export function registerDelegateLibrarianTool(pi: ExtensionAPI, spawnFn?: SpawnFn): void {
-  registerSubAgent(pi, librarianDeclaration, { spawnFn });
-}

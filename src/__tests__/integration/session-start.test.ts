@@ -132,3 +132,122 @@ describe("integration: session_start", () => {
     }
   });
 });
+
+describe("integration: session_start with YAML sub-agents", () => {
+  let tmpDir: string;
+  const originalAgentDir = process.env.PI_AGENT_DIR;
+
+  afterEach(async () => {
+    _resetEnabledSet();
+    _resetSubAgentRegistry();
+    if (originalAgentDir === undefined) {
+      delete process.env.PI_AGENT_DIR;
+    } else {
+      process.env.PI_AGENT_DIR = originalAgentDir;
+    }
+    if (tmpDir) {
+      await fs.rm(tmpDir, { recursive: true, force: true });
+    }
+  });
+
+  async function setupWithYaml(
+    yamlFiles: Record<string, string>,
+    settings: Record<string, unknown> = {},
+  ): Promise<{ mock: ReturnType<typeof createMockPi> }> {
+    tmpDir = await makeTempDir();
+    const subAgentsDir = path.join(tmpDir, "sub-agents");
+    await fs.mkdir(subAgentsDir, { recursive: true });
+    for (const [name, content] of Object.entries(yamlFiles)) {
+      await fs.writeFile(path.join(subAgentsDir, name), content, "utf8");
+    }
+    await writeSettings(tmpDir, JSON.stringify({ blackbytes: settings }));
+    process.env.PI_AGENT_DIR = tmpDir;
+    const mock = createMockPi();
+    bootstrap(mock);
+    return { mock };
+  }
+
+  const VALID_YAML = [
+    "name: researcher",
+    "description: A research specialist",
+    "system_prompt: You are a research specialist.",
+  ].join("\n");
+
+  it("registers valid YAML sub-agents alongside builtins", async () => {
+    const { mock } = await setupWithYaml({ "researcher.yaml": VALID_YAML });
+    mock.emit("session_start", {});
+    await waitForEnabledSet();
+
+    const enabledSet = getEnabledSet();
+    // Builtin agents should be present
+    assert.equal(enabledSet.subAgents.has("explore"), true);
+    assert.equal(enabledSet.subAgents.has("oracle"), true);
+    // YAML agent should also be present
+    assert.equal(enabledSet.subAgents.has("researcher"), true);
+
+    // delegate tool should be registered
+    const toolNames = mock.calls.registerTool.map((t: any) => t.name ?? t.definition?.name);
+    assert.ok(
+      toolNames.includes("delegate_researcher"),
+      "delegate_researcher tool should be registered",
+    );
+  });
+
+  it("skips invalid YAML files without crashing startup", async () => {
+    const { mock } = await setupWithYaml({
+      "bad.yaml": "name: [\ninvalid yaml",
+      "good.yaml": VALID_YAML,
+    });
+    mock.emit("session_start", {});
+    await waitForEnabledSet();
+
+    const enabledSet = getEnabledSet();
+    // Good agent loaded, bad one skipped
+    assert.equal(enabledSet.subAgents.has("researcher"), true);
+    // Builtins still work
+    assert.equal(enabledSet.subAgents.has("explore"), true);
+  });
+
+  it("aborts on duplicate name between YAML and builtin", async () => {
+    // 'explore' is a builtin name — YAML agent with same name should cause error
+    const dupeYaml = [
+      "name: explore",
+      "description: Duplicate of builtin",
+      "system_prompt: I conflict with the builtin.",
+    ].join("\n");
+
+    const { mock } = await setupWithYaml({ "explore.yaml": dupeYaml });
+
+    // session_start should throw (caught by bootstrap's wrap, but assertUniqueNames throws)
+    // We need to test that the enabled set is NOT initialized
+    mock.emit("session_start", {});
+
+    // The handler throws, so enabled-set should never be initialized
+    // Wait a bit then verify it's not set
+    await new Promise<void>((r) => setTimeout(r, 200));
+    assert.throws(
+      () => getEnabledSet(),
+      /not initialized/,
+      "EnabledSet should not be initialized when duplicate names detected",
+    );
+  });
+
+  it("disables a YAML agent through config disabled_sub_agents", async () => {
+    const { mock } = await setupWithYaml(
+      { "researcher.yaml": VALID_YAML },
+      { disabled_sub_agents: ["researcher"] },
+    );
+    mock.emit("session_start", {});
+    await waitForEnabledSet();
+
+    const enabledSet = getEnabledSet();
+    // YAML agent should be disabled via config
+    assert.equal(
+      enabledSet.subAgents.has("researcher"),
+      false,
+      "'researcher' should be disabled via config",
+    );
+    // Builtins should still be present
+    assert.equal(enabledSet.subAgents.has("explore"), true);
+  });
+});

@@ -1,10 +1,7 @@
 import { Type } from "@sinclair/typebox";
 import { getEnabledSet } from "../config/enabled-set.js";
-import type { ExtensionAPI } from "../types/pi.js";
 import { defineSubAgent } from "./declaration.js";
 import { resolveToolStrategy } from "./delegable-tools.js";
-import { registerSubAgent } from "./register.js";
-import type { SpawnFn } from "./runner.js";
 
 const GENERAL_SYSTEM_PROMPT = `# General — Sub-Agent Persona (Implementation Executor)
 
@@ -96,8 +93,3 @@ export const generalDeclaration = defineSubAgent<{ task: string; context?: strin
   buildUserPrompt: (p) =>
     p.context ? `${p.task}\n\n---\n\nAdditional context:\n${p.context}` : p.task,
 });
-
-/** @deprecated Use {@link generalDeclaration} with `registerSubAgent()`. */
-export function registerDelegateGeneralTool(pi: ExtensionAPI, spawnFn?: SpawnFn): void {
-  registerSubAgent(pi, generalDeclaration, { spawnFn });
-}

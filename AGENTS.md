@@ -41,12 +41,22 @@ src/index.ts -> bootstrap(pi) -> wires 6 event handlers + 2 commands:
 
 ### Registration flow (critical)
 
-All tools and sub-agents are registered in `handleSessionStart()` (`src/handlers/index.ts`). If you add or rename a tool:
+All tools and sub-agents are registered in `handleSessionStart()` (`src/handlers/index.ts`).
 
-1. Create or update the register function in `src/tools/<name>/...` or `src/sub-agents/<name>.ts`
+**Adding or renaming a tool:**
+
+1. Create or update the register function in `src/tools/<name>/...`
 2. Import and call it from `handleSessionStart()`
 3. Add the public name to `src/config/resource-metadata.ts`
 4. Ensure any enable/disable behavior still flows through `src/config/enabled-set.ts`
+
+**Adding a builtin sub-agent:**
+
+1. Define a declaration with `defineSubAgent()` in `src/sub-agents/<name>.ts`
+2. Export the declaration and add it to `BUILTIN_DECLARATIONS` in `src/handlers/index.ts`
+3. Add metadata to `SUB_AGENTS` in `src/config/resource-metadata.ts`
+
+**User-defined sub-agents** are loaded automatically from YAML files via `loadYamlDeclarations()`. Duplicate names (across builtins + YAML) are rejected at startup.
 
 ### Tool name conventions
 
@@ -77,9 +87,10 @@ The schema is `.passthrough()`, so wizard-managed extra keys in the `blackbytes`
 ### Prompt injection
 
 `before_agent_start` renders a compact Bytes v2 policy overlay from runtime state instead of appending a second static prompt blob. The overlay contains precedence, session-capability, boundary, workflow, and completion sections; it only mentions enabled capabilities, resolves model-family formatting deterministically from the event model or cached family, and falls back to a minimal safe overlay when runtime state is incomplete. The sentinel-delimited augmentation remains idempotent: re-running the handler replaces the existing block instead of appending duplicates.
+
 ### Sub-agents
 
-Sub-agents spawn nested `pi -p` sessions through `src/sub-agents/runner.ts`. Delegate allowlists are enforced at runtime, and nested sessions do not receive `delegate_*` tools again.
+Sub-agents are defined as typed declarations (`SubAgentDeclaration`) and registered via `registerSubAgent()`. Builtin declarations live in `src/sub-agents/{explore,oracle,librarian,general}.ts`. User-defined agents are loaded from YAML files via `src/sub-agents/loader.ts`. All agents spawn nested `pi -p` sessions through `src/sub-agents/runner.ts`. Delegate allowlists are enforced at runtime, and nested sessions do not receive `delegate_*` tools again.
 
 ## Code style
 

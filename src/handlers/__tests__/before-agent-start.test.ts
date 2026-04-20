@@ -187,3 +187,32 @@ it("does not advertise web lookup when websearch is fully disabled", () => {
 
   assert.ok(!result.includes("Web lookup capabilities may be available"));
 });
+
+it("advertises dynamically registered YAML agents in the resource block", () => {
+  seedBuiltinAgents();
+  registerSubAgentMeta({ name: "yaml-researcher", description: "YAML-defined research agent" });
+  initEnabledSet(makeConfig(), ["explore", "oracle", "librarian", "general", "yaml-researcher"]);
+  const result = injectPromptAugmentation("prompt");
+
+  assert.ok(result.includes("yaml-researcher"), "dynamically registered agent should appear");
+  assert.ok(
+    result.includes("YAML-defined research agent"),
+    "dynamic agent description should appear",
+  );
+});
+
+it("excludes disabled dynamically registered agents from resource block", () => {
+  seedBuiltinAgents();
+  registerSubAgentMeta({ name: "yaml-bot", description: "A YAML bot" });
+  initEnabledSet(makeConfig({ disabled_sub_agents: ["yaml-bot"] }), [
+    "explore",
+    "oracle",
+    "librarian",
+    "general",
+    "yaml-bot",
+  ]);
+  const result = injectPromptAugmentation("prompt");
+
+  assert.ok(!result.includes("yaml-bot"), "disabled dynamic agent should not appear");
+  assert.ok(result.includes("explore"), "other agents still present");
+});

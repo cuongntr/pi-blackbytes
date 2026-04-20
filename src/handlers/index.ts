@@ -9,8 +9,10 @@ import { declarationToMeta } from "../sub-agents/declaration.js";
 import { exploreDeclaration } from "../sub-agents/explore.js";
 import { generalDeclaration } from "../sub-agents/general.js";
 import { librarianDeclaration } from "../sub-agents/librarian.js";
+import { loadYamlDeclarations } from "../sub-agents/loader.js";
 import { oracleDeclaration } from "../sub-agents/oracle.js";
 import { registerSubAgent } from "../sub-agents/register.js";
+import { assertUniqueNames } from "../sub-agents/validate-unique.js";
 import { registerAstGrepReplaceTool } from "../tools/ast-grep/replace.js";
 import { registerAstGrepSearchTool } from "../tools/ast-grep/search.js";
 import { registerQueryDocsTool } from "../tools/context7/query.js";
@@ -35,11 +37,25 @@ const BUILTIN_DECLARATIONS = [
   generalDeclaration,
 ];
 export async function handleSessionStart(pi: ExtensionAPI, ..._args: any[]): Promise<void> {
+  const logger = getLogger();
   const config = await loadBlackbytesConfig();
 
-  // Assemble known agent names from declarations before enablement
-  const knownAgentNames = BUILTIN_DECLARATIONS.map((d) => d.name);
-  initEnabledSet(config, knownAgentNames);
+  // Load YAML declarations and combine with builtins
+  const yamlDeclarations = await loadYamlDeclarations();
+  const allDeclarations = [...BUILTIN_DECLARATIONS, ...yamlDeclarations];
+
+  // Assert unique names across all declarations before enablement
+  const allNames = allDeclarations.map((d) => d.name);
+  assertUniqueNames(allNames);
+
+  initEnabledSet(config, allNames);
+
+  if (yamlDeclarations.length > 0) {
+    logger.info("Loaded YAML sub-agent declarations", {
+      count: yamlDeclarations.length,
+      names: yamlDeclarations.map((d) => d.name),
+    });
+  }
 
   registerCopilotHeader(pi, config);
 
@@ -58,7 +74,7 @@ export async function handleSessionStart(pi: ExtensionAPI, ..._args: any[]): Pro
   registerGrepAppSearchTool(pi);
 
   // Sub-agent delegates — declaration-driven registration
-  for (const decl of BUILTIN_DECLARATIONS) {
+  for (const decl of allDeclarations) {
     registerSubAgentMeta(declarationToMeta(decl));
     registerSubAgent(pi, decl);
   }

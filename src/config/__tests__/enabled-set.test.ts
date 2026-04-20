@@ -14,6 +14,8 @@ import {
   TOOL_GROUPS,
   _resetSubAgentRegistry,
   derivePromptFeatureFlags,
+  getRegisteredSubAgentNames,
+  getRegisteredSubAgents,
   isBundledTool,
   registerSubAgentMeta,
 } from "../resource-metadata.js";
@@ -209,6 +211,62 @@ describe("enabled-set", () => {
         githubCodeSearch: true,
         webSearch: true,
       });
+    });
+  });
+
+  describe("dynamic sub-agent metadata registry", () => {
+    it("registerSubAgentMeta adds agents to the registry", () => {
+      registerSubAgentMeta({ name: "custom-agent", description: "A custom agent" });
+      const agents = getRegisteredSubAgents();
+      assert.equal(agents.length, 1);
+      assert.equal(agents[0].name, "custom-agent");
+    });
+
+    it("getRegisteredSubAgentNames returns names of registered agents", () => {
+      registerSubAgentMeta({ name: "alpha", description: "Alpha" });
+      registerSubAgentMeta({ name: "beta", description: "Beta" });
+      assert.deepEqual(getRegisteredSubAgentNames(), ["alpha", "beta"]);
+    });
+
+    it("rejects duplicate registration by name", () => {
+      registerSubAgentMeta({ name: "dup", description: "First" });
+      assert.throws(
+        () => registerSubAgentMeta({ name: "dup", description: "Second" }),
+        /already registered.*"dup"/,
+      );
+    });
+
+    it("_resetSubAgentRegistry clears all registered agents", () => {
+      registerSubAgentMeta({ name: "temp", description: "Temporary" });
+      assert.equal(getRegisteredSubAgents().length, 1);
+      _resetSubAgentRegistry();
+      assert.equal(getRegisteredSubAgents().length, 0);
+    });
+
+    it("derivePromptFeatureFlags uses dynamically registered agents for subagentDelegation", () => {
+      // No agents registered yet — subagentDelegation should be false
+      const set = computeEnabledSet(defaultConfig);
+      const flagsNone = derivePromptFeatureFlags(set.tools, set.subAgents);
+      assert.equal(flagsNone.subagentDelegation, false);
+
+      // Register a custom agent and include it in enabled set
+      registerSubAgentMeta({
+        name: "yaml-bot",
+        description: "YAML bot",
+        promptFeatures: ["subagentDelegation"],
+      });
+      const setWithCustom = computeEnabledSet(defaultConfig, ["yaml-bot"]);
+      const flagsCustom = derivePromptFeatureFlags(setWithCustom.tools, setWithCustom.subAgents);
+      assert.equal(flagsCustom.subagentDelegation, true);
+    });
+
+    it("derivePromptFeatureFlags returns false when all registered agents are disabled", () => {
+      registerSubAgentMeta({ name: "only-agent", description: "Only" });
+      const set = computeEnabledSet({ ...defaultConfig, disabled_sub_agents: ["only-agent"] }, [
+        "only-agent",
+      ]);
+      const flags = derivePromptFeatureFlags(set.tools, set.subAgents);
+      assert.equal(flags.subagentDelegation, false);
     });
   });
 });

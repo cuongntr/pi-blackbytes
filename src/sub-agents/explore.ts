@@ -1,8 +1,5 @@
 import { Type } from "@sinclair/typebox";
-import type { ExtensionAPI } from "../types/pi.js";
 import { defineSubAgent } from "./declaration.js";
-import { registerSubAgent } from "./register.js";
-import type { SpawnFn } from "./runner.js";
 
 const EXPLORE_SYSTEM_PROMPT = `# Explore — Sub-Agent Persona
 
@@ -62,8 +59,3 @@ export const exploreDeclaration = defineSubAgent<{ question: string }>({
   allowedTools: ["read", "grep", "glob", "ast_grep_search"],
   buildUserPrompt: (p) => p.question,
 });
-
-/** @deprecated Use {@link exploreDeclaration} with `registerSubAgent()`. */
-export function registerDelegateExploreTool(pi: ExtensionAPI, spawnFn?: SpawnFn): void {
-  registerSubAgent(pi, exploreDeclaration, { spawnFn });
-}

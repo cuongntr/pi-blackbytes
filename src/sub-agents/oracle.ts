@@ -1,9 +1,6 @@
 import { Type } from "@sinclair/typebox";
 import { loadBlackbytesConfig } from "../config/loader.js";
-import type { ExtensionAPI } from "../types/pi.js";
 import { defineSubAgent } from "./declaration.js";
-import { registerSubAgent } from "./register.js";
-import type { SpawnFn } from "./runner.js";
 
 const ORACLE_SYSTEM_PROMPT = `# Oracle — Sub-Agent Persona
 
@@ -88,8 +85,3 @@ export const oracleDeclaration = defineSubAgent<{
     };
   },
 });
-
-/** @deprecated Use {@link oracleDeclaration} with `registerSubAgent()`. */
-export function registerDelegateOracleTool(pi: ExtensionAPI, spawnFn?: SpawnFn): void {
-  registerSubAgent(pi, oracleDeclaration, { spawnFn });
-}

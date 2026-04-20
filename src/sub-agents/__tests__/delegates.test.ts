@@ -5,10 +5,12 @@ import { _resetEnabledSet, initEnabledSet } from "../../config/enabled-set.js";
 import { ALL_TOOL_NAMES } from "../../config/resource-metadata.js";
 import type { BlackbytesConfig } from "../../config/schema.js";
 import type { ExtensionAPI } from "../../types/pi.js";
-import { registerDelegateExploreTool } from "../explore.js";
-import { registerDelegateGeneralTool } from "../general.js";
-import { registerDelegateLibrarianTool } from "../librarian.js";
-import { registerDelegateOracleTool } from "../oracle.js";
+import type { SubAgentDeclaration } from "../declaration.js";
+import { exploreDeclaration } from "../explore.js";
+import { generalDeclaration } from "../general.js";
+import { librarianDeclaration } from "../librarian.js";
+import { oracleDeclaration } from "../oracle.js";
+import { registerSubAgent } from "../register.js";
 import type { SpawnFn } from "../runner.js";
 
 // ---------------------------------------------------------------------------
@@ -89,6 +91,15 @@ function makeFakePi(): ExtensionAPI & {
   };
 }
 
+/** Helper: register a declaration via the generic registerSubAgent path. */
+function registerDecl(
+  pi: ReturnType<typeof makeFakePi>,
+  decl: SubAgentDeclaration,
+  spawnFn?: SpawnFn,
+): void {
+  registerSubAgent(pi, decl, { spawnFn });
+}
+
 // ---------------------------------------------------------------------------
 // Reset enabled-set singleton between tests
 // ---------------------------------------------------------------------------
@@ -104,21 +115,70 @@ afterEach(() => {
 });
 
 // ---------------------------------------------------------------------------
+// Declaration contract tests — verify static properties for all builtins
+// ---------------------------------------------------------------------------
+
+describe("builtin declaration contracts", () => {
+  const builtins: SubAgentDeclaration[] = [
+    exploreDeclaration,
+    oracleDeclaration,
+    librarianDeclaration,
+    generalDeclaration,
+  ];
+
+  for (const decl of builtins) {
+    it(`${decl.name}: toolName follows delegate_ convention`, () => {
+      assert.equal(decl.toolName, `delegate_${decl.name}`);
+    });
+
+    it(`${decl.name}: has non-empty description`, () => {
+      assert.ok(decl.description.length > 0);
+    });
+
+    it(`${decl.name}: has parameters schema`, () => {
+      assert.ok(decl.parameters);
+      assert.equal(decl.parameters.type, "object");
+    });
+
+    it(`${decl.name}: has a system prompt`, () => {
+      assert.ok(
+        decl.systemPrompt || decl.systemPromptPath,
+        "must have systemPrompt or systemPromptPath",
+      );
+    });
+
+    it(`${decl.name}: has allowedTools`, () => {
+      // general's allowedTools is a dynamic resolver that needs EnabledSet
+      if (typeof decl.allowedTools === "function") {
+        initEnabledSet(defaultConfig);
+      }
+      const tools =
+        typeof decl.allowedTools === "function" ? decl.allowedTools() : decl.allowedTools;
+      assert.ok(tools.length > 0, "allowedTools must not be empty");
+    });
+
+    it(`${decl.name}: declaration is frozen`, () => {
+      assert.ok(Object.isFrozen(decl));
+    });
+  }
+});
+
+// ---------------------------------------------------------------------------
 // delegate_explore
 // ---------------------------------------------------------------------------
 
 describe("delegate_explore", () => {
-  it("registers the tool when explore sub-agent is enabled", () => {
+  it("registers via registerSubAgent when explore is enabled", () => {
     initEnabledSet(defaultConfig);
     const pi = makeFakePi();
-    registerDelegateExploreTool(pi);
+    registerDecl(pi, exploreDeclaration);
     assert.ok(pi.registeredTools.has("delegate_explore"), "delegate_explore should be registered");
   });
 
   it("skips registration when explore sub-agent is disabled", () => {
     initEnabledSet({ ...defaultConfig, disabled_sub_agents: ["explore"] });
     const pi = makeFakePi();
-    registerDelegateExploreTool(pi);
+    registerDecl(pi, exploreDeclaration);
     assert.ok(
       !pi.registeredTools.has("delegate_explore"),
       "delegate_explore should NOT be registered",
@@ -134,7 +194,7 @@ describe("delegate_explore", () => {
       capturedArgs = args;
     });
 
-    registerDelegateExploreTool(pi, spawnFn);
+    registerDecl(pi, exploreDeclaration, spawnFn);
     const tool = pi.registeredTools.get("delegate_explore")!;
 
     const result = await tool.execute({ question: "Where is the login function?" });
@@ -149,7 +209,7 @@ describe("delegate_explore", () => {
     const pi = makeFakePi();
 
     const spawnFn = makeCapturingSpawnFn({ exitCode: 1 });
-    registerDelegateExploreTool(pi, spawnFn);
+    registerDecl(pi, exploreDeclaration, spawnFn);
     const tool = pi.registeredTools.get("delegate_explore")!;
 
     const result = await tool.execute({ question: "something" });
@@ -163,17 +223,17 @@ describe("delegate_explore", () => {
 // ---------------------------------------------------------------------------
 
 describe("delegate_oracle", () => {
-  it("registers the tool when oracle sub-agent is enabled", () => {
+  it("registers via registerSubAgent when oracle is enabled", () => {
     initEnabledSet(defaultConfig);
     const pi = makeFakePi();
-    registerDelegateOracleTool(pi);
+    registerDecl(pi, oracleDeclaration);
     assert.ok(pi.registeredTools.has("delegate_oracle"));
   });
 
   it("skips registration when oracle sub-agent is disabled", () => {
     initEnabledSet({ ...defaultConfig, disabled_sub_agents: ["oracle"] });
     const pi = makeFakePi();
-    registerDelegateOracleTool(pi);
+    registerDecl(pi, oracleDeclaration);
     assert.ok(!pi.registeredTools.has("delegate_oracle"));
   });
 
@@ -186,7 +246,7 @@ describe("delegate_oracle", () => {
       capturedArgs = args;
     });
 
-    registerDelegateOracleTool(pi, spawnFn);
+    registerDecl(pi, oracleDeclaration, spawnFn);
     const tool = pi.registeredTools.get("delegate_oracle")!;
 
     const result = await tool.execute({ question: "Why is this slow?" });
@@ -205,7 +265,7 @@ describe("delegate_oracle", () => {
       capturedArgs = args;
     });
 
-    registerDelegateOracleTool(pi, spawnFn);
+    registerDecl(pi, oracleDeclaration, spawnFn);
     const tool = pi.registeredTools.get("delegate_oracle")!;
 
     await tool.execute({ question: "What is wrong?", context: "Error: ENOMEM" });
@@ -222,17 +282,17 @@ describe("delegate_oracle", () => {
 // ---------------------------------------------------------------------------
 
 describe("delegate_librarian", () => {
-  it("registers the tool when librarian sub-agent is enabled", () => {
+  it("registers via registerSubAgent when librarian is enabled", () => {
     initEnabledSet(defaultConfig);
     const pi = makeFakePi();
-    registerDelegateLibrarianTool(pi);
+    registerDecl(pi, librarianDeclaration);
     assert.ok(pi.registeredTools.has("delegate_librarian"));
   });
 
   it("skips registration when librarian sub-agent is disabled", () => {
     initEnabledSet({ ...defaultConfig, disabled_sub_agents: ["librarian"] });
     const pi = makeFakePi();
-    registerDelegateLibrarianTool(pi);
+    registerDecl(pi, librarianDeclaration);
     assert.ok(!pi.registeredTools.has("delegate_librarian"));
   });
 
@@ -245,7 +305,7 @@ describe("delegate_librarian", () => {
       capturedArgs = args;
     });
 
-    registerDelegateLibrarianTool(pi, spawnFn);
+    registerDecl(pi, librarianDeclaration, spawnFn);
     const tool = pi.registeredTools.get("delegate_librarian")!;
 
     const result = await tool.execute({ question: "How does typebox work?" });
@@ -266,7 +326,7 @@ describe("delegate_librarian", () => {
     const pi = makeFakePi();
 
     const spawnFn = makeCapturingSpawnFn({ exitCode: 1 });
-    registerDelegateLibrarianTool(pi, spawnFn);
+    registerDecl(pi, librarianDeclaration, spawnFn);
     const tool = pi.registeredTools.get("delegate_librarian")!;
 
     const result = await tool.execute({ question: "anything" });
@@ -279,17 +339,17 @@ describe("delegate_librarian", () => {
 // ---------------------------------------------------------------------------
 
 describe("delegate_general", () => {
-  it("registers the tool when general sub-agent is enabled", () => {
+  it("registers via registerSubAgent when general is enabled", () => {
     initEnabledSet(defaultConfig);
     const pi = makeFakePi();
-    registerDelegateGeneralTool(pi);
+    registerDecl(pi, generalDeclaration);
     assert.ok(pi.registeredTools.has("delegate_general"));
   });
 
   it("skips registration when general sub-agent is disabled", () => {
     initEnabledSet({ ...defaultConfig, disabled_sub_agents: ["general"] });
     const pi = makeFakePi();
-    registerDelegateGeneralTool(pi);
+    registerDecl(pi, generalDeclaration);
     assert.ok(!pi.registeredTools.has("delegate_general"));
   });
 
@@ -302,7 +362,7 @@ describe("delegate_general", () => {
       capturedArgs = args;
     });
 
-    registerDelegateGeneralTool(pi, spawnFn);
+    registerDecl(pi, generalDeclaration, spawnFn);
     const tool = pi.registeredTools.get("delegate_general")!;
 
     await tool.execute({ task: "Fix the bug" });
@@ -322,7 +382,7 @@ describe("delegate_general", () => {
       capturedArgs = args;
     });
 
-    registerDelegateGeneralTool(pi, spawnFn);
+    registerDecl(pi, generalDeclaration, spawnFn);
     const tool = pi.registeredTools.get("delegate_general")!;
 
     await tool.execute({ task: "Fix the bug" });
@@ -342,7 +402,7 @@ describe("delegate_general", () => {
       capturedArgs = args;
     });
 
-    registerDelegateGeneralTool(pi, spawnFn);
+    registerDecl(pi, generalDeclaration, spawnFn);
     const tool = pi.registeredTools.get("delegate_general")!;
 
     await tool.execute({ task: "Implement X", context: "File is at src/foo.ts" });

@@ -182,22 +182,50 @@ describe("integration: before_agent_start", () => {
     }
   });
 
-  it("error path: handler error is caught, prompt is unchanged, no crash", async () => {
-    // Arrange: no settings file → ENOENT → defaults used (so no crash from config loading)
-    // Force an error inside handler by not initialising the enabled set at all.
-    // We skip session_start, so getEnabledSet() will throw → wrap() catches it.
+  it("fallback path: injects a minimal safe overlay when enabled set is unavailable", async () => {
+    // Arrange: skip session_start so getEnabledSet() is unavailable.
     const mock = createMockPi();
     bootstrap(mock);
-    // Do NOT fire session_start — enabled set is not initialized
 
-    const originalPrompt = "Original prompt, must be preserved.";
+    const originalPrompt = "Original prompt.";
     const event = { systemPrompt: originalPrompt };
 
-    // Should not throw — wrap() swallows errors
     await mock.emit("before_agent_start", event);
     await settle();
 
-    // Prompt should be unchanged because handler threw before mutating
-    assert.equal(event.systemPrompt, originalPrompt, "prompt unchanged when handler throws");
+    assert.ok(event.systemPrompt.startsWith(originalPrompt));
+    assert.ok(event.systemPrompt.includes("<!-- pi-blackbytes:resources:start -->"));
+    assert.ok(event.systemPrompt.includes("Precedence"));
+    assert.ok(!event.systemPrompt.includes("Hashline Edit Workflow"));
   });
+});
+
+it("uses event modelId to choose prompt family before model_select runs", async () => {
+  const subDir = await makeTempDir();
+  try {
+    await writeSettings(subDir, JSON.stringify({ blackbytes: {} }));
+    process.env.PI_AGENT_DIR = subDir;
+
+    const mock = createMockPi();
+    bootstrap(mock);
+
+    mock.emit("session_start", {});
+    await waitForEnabledSet();
+
+    const event = {
+      systemPrompt: "Base prompt.",
+      modelId: "gpt-5.4",
+    };
+
+    await mock.emit("before_agent_start", event);
+    await settle();
+
+    assert.ok(
+      event.systemPrompt.includes("NEVER open with filler"),
+      "GPT prompt variant should be selected from event modelId",
+    );
+    assert.ok(!event.systemPrompt.includes("<agency>"), "Claude XML prompt should not be used");
+  } finally {
+    await fs.rm(subDir, { recursive: true, force: true });
+  }
 });

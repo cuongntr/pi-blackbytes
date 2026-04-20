@@ -192,4 +192,32 @@ describe("integration: before_provider_request", () => {
       await fs.rm(subDir, { recursive: true, force: true });
     }
   });
+
+  it("uses model family cached during before_agent_start before model_select runs", async () => {
+    const subDir = await makeTempDir();
+    try {
+      await writeSettings(subDir, JSON.stringify({ blackbytes: {} }));
+      process.env.PI_AGENT_DIR = subDir;
+
+      const mock = createMockPi();
+      bootstrap(mock);
+
+      mock.emit("session_start", {});
+      await waitForEnabledSet();
+
+      await mock.emit("before_agent_start", {
+        systemPrompt: "Base prompt.",
+        modelId: "gpt-5.4",
+      });
+      await settle();
+
+      const payload: Record<string, unknown> = {};
+      await mock.emit("before_provider_request", { payload, reasoningEffort: "medium" });
+      await settle();
+
+      assert.equal(payload.reasoning_effort, "medium");
+    } finally {
+      await fs.rm(subDir, { recursive: true, force: true });
+    }
+  });
 });

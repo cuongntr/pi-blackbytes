@@ -29,7 +29,7 @@ Run in order: `lint -> build -> test`.
 ```text
 src/index.ts -> bootstrap(pi) -> wires 6 event handlers + 2 commands:
   session_start           -> loads config, computes enabled set, registers tools/sub-agents
-  before_agent_start      -> injects Bytes prompt + <available_resources>
+  before_agent_start      -> renders capability-aware Bytes v2 overlay + <available_resources>
   model_select            -> tracks current model family
   before_provider_request -> maps reasoning params by provider family
   tool_result             -> rewrites read/write output for hashline workflow
@@ -76,8 +76,7 @@ The schema is `.passthrough()`, so wizard-managed extra keys in the `blackbytes`
 
 ### Prompt injection
 
-`before_agent_start` loads the Bytes prompt variant from `src/prompts/` and wraps the current session resources in a sentinel-delimited augmentation block. The augmentation is idempotent: re-running the handler replaces the existing block instead of appending duplicates.
-
+`before_agent_start` renders a compact Bytes v2 policy overlay from runtime state instead of appending a second static prompt blob. The overlay contains precedence, session-capability, boundary, workflow, and completion sections; it only mentions enabled capabilities, resolves model-family formatting deterministically from the event model or cached family, and falls back to a minimal safe overlay when runtime state is incomplete. The sentinel-delimited augmentation remains idempotent: re-running the handler replaces the existing block instead of appending duplicates.
 ### Sub-agents
 
 Sub-agents spawn nested `pi -p` sessions through `src/sub-agents/runner.ts`. Delegate allowlists are enforced at runtime, and nested sessions do not receive `delegate_*` tools again.

@@ -1,9 +1,11 @@
 import assert from "node:assert/strict";
 import { beforeEach, describe, it } from "node:test";
 import {
+  DEFAULT_PROMPT_MODEL_FAMILY,
   _resetModelFamily,
   classifyModel,
   getModelFamily,
+  resolvePromptModelFamily,
   setModelFamily,
 } from "../model-capability.js";
 
@@ -52,5 +54,25 @@ describe("model family cache", () => {
 
     _resetModelFamily();
     assert.equal(getModelFamily(), "other");
+  });
+});
+
+describe("resolvePromptModelFamily", () => {
+  beforeEach(() => {
+    _resetModelFamily();
+  });
+
+  it("prefers an explicit modelId when provided", () => {
+    setModelFamily("claude-3");
+    assert.equal(resolvePromptModelFamily("gpt-5.4"), "gpt");
+  });
+
+  it("uses cached family when available", () => {
+    setModelFamily("gemini-1.5-pro");
+    assert.equal(resolvePromptModelFamily(), "gemini");
+  });
+
+  it("falls back to the documented safe default when cache is unset", () => {
+    assert.equal(resolvePromptModelFamily(), DEFAULT_PROMPT_MODEL_FAMILY);
   });
 });

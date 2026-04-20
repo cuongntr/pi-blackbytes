@@ -48,9 +48,12 @@ export async function handleSessionStart(pi: ExtensionAPI, ..._args: any[]): Pro
 }
 
 export async function handleBeforeAgentStart(..._args: any[]): Promise<void> {
-  const event = _args[0] as { systemPrompt?: string } | undefined;
+  const event = _args[0] as { systemPrompt?: string; modelId?: string } | undefined;
   if (!event?.systemPrompt) return;
-  event.systemPrompt = injectPromptAugmentation(event.systemPrompt);
+  if (event.modelId) {
+    setModelFamily(event.modelId);
+  }
+  event.systemPrompt = injectPromptAugmentation(event.systemPrompt, event.modelId);
 }
 
 export async function handleModelSelect(..._args: any[]): Promise<void> {

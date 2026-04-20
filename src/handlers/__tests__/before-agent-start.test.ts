@@ -36,9 +36,9 @@ describe("injectPromptAugmentation", () => {
   it("includes prompt guidance in augmentation block", () => {
     initEnabledSet(makeConfig());
     const result = injectPromptAugmentation("Base prompt.");
-    assert.ok(result.includes("Guardrails"), "prompt guidance content present");
+    assert.ok(result.includes("Hard Boundaries"), "prompt guidance content present");
     assert.ok(
-      result.indexOf("Guardrails") < result.indexOf("<available_resources>"),
+      result.indexOf("Hard Boundaries") < result.indexOf("<available_resources>"),
       "prompt guidance appears before available_resources",
     );
   });
@@ -61,6 +61,22 @@ describe("injectPromptAugmentation", () => {
     const result = injectPromptAugmentation("prompt");
     assert.ok(!result.includes("grep_app"), "disabled tool group not listed");
     assert.ok(result.includes("hashline_edit"), "bundled tools still present");
+  });
+
+  it("resource block lists exact enabled tools for partially enabled groups", () => {
+    initEnabledSet(makeConfig({ disabled_tools: ["websearch_search", "context7_query_docs"] }));
+    const result = injectPromptAugmentation("prompt");
+
+    assert.ok(result.includes("websearch (web search and page fetching): websearch_fetch"));
+    assert.ok(!result.includes("websearch (web search and page fetching): websearch_search"));
+    assert.ok(
+      result.includes(
+        "context7 (library/framework documentation lookup): context7_resolve_library_id",
+      ),
+    );
+    assert.ok(
+      !result.includes("context7 (library/framework documentation lookup): context7_query_docs"),
+    );
   });
 
   it("disabled sub-agent is excluded from resources block", () => {
@@ -95,4 +111,62 @@ describe("injectPromptAugmentation", () => {
       );
     }
   });
+});
+
+it("falls back to a minimal safe overlay when enabled-set is unavailable", () => {
+  const result = injectPromptAugmentation("prompt");
+
+  assert.ok(result.includes("<!-- pi-blackbytes:resources:start -->"));
+  assert.ok(result.includes("Precedence"), "fallback overlay should still be injected");
+  assert.ok(
+    !result.includes("Hashline Edit Workflow"),
+    "fallback should not imply hashline support",
+  );
+  assert.ok(
+    !result.includes("Delegate when specialization materially reduces"),
+    "fallback should not imply delegation support",
+  );
+});
+
+it("renders capability-aware prompt sections from enabled resources", () => {
+  initEnabledSet(
+    makeConfig({
+      disabled_tools: [
+        "hashline_edit",
+        "websearch_search",
+        "websearch_fetch",
+        "context7_resolve_library_id",
+        "context7_query_docs",
+        "grep_app_search_github",
+      ],
+      disabled_sub_agents: ["explore", "oracle", "librarian", "general"],
+    }),
+  );
+
+  const result = injectPromptAugmentation("prompt");
+
+  assert.ok(!result.includes("Hashline Edit Workflow"));
+  assert.ok(!result.includes("Delegate when specialization materially reduces"));
+  assert.ok(!result.includes("Documentation lookup may be available"));
+  assert.ok(!result.includes("Web lookup capabilities may be available"));
+  assert.ok(!result.includes("GitHub code search may be available"));
+});
+
+it("does not advertise docs lookup when only context7 resolve is enabled", () => {
+  initEnabledSet(makeConfig({ disabled_tools: ["context7_query_docs"] }));
+  const result = injectPromptAugmentation("prompt");
+
+  assert.ok(!result.includes("Documentation lookup may be available"));
+  assert.ok(
+    result.includes(
+      "context7 (library/framework documentation lookup): context7_resolve_library_id",
+    ),
+  );
+});
+
+it("does not advertise web lookup when websearch is fully disabled", () => {
+  initEnabledSet(makeConfig({ disabled_tools: ["websearch_search", "websearch_fetch"] }));
+  const result = injectPromptAugmentation("prompt");
+
+  assert.ok(!result.includes("Web lookup capabilities may be available"));
 });

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { afterEach, describe, it } from "node:test";
 import { _resetModelFamily, setModelFamily } from "../../shared/model-capability.js";
+import { buildStaticBytesPromptSectionMap } from "../bytes/shared.js";
 import { loadBytesPrompt } from "../loader.js";
 
 describe("loadBytesPrompt", () => {
@@ -59,5 +60,29 @@ describe("loadBytesPrompt", () => {
     const withoutHashline = loadBytesPrompt("claude", false);
     assert.ok(withHashline.includes("Hashline Edit Workflow"));
     assert.ok(!withoutHashline.includes("Hashline Edit Workflow"));
+  });
+
+  it("renders the same canonical section titles across model families", () => {
+    const sections = buildStaticBytesPromptSectionMap("claude", true);
+    const sectionTitles = Object.values(sections).map((section) => section.title);
+
+    for (const family of ["claude", "gpt", "gemini"] as const) {
+      const prompt = loadBytesPrompt(family, true);
+      for (const title of sectionTitles) {
+        assert.ok(prompt.includes(title));
+      }
+    }
+  });
+});
+
+describe("createPromptVariantRenderContext fallback behavior", () => {
+  afterEach(() => {
+    _resetModelFamily();
+  });
+
+  it("uses the deterministic safe default when no family is provided and cache is unset", () => {
+    const defaultPrompt = loadBytesPrompt("claude");
+    const fallbackPrompt = loadBytesPrompt();
+    assert.equal(fallbackPrompt, defaultPrompt);
   });
 });

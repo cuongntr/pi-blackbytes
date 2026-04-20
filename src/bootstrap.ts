@@ -10,12 +10,14 @@ import {
 } from "./handlers/index.js";
 import type { ExtensionAPI } from "./types/pi.js";
 
+// Define the shape of the event context for error handling
 interface EventContext {
   ui?: {
     notify(level: string, message: string): void;
   };
 }
 
+// Utility function to wrap event handlers with error handling
 function wrap(
   eventName: string,
   handler: (...args: any[]) => Promise<void>,

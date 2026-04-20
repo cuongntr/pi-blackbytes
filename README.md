@@ -112,7 +112,7 @@ Blackbytes reads the top-level `blackbytes` object from the Pi settings file.
 | `delegate_librarian` | Read-only docs, web, and cross-repository research |
 | `delegate_general` | Full-access execution for well-scoped multi-file implementation work |
 
-Blackbytes also injects an `<available_resources>` block into the primary agent prompt so the model sees the currently enabled bundled tools, HTTP tools, and sub-agents for the session.
+Blackbytes injects a compact, capability-aware prompt overlay plus an `<available_resources>` block into the primary agent prompt. The overlay is rendered from the session's enabled tools/sub-agents, uses model-family-specific formatting adapters, and falls back to a minimal safe policy layer when runtime state is incomplete.
 
 ## `hashline_edit`
 
@@ -176,8 +176,8 @@ Recommended verification order:
 The extension bootstraps from `src/index.ts` and wires the core session handlers in `src/bootstrap.ts`:
 
 - `session_start` loads config, computes the enabled set, registers tools, and registers delegate agents
-- `before_agent_start` injects the Bytes prompt augmentation and `<available_resources>`
-- `model_select` caches the current model family
+- `before_agent_start` renders the capability-aware Bytes v2 overlay, injects `<available_resources>`, and uses a minimal safe fallback if the enabled set is unavailable
+- `model_select` caches the current model family for later requests
 - `before_provider_request` maps reasoning settings to provider-native fields
 - `tool_result` rewrites `read`/`write` results for the hashline workflow
 - `session_shutdown` flushes the buffered logger

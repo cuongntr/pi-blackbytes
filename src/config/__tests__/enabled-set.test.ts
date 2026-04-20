@@ -12,6 +12,7 @@ import {
   BUNDLED_TOOLS,
   SUB_AGENTS,
   TOOL_GROUPS,
+  derivePromptFeatureFlags,
   isBundledTool,
 } from "../resource-metadata.js";
 import type { BlackbytesConfig } from "../schema.js";
@@ -119,6 +120,59 @@ describe("enabled-set", () => {
           assert.ok(!isBundledTool(toolName), `${toolName} should not be bundled`);
         }
       }
+    });
+
+    it("derivePromptFeatureFlags reflects enabled tools and sub-agents", () => {
+      const set = computeEnabledSet(defaultConfig);
+      const flags = derivePromptFeatureFlags(set.tools, set.subAgents);
+
+      assert.deepEqual(flags, {
+        hashlineEdit: true,
+        subagentDelegation: true,
+        documentationLookup: true,
+        githubCodeSearch: true,
+        webSearch: true,
+      });
+    });
+
+    it("derivePromptFeatureFlags drops features when backing resources are disabled", () => {
+      const set = computeEnabledSet({
+        ...defaultConfig,
+        disabled_tools: [
+          "hashline_edit",
+          "websearch_search",
+          "websearch_fetch",
+          "context7_resolve_library_id",
+          "context7_query_docs",
+          "grep_app_search_github",
+        ],
+        disabled_sub_agents: ["explore", "oracle", "librarian", "general"],
+      });
+      const flags = derivePromptFeatureFlags(set.tools, set.subAgents);
+
+      assert.deepEqual(flags, {
+        hashlineEdit: false,
+        subagentDelegation: false,
+        documentationLookup: false,
+        githubCodeSearch: false,
+        webSearch: false,
+      });
+    });
+
+    it("derivePromptFeatureFlags keeps exact capabilities for partially enabled tool groups", () => {
+      const set = computeEnabledSet({
+        ...defaultConfig,
+        disabled_tools: ["context7_query_docs", "websearch_search"],
+      });
+      const flags = derivePromptFeatureFlags(set.tools, set.subAgents);
+
+      assert.deepEqual(flags, {
+        hashlineEdit: true,
+        subagentDelegation: true,
+        documentationLookup: false,
+        githubCodeSearch: true,
+        webSearch: true,
+      });
     });
   });
 });

@@ -1,7 +1,7 @@
 import { stat } from "node:fs/promises";
+import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { Type } from "@sinclair/typebox";
 import fg from "fast-glob";
-import type { ExtensionAPI } from "../../types/pi.js";
 import { registerTool } from "../_shared/register-tool.js";
 
 const RESULT_CAP = 100;

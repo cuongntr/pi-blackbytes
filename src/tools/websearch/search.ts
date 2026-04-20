@@ -1,6 +1,6 @@
+import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { Type } from "@sinclair/typebox";
 import { loadBlackbytesConfig } from "../../config/loader.js";
-import type { ExtensionAPI } from "../../types/pi.js";
 import { type HttpFetchOptions, httpFetch } from "../_shared/http.js";
 import { registerTool } from "../_shared/register-tool.js";
 

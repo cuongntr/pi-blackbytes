@@ -1,5 +1,5 @@
+import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { Type } from "@sinclair/typebox";
-import type { ExtensionAPI } from "../../types/pi.js";
 import { registerTool } from "../_shared/register-tool.js";
 import { AST_GREP_LANGUAGES, detectBinary, runAstGrep } from "./helpers.js";
 

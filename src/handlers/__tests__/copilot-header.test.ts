@@ -1,18 +1,18 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import type { ExtensionAPI } from "../../types/pi.js";
+import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { registerCopilotHeader } from "../copilot-header.js";
 
 function makeMockPi(): { pi: ExtensionAPI; calls: Array<[string, unknown]> } {
   const calls: Array<[string, unknown]> = [];
-  const pi: ExtensionAPI = {
+  const pi = {
     on: () => {},
     registerTool: () => {},
     registerProvider: (name: string, opts: unknown) => {
       calls.push([name, opts]);
     },
     registerCommand: () => {},
-  };
+  } as unknown as ExtensionAPI;
   return { pi, calls };
 }
 

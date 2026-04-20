@@ -1,4 +1,4 @@
-import type { ExtensionAPI } from "../types/pi.js";
+import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 
 export function registerCopilotHeader(
   pi: ExtensionAPI,

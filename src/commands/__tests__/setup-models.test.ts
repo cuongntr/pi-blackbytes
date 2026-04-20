@@ -3,7 +3,7 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import test from "node:test";
-import type { CommandContext, ExtensionAPI } from "../../types/pi.js";
+import type { ExtensionAPI, ExtensionCommandContext } from "@mariozechner/pi-coding-agent";
 
 // --------------------------------------------------------------------------
 // Test helpers
@@ -16,48 +16,55 @@ interface MockUI {
   notifications: Array<{ message: string; level?: string }>;
 }
 
-function makeMockCtx(ui: MockUI): CommandContext {
+function makeMockCtx(ui: MockUI): ExtensionCommandContext {
   return {
     ui: {
-      select: async (_opts) => {
+      select: async (_title: string, _opts: string[]) => {
         const r = ui.selectResponses.shift();
         if (r === undefined) throw new Error("No more select responses");
         return r;
       },
-      input: async (_opts) => {
+      input: async (_title: string, _placeholder?: string) => {
         const r = ui.inputResponses.shift();
         if (r === undefined) throw new Error("No more input responses");
         return r;
       },
-      confirm: async (_opts) => {
+      confirm: async (_title: string, _message: string) => {
         const r = ui.confirmResponses.shift();
         if (r === undefined) throw new Error("No more confirm responses");
         return r;
       },
-      notify: (message, level) => {
+      notify: (message: string, level?: "info" | "warning" | "error") => {
         ui.notifications.push({ message, level });
       },
     },
-  };
+  } as unknown as ExtensionCommandContext;
 }
 
 interface CapturedCommand {
   name: string;
-  handler: (args: string, ctx: CommandContext) => Promise<void>;
+  handler: (args: string, ctx: ExtensionCommandContext) => Promise<void>;
 }
 
 function makeMockPi(): { pi: ExtensionAPI; commands: CapturedCommand[] } {
   const commands: CapturedCommand[] = [];
-  const pi: ExtensionAPI = {
+  const pi = {
     on: () => {},
     registerTool: () => {},
     registerProvider: () => {},
-    registerCommand: (name, handlerOrObj) => {
-      if (typeof handlerOrObj === "object" && "handler" in handlerOrObj) {
-        commands.push({ name, handler: handlerOrObj.handler });
+    registerCommand: (name: string, handlerOrObj: unknown) => {
+      if (typeof handlerOrObj === "object" && handlerOrObj !== null && "handler" in handlerOrObj) {
+        commands.push({
+          name,
+          handler: (
+            handlerOrObj as {
+              handler: (args: string, ctx: ExtensionCommandContext) => Promise<void>;
+            }
+          ).handler,
+        });
       }
     },
-  };
+  } as unknown as ExtensionAPI;
   return { pi, commands };
 }
 
@@ -82,7 +89,7 @@ async function invokeSetupModels(ui: MockUI, settingsPath: string): Promise<void
 function minimalUI(overrides: Partial<MockUI> = {}): MockUI {
   return {
     // select: provider, websearch, reasoning
-    selectResponses: ["anthropic", "none", "medium"],
+    selectResponses: ["Anthropic", "None", "Medium"],
     // input: anthropic key, default model
     inputResponses: ["sk-ant-test-key", "claude-opus-4-5"],
     // confirm: overwrite existing? (only asked when keys exist), context7?

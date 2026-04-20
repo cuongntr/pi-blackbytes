@@ -1,4 +1,4 @@
-import type { ExtensionAPI } from "../types/pi.js";
+import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 
 export interface MockPiCalls {
   registerTool: unknown[];
@@ -9,9 +9,10 @@ export interface MockPiCalls {
   appendEntry: unknown[];
 }
 
-export interface MockPi extends ExtensionAPI {
+export interface MockPi {
   registerTool(definition: unknown): void;
   registerCommand(definition: unknown): void;
+  registerProvider(name: string, opts: unknown): void;
   on(event: string, handler: (...args: any[]) => void | Promise<void>): void;
   setActiveTools(...args: unknown[]): void;
   appendEntry(...args: unknown[]): void;
@@ -21,7 +22,7 @@ export interface MockPi extends ExtensionAPI {
   emit(event: string, ...args: unknown[]): void | Promise<void>;
 }
 
-export function createMockPi(): MockPi {
+export function createMockPi(): MockPi & ExtensionAPI {
   const calls: MockPiCalls = {
     registerTool: [],
     registerCommand: [],
@@ -32,6 +33,18 @@ export function createMockPi(): MockPi {
   };
 
   const handlers = new Map<string, Array<(...args: any[]) => void | Promise<void>>>();
+
+  // Default ctx supplied when tests emit events without an explicit ctx.
+  // Mirrors what Pi's runtime always provides to handlers.
+  const defaultCtx = {
+    model: undefined as { id: string } | undefined,
+    ui: {
+      notify: () => {},
+      input: async () => undefined as string | undefined,
+      select: async () => undefined as string | undefined,
+      confirm: async () => false,
+    },
+  };
 
   const mock: MockPi = {
     calls,
@@ -66,8 +79,9 @@ export function createMockPi(): MockPi {
     emit(event: string, ...args: unknown[]): void | Promise<void> {
       const list = handlers.get(event);
       if (!list || list.length === 0) return;
-      // Run all handlers; return a promise if any are async
-      const results = list.map((h) => h(...args));
+      // Pi runtime always passes (event, ctx); supply default ctx when not provided
+      const callArgs: unknown[] = args.length >= 2 ? args : [args[0], defaultCtx];
+      const results = list.map((h) => h(...callArgs));
       const promises = results.filter((r): r is Promise<void> => r instanceof Promise);
       if (promises.length > 0) {
         return Promise.all(promises).then(() => undefined);
@@ -75,5 +89,5 @@ export function createMockPi(): MockPi {
     },
   };
 
-  return mock;
+  return mock as unknown as MockPi & ExtensionAPI;
 }

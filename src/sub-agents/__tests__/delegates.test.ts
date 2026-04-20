@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import { EventEmitter } from "node:events";
 import { afterEach, beforeEach, describe, it } from "node:test";
+import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { _resetEnabledSet, initEnabledSet } from "../../config/enabled-set.js";
 import { ALL_TOOL_NAMES } from "../../config/resource-metadata.js";
 import type { BlackbytesConfig } from "../../config/schema.js";
-import type { ExtensionAPI } from "../../types/pi.js";
 import type { SubAgentDeclaration } from "../declaration.js";
 import { exploreDeclaration } from "../explore.js";
 import { generalDeclaration } from "../general.js";
@@ -76,9 +76,9 @@ function extractAllowedTools(args: string[]): string[] {
 }
 
 /** Builds a minimal fake ExtensionAPI that captures registered tools. */
-function makeFakePi(): ExtensionAPI & {
+function makeFakePi(): {
   registeredTools: Map<string, { execute: (p: any) => Promise<any> }>;
-} {
+} & ExtensionAPI {
   const registeredTools = new Map<string, { execute: (p: any) => Promise<any> }>();
   return {
     registeredTools,
@@ -88,7 +88,9 @@ function makeFakePi(): ExtensionAPI & {
     },
     registerProvider: () => {},
     registerCommand: () => {},
-  };
+  } as unknown as {
+    registeredTools: Map<string, { execute: (p: any) => Promise<any> }>;
+  } & ExtensionAPI;
 }
 
 /** Helper: register a declaration via the generic registerSubAgent path. */

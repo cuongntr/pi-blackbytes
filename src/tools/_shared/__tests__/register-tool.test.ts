@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { beforeEach, describe, it } from "node:test";
+import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { _resetEnabledSet, initEnabledSet } from "../../../config/enabled-set.js";
 import { parseBlackbytesConfig } from "../../../config/schema.js";
 import { registerTool } from "../register-tool.js";
@@ -28,7 +29,7 @@ describe("registerTool", () => {
       },
     };
 
-    registerTool(mockPi, "hashline_edit", { name: "hashline_edit" });
+    registerTool(mockPi as unknown as ExtensionAPI, "hashline_edit", { name: "hashline_edit" });
     assert.equal(registered.length, 0);
   });
 
@@ -46,7 +47,7 @@ describe("registerTool", () => {
     };
 
     const definition = { name: "hashline_edit", description: "Edit files" };
-    registerTool(mockPi, "hashline_edit", definition);
+    registerTool(mockPi as unknown as ExtensionAPI, "hashline_edit", definition);
     assert.equal(registered.length, 1);
     assert.deepEqual(registered[0], definition);
   });
@@ -64,7 +65,9 @@ describe("registerTool", () => {
       },
     };
 
-    registerTool(mockPi, "nonexistent_tool", { name: "nonexistent_tool" });
+    registerTool(mockPi as unknown as ExtensionAPI, "nonexistent_tool", {
+      name: "nonexistent_tool",
+    });
     assert.equal(registered.length, 0);
   });
 });

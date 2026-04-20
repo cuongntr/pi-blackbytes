@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import { EventEmitter } from "node:events";
 import { afterEach, beforeEach, describe, it } from "node:test";
+import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { Type } from "@sinclair/typebox";
 import { _resetEnabledSet, initEnabledSet } from "../../config/enabled-set.js";
 import type { BlackbytesConfig } from "../../config/schema.js";
-import type { ExtensionAPI } from "../../types/pi.js";
 import { defineSubAgent } from "../declaration.js";
 import { registerSubAgent } from "../register.js";
 import type { SpawnFn } from "../runner.js";
@@ -63,9 +63,9 @@ function extractAllowedTools(args: string[]): string[] {
   return (args[idx + 1] ?? "").split(",");
 }
 
-function makeFakePi(): ExtensionAPI & {
+function makeFakePi(): {
   registeredTools: Map<string, { execute: (p: any) => Promise<any> }>;
-} {
+} & ExtensionAPI {
   const registeredTools = new Map<string, { execute: (p: any) => Promise<any> }>();
   return {
     registeredTools,
@@ -75,7 +75,9 @@ function makeFakePi(): ExtensionAPI & {
     },
     registerProvider: () => {},
     registerCommand: () => {},
-  };
+  } as unknown as {
+    registeredTools: Map<string, { execute: (p: any) => Promise<any> }>;
+  } & ExtensionAPI;
 }
 
 // A minimal declaration for testing

@@ -1,5 +1,5 @@
+import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { getEnabledSet } from "../../config/enabled-set.js";
-import type { ExtensionAPI } from "../../types/pi.js";
 
 /**
  * Registers a tool with the pi extension API if it is enabled in the current session config.

@@ -1,8 +1,8 @@
 import { readFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { getEnabledSet } from "../config/enabled-set.js";
-import type { ExtensionAPI } from "../types/pi.js";
 import type { SubAgentDeclaration } from "./declaration.js";
 import { type SpawnFn, runNestedPi } from "./runner.js";
 
@@ -30,7 +30,7 @@ export function registerSubAgent(
 
   const { spawnFn } = options ?? {};
 
-  pi.registerTool({
+  (pi.registerTool as (def: unknown) => void)({
     name: declaration.toolName,
     description: declaration.description,
     parameters: declaration.parameters,

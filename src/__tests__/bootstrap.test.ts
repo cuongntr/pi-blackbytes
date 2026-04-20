@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
+import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 // We import via dynamic import to avoid top-level console.log at import time.
 // Instead, we test bootstrap directly.
 import { bootstrap } from "../bootstrap.js";
@@ -26,7 +27,7 @@ describe("bootstrap", () => {
       registerCommand(_name: string, _handler: any) {},
     };
 
-    assert.doesNotThrow(() => bootstrap(mockPi));
+    assert.doesNotThrow(() => bootstrap(mockPi as unknown as ExtensionAPI));
     assert.deepEqual(subscribedEvents, EXPECTED_EVENTS);
   });
 
@@ -43,7 +44,7 @@ describe("bootstrap", () => {
       registerCommand(_name: string, _handler: any) {},
     };
 
-    bootstrap(mockPi);
+    bootstrap(mockPi as unknown as ExtensionAPI);
     assert.ok(capturedHandler, "session_start handler should be registered");
 
     // Calling the handler should not throw even if the underlying async handler rejects.

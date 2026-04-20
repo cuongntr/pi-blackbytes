@@ -1,6 +1,6 @@
 import { readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
+import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { type Static, Type } from "@sinclair/typebox";
-import type { ExtensionAPI } from "../../types/pi.js";
 import { computeCID } from "../../utils/cid.js";
 import { registerTool } from "../_shared/register-tool.js";
 

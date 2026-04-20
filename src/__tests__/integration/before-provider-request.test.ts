@@ -99,6 +99,7 @@ describe("integration: before_provider_request", () => {
   it("reasoning effort mapping: model_select + before_provider_request adds thinking param for claude", async () => {
     // Arrange
     const subDir = await makeTempDir();
+    let prevEffort: string | undefined;
     try {
       await writeSettings(subDir, JSON.stringify({ blackbytes: {} }));
       process.env.PI_AGENT_DIR = subDir;
@@ -110,12 +111,14 @@ describe("integration: before_provider_request", () => {
       await waitForEnabledSet();
 
       // Select a claude model → sets model family
-      await mock.emit("model_select", { modelId: "claude-3-5-sonnet-20241022" });
+      await mock.emit("model_select", { model: { id: "claude-3-5-sonnet-20241022" } });
       await settle();
 
-      // Fire before_provider_request with reasoningEffort
+      // Fire before_provider_request with reasoningEffort via env var
+      prevEffort = process.env.BLACKBYTES_REASONING_EFFORT;
+      process.env.BLACKBYTES_REASONING_EFFORT = "high";
       const payload: Record<string, unknown> = { temperature: 0.7 };
-      const event = { payload, reasoningEffort: "high" };
+      const event = { payload };
       await mock.emit("before_provider_request", event);
       await settle();
 
@@ -125,6 +128,11 @@ describe("integration: before_provider_request", () => {
       assert.equal(thinking.type, "enabled", "thinking type should be 'enabled'");
       assert.equal(thinking.budget_tokens, 50000, "high effort = 50000 tokens");
     } finally {
+      if (prevEffort === undefined) {
+        delete process.env.BLACKBYTES_REASONING_EFFORT;
+      } else {
+        process.env.BLACKBYTES_REASONING_EFFORT = prevEffort;
+      }
       await fs.rm(subDir, { recursive: true, force: true });
     }
   });
@@ -197,6 +205,7 @@ describe("integration: before_provider_request", () => {
 
   it("uses model family cached during before_agent_start before model_select runs", async () => {
     const subDir = await makeTempDir();
+    let prevEffort: string | undefined;
     try {
       await writeSettings(subDir, JSON.stringify({ blackbytes: {} }));
       process.env.PI_AGENT_DIR = subDir;
@@ -207,18 +216,25 @@ describe("integration: before_provider_request", () => {
       mock.emit("session_start", {});
       await waitForEnabledSet();
 
-      await mock.emit("before_agent_start", {
-        systemPrompt: "Base prompt.",
-        modelId: "gpt-5.4",
-      });
+      await mock.emit(
+        "before_agent_start",
+        { systemPrompt: "Base prompt." },
+        { model: { id: "gpt-5.4" }, ui: { notify: () => {} } },
+      );
       await settle();
 
       const payload: Record<string, unknown> = {};
-      await mock.emit("before_provider_request", { payload, reasoningEffort: "medium" });
+      prevEffort = process.env.BLACKBYTES_REASONING_EFFORT;
+      process.env.BLACKBYTES_REASONING_EFFORT = "medium";
+      await mock.emit("before_provider_request", { payload });
       await settle();
-
       assert.equal(payload.reasoning_effort, "medium");
     } finally {
+      if (prevEffort === undefined) {
+        delete process.env.BLACKBYTES_REASONING_EFFORT;
+      } else {
+        process.env.BLACKBYTES_REASONING_EFFORT = prevEffort;
+      }
       await fs.rm(subDir, { recursive: true, force: true });
     }
   });

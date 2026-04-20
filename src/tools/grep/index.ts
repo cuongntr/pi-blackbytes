@@ -1,8 +1,8 @@
 import { spawn } from "node:child_process";
 import { readFile, readdir, stat } from "node:fs/promises";
 import { join, relative } from "node:path";
+import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { Type } from "@sinclair/typebox";
-import type { ExtensionAPI } from "../../types/pi.js";
 import { registerTool } from "../_shared/register-tool.js";
 
 type OutputMode = "content" | "files_with_matches" | "count";

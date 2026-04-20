@@ -202,7 +202,7 @@ describe("integration: before_agent_start", () => {
   });
 });
 
-it("uses event modelId to choose prompt family before model_select runs", async () => {
+it("uses ctx.model.id to choose prompt family before model_select runs", async () => {
   const subDir = await makeTempDir();
   try {
     await writeSettings(subDir, JSON.stringify({ blackbytes: {} }));
@@ -214,17 +214,16 @@ it("uses event modelId to choose prompt family before model_select runs", async 
     mock.emit("session_start", {});
     await waitForEnabledSet();
 
-    const event = {
-      systemPrompt: "Base prompt.",
-      modelId: "gpt-5.4",
-    };
+    const event = { systemPrompt: "Base prompt." };
+    // Pass ctx with a GPT model so before_agent_start can detect the family
+    const mockCtx = { model: { id: "gpt-5.4" }, ui: { notify: () => {} } };
 
-    await mock.emit("before_agent_start", event);
+    await mock.emit("before_agent_start", event, mockCtx);
     await settle();
 
     assert.ok(
       event.systemPrompt.includes("NEVER open with filler"),
-      "GPT prompt variant should be selected from event modelId",
+      "GPT prompt variant should be selected from ctx.model.id",
     );
     assert.ok(!event.systemPrompt.includes("<agency>"), "Claude XML prompt should not be used");
   } finally {

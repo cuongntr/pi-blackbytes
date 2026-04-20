@@ -4,9 +4,9 @@ import * as fsPromises from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
 import { afterEach, beforeEach, describe, it } from "node:test";
+import type { ExtensionAPI, ExtensionCommandContext } from "@mariozechner/pi-coding-agent";
 import { registerSetupModelsCommand } from "../../commands/setup-models.js";
 import { loadBlackbytesConfig } from "../../config/loader.js";
-import type { CommandContext, ExtensionAPI } from "../../types/pi.js";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -33,29 +33,22 @@ function readSettingsJson(dir: string): Record<string, unknown> {
  */
 function createCommandCapturePi(): {
   pi: ExtensionAPI;
-  getHandler: () => (args: string, ctx: CommandContext) => Promise<void>;
+  getHandler: () => (args: string, ctx: ExtensionCommandContext) => Promise<void>;
 } {
-  let capturedHandler: ((args: string, ctx: CommandContext) => Promise<void>) | undefined;
+  let capturedHandler: ((args: string, ctx: ExtensionCommandContext) => Promise<void>) | undefined;
 
-  const pi: ExtensionAPI = {
+  const pi = {
     on() {},
     registerTool() {},
     registerProvider() {},
-    registerCommand(
-      _name: string,
-      handler:
-        | ((...args: unknown[]) => void | Promise<void>)
-        | { handler: (args: string, ctx: CommandContext) => Promise<void> },
-    ) {
-      if (typeof handler === "object" && handler !== null && "handler" in handler) {
+    registerCommand(_name: string, options: unknown) {
+      if (typeof options === "object" && options !== null && "handler" in options) {
         capturedHandler = (
-          handler as { handler: (args: string, ctx: CommandContext) => Promise<void> }
+          options as { handler: (args: string, ctx: ExtensionCommandContext) => Promise<void> }
         ).handler;
-      } else if (typeof handler === "function") {
-        capturedHandler = handler as (args: string, ctx: CommandContext) => Promise<void>;
       }
     },
-  };
+  } as unknown as ExtensionAPI;
 
   return {
     pi,
@@ -67,31 +60,31 @@ function createCommandCapturePi(): {
 }
 
 /**
- * Build a mock CommandContext with pre-programmed queue-based responses.
+ * Build a mock ExtensionCommandContext with pre-programmed queue-based responses.
  * Each ui method pops from its own queue. Extra calls beyond the queue return safe defaults.
  */
 function buildMockCtx(responses: {
   selects?: string[];
   inputs?: string[];
   confirms?: boolean[];
-}): { ctx: CommandContext; notifications: Array<{ msg: string; level: string }> } {
+}): { ctx: ExtensionCommandContext; notifications: Array<{ msg: string; level: string }> } {
   const selects = [...(responses.selects ?? [])];
   const inputs = [...(responses.inputs ?? [])];
   const confirms = [...(responses.confirms ?? [])];
   const notifications: Array<{ msg: string; level: string }> = [];
 
-  const ctx: CommandContext = {
+  const ctx = {
     ui: {
-      select: async (_opts) => {
+      select: async (_title: string, _opts: string[]) => {
         const v = selects.shift();
         if (v === undefined) throw new Error("Unexpected ctx.ui.select() — queue exhausted");
         return v;
       },
-      input: async (_opts) => inputs.shift() ?? "",
-      confirm: async (_opts) => confirms.shift() ?? false,
-      notify: (msg, level = "info") => notifications.push({ msg, level }),
+      input: async (_title: string, _placeholder?: string) => inputs.shift() ?? "",
+      confirm: async (_title: string, _message: string) => confirms.shift() ?? false,
+      notify: (msg: string, level = "info") => notifications.push({ msg, level }),
     },
-  };
+  } as unknown as ExtensionCommandContext;
 
   return { ctx, notifications };
 }
@@ -236,7 +229,7 @@ describe("integration: setup-models wizard", () => {
 
     // No existing blackbytes block → no overwrite confirm
     await runWizard({
-      selects: ["copilot", "none", "medium"], // provider, websearch, reasoning
+      selects: ["GitHub Copilot", "None", "Medium"], // provider, websearch, reasoning
       inputs: ["claude-opus-4-5"], // default model
       confirms: [false], // context7 = no
     });
@@ -249,7 +242,7 @@ describe("integration: setup-models wizard", () => {
 
   it("7. atomic write — final file is valid JSON, no .tmp file left behind", async () => {
     await runWizard({
-      selects: ["copilot", "none", "medium"],
+      selects: ["GitHub Copilot", "None", "Medium"],
       inputs: ["claude-opus-4-5"],
       confirms: [false],
     });
@@ -280,7 +273,7 @@ describe("integration: setup-models wizard", () => {
 
     // Has existing blackbytes → wizard confirms overwrite first
     await runWizard({
-      selects: ["anthropic", "none", "medium"], // provider, websearch, reasoning
+      selects: ["Anthropic", "None", "Medium"], // provider, websearch, reasoning
       inputs: ["sk-ant-key", "claude-opus-4-5"], // api key, model
       confirms: [true, false], // overwrite=yes, context7=no
     });

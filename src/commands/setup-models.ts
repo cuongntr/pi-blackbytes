@@ -2,8 +2,8 @@ import * as fs from "node:fs";
 import * as fsPromises from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
+import type { ExtensionAPI, ExtensionCommandContext } from "@mariozechner/pi-coding-agent";
 import { createLogger } from "../shared/logger.js";
-import type { CommandContext, ExtensionAPI } from "../types/pi.js";
 
 const logger = createLogger();
 
@@ -56,8 +56,8 @@ function atomicWriteJson(filePath: string, data: unknown): void {
 
 export function registerSetupModelsCommand(pi: ExtensionAPI): void {
   pi.registerCommand("setup-models", {
-    handler: async (_args: string, ctx: CommandContext) => {
-      const notify = (msg: string, level: "info" | "warn" | "error" = "info") =>
+    handler: async (_args: string, ctx: ExtensionCommandContext) => {
+      const notify = (msg: string, level: "info" | "warning" | "error" = "info") =>
         ctx.ui.notify(msg, level);
 
       notify("Welcome to the Blackbytes setup wizard!");
@@ -78,10 +78,10 @@ export function registerSetupModelsCommand(pi: ExtensionAPI): void {
       // If there's existing blackbytes config, confirm overwrite
       const hasExistingKeys = Object.keys(existingBlackbytes).length > 0;
       if (hasExistingKeys) {
-        const overwrite = await ctx.ui.confirm({
-          message:
-            "Existing blackbytes configuration found. This wizard will overwrite it. Continue?",
-        });
+        const overwrite = await ctx.ui.confirm(
+          "Confirm",
+          "Existing blackbytes configuration found. This wizard will overwrite it. Continue?",
+        );
         if (!overwrite) {
           notify("Setup cancelled — no changes made.", "info");
           return;
@@ -89,16 +89,19 @@ export function registerSetupModelsCommand(pi: ExtensionAPI): void {
       }
 
       // --- Provider selection ---
-      const providerChoice = await ctx.ui.select({
-        message: "Which AI provider(s) do you want to configure?",
-        options: [
-          { label: "Anthropic", value: "anthropic" },
-          { label: "OpenAI", value: "openai" },
-          { label: "GitHub Copilot", value: "copilot" },
-          { label: "Anthropic + OpenAI", value: "anthropic_openai" },
-          { label: "All providers", value: "all" },
-        ],
-      });
+      const PROVIDER_OPTIONS = [
+        { label: "Anthropic", value: "anthropic" },
+        { label: "OpenAI", value: "openai" },
+        { label: "GitHub Copilot", value: "copilot" },
+        { label: "Anthropic + OpenAI", value: "anthropic_openai" },
+        { label: "All providers", value: "all" },
+      ] as const;
+      const selectedProviderLabel = await ctx.ui.select(
+        "Which AI provider(s) do you want to configure?",
+        PROVIDER_OPTIONS.map((o) => o.label),
+      );
+      const providerChoice =
+        PROVIDER_OPTIONS.find((o) => o.label === selectedProviderLabel)?.value ?? "none";
 
       const providers = new Set<string>();
       if (
@@ -128,23 +131,19 @@ export function registerSetupModelsCommand(pi: ExtensionAPI): void {
       const providerKeys: Record<string, string> = {};
 
       if (providers.has("anthropic")) {
-        const key = await ctx.ui.input({
-          message: "Anthropic API key:",
-          placeholder: "sk-ant-...",
-        });
-        if (key.trim()) {
-          providerKeys.anthropic_api_key = key.trim();
+        const key = await ctx.ui.input("Anthropic API key:", "sk-ant-...");
+        const trimmed = (key ?? "").trim();
+        if (trimmed) {
+          providerKeys.anthropic_api_key = trimmed;
         }
         packages.add("anthropic");
       }
 
       if (providers.has("openai")) {
-        const key = await ctx.ui.input({
-          message: "OpenAI API key:",
-          placeholder: "sk-...",
-        });
-        if (key.trim()) {
-          providerKeys.openai_api_key = key.trim();
+        const key = await ctx.ui.input("OpenAI API key:", "sk-...");
+        const trimmed = (key ?? "").trim();
+        if (trimmed) {
+          providerKeys.openai_api_key = trimmed;
         }
         packages.add("openai");
       }
@@ -156,65 +155,69 @@ export function registerSetupModelsCommand(pi: ExtensionAPI): void {
       }
 
       // --- Websearch ---
-      const wsProvider = await ctx.ui.select({
-        message: "Websearch provider:",
-        options: [
-          { label: "Exa", value: "exa" },
-          { label: "Tavily", value: "tavily" },
-          { label: "None", value: "none" },
-        ],
-      });
+      const WS_OPTIONS = [
+        { label: "Exa", value: "exa" },
+        { label: "Tavily", value: "tavily" },
+        { label: "None", value: "none" },
+      ] as const;
+      const selectedWsLabel = await ctx.ui.select(
+        "Websearch provider:",
+        WS_OPTIONS.map((o) => o.label),
+      );
+      const wsProvider = WS_OPTIONS.find((o) => o.label === selectedWsLabel)?.value ?? "none";
 
       const websearchConfig: Record<string, unknown> | undefined =
         wsProvider === "none" ? undefined : { provider: wsProvider };
 
       if (wsProvider === "exa") {
-        const key = await ctx.ui.input({
-          message: "Exa API key:",
-          placeholder: "exa-...",
-        });
-        if (key.trim() && websearchConfig) {
-          websearchConfig.exa_api_key = key.trim();
+        const key = await ctx.ui.input("Exa API key:", "exa-...");
+        const trimmed = (key ?? "").trim();
+        if (trimmed && websearchConfig) {
+          websearchConfig.exa_api_key = trimmed;
         }
       } else if (wsProvider === "tavily") {
-        const key = await ctx.ui.input({
-          message: "Tavily API key:",
-          placeholder: "tvly-...",
-        });
-        if (key.trim() && websearchConfig) {
-          websearchConfig.tavily_api_key = key.trim();
+        const key = await ctx.ui.input("Tavily API key:", "tvly-...");
+        const trimmed = (key ?? "").trim();
+        if (trimmed && websearchConfig) {
+          websearchConfig.tavily_api_key = trimmed;
         }
       }
 
       // --- Context7 ---
-      const useContext7 = await ctx.ui.confirm({
-        message: "Configure Context7 (optional documentation lookup)?",
-      });
+      const useContext7 = await ctx.ui.confirm(
+        "Context7",
+        "Configure Context7 (optional documentation lookup)?",
+      );
 
       let context7Config: { api_key?: string } | undefined;
       if (useContext7) {
-        const key = await ctx.ui.input({
-          message: "Context7 API key (optional, press Enter to skip):",
-          placeholder: "ctx7-...",
-        });
-        context7Config = key.trim() ? { api_key: key.trim() } : {};
+        const key = await ctx.ui.input(
+          "Context7 API key (optional, press Enter to skip):",
+          "ctx7-...",
+        );
+        const trimmed = (key ?? "").trim();
+        context7Config = trimmed ? { api_key: trimmed } : {};
       }
 
       // --- Default model ---
-      const defaultModel = await ctx.ui.input({
-        message: "Default model (e.g. claude-opus-4-5, gpt-4o):",
-        placeholder: "claude-opus-4-5",
-      });
+      const defaultModelRaw = await ctx.ui.input(
+        "Default model (e.g. claude-opus-4-5, gpt-4o):",
+        "claude-opus-4-5",
+      );
+      const defaultModel = (defaultModelRaw ?? "").trim();
 
       // --- Reasoning settings ---
-      const reasoningEffort = await ctx.ui.select({
-        message: "Default reasoning effort:",
-        options: [
-          { label: "Low", value: "low" },
-          { label: "Medium", value: "medium" },
-          { label: "High", value: "high" },
-        ],
-      });
+      const REASONING_OPTIONS = [
+        { label: "Low", value: "low" },
+        { label: "Medium", value: "medium" },
+        { label: "High", value: "high" },
+      ] as const;
+      const selectedReasoningLabel = await ctx.ui.select(
+        "Default reasoning effort:",
+        REASONING_OPTIONS.map((o) => o.label),
+      );
+      const reasoningEffort =
+        REASONING_OPTIONS.find((o) => o.label === selectedReasoningLabel)?.value ?? "medium";
 
       // --- Build new blackbytes block ---
       const newBlackbytes: Record<string, unknown> = {
@@ -232,8 +235,8 @@ export function registerSetupModelsCommand(pi: ExtensionAPI): void {
         newBlackbytes.context7 = context7Config;
       }
 
-      if (defaultModel.trim()) {
-        newBlackbytes.default_model = defaultModel.trim();
+      if (defaultModel) {
+        newBlackbytes.default_model = defaultModel;
         newBlackbytes.sub_agents = {
           ...(typeof newBlackbytes.sub_agents === "object" && newBlackbytes.sub_agents !== null
             ? (newBlackbytes.sub_agents as Record<string, unknown>)

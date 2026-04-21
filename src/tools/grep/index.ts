@@ -5,6 +5,7 @@ import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { Type } from "@sinclair/typebox";
 import { TOOL_NAMES } from "../../config/resource-metadata.js";
 import { registerTool } from "../_shared/register-tool.js";
+import { type TextToolResult, textResult } from "../_shared/text-result.js";
 
 type OutputMode = "content" | "files_with_matches" | "count";
 
@@ -212,34 +213,34 @@ async function nodeFallbackGrep(params: GrepParams): Promise<string> {
 // Execute
 // ---------------------------------------------------------------------------
 
-async function executeGrep(params: GrepParams): Promise<{ content: string }> {
+async function executeGrep(params: GrepParams): Promise<TextToolResult> {
   // Validate regex up front
   try {
     new RegExp(params.pattern);
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
-    return { content: `Error: Invalid regex pattern: ${msg}` };
+    return textResult(`Error: Invalid regex pattern: ${msg}`);
   }
 
   // Try ripgrep first
   try {
     const args = buildRgArgs(params);
     const output = await spawnRg(args);
-    return { content: output || "(no matches)" };
+    return textResult(output || "(no matches)");
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
     // If rg binary not found or spawn error, fall back to Node
     if (msg.includes("ENOENT") || msg.includes("not found")) {
       try {
         const output = await nodeFallbackGrep(params);
-        return { content: output || "(no matches)" };
+        return textResult(output || "(no matches)");
       } catch (fallbackErr: unknown) {
         const fallbackMsg =
           fallbackErr instanceof Error ? fallbackErr.message : String(fallbackErr);
-        return { content: `Error: ${fallbackMsg}` };
+        return textResult(`Error: ${fallbackMsg}`);
       }
     }
-    return { content: `Error: ${msg}` };
+    return textResult(`Error: ${msg}`);
   }
 }
 

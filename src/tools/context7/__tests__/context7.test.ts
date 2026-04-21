@@ -40,9 +40,9 @@ describe("executeResolveLibraryId", () => {
       fetchFn,
     );
 
-    assert.ok(result.content.includes("/vercel/next.js"));
-    assert.ok(result.content.includes("Next.js"));
-    assert.ok(result.content.includes("The React Framework"));
+    assert.ok(result.content[0].text.includes("/vercel/next.js"));
+    assert.ok(result.content[0].text.includes("Next.js"));
+    assert.ok(result.content[0].text.includes("The React Framework"));
   });
 
   it("returns message when no results found", async () => {
@@ -53,8 +53,8 @@ describe("executeResolveLibraryId", () => {
       fetchFn,
     );
 
-    assert.ok(result.content.includes("No libraries found"));
-    assert.ok(result.content.includes("nonexistent-xyz-lib"));
+    assert.ok(result.content[0].text.includes("No libraries found"));
+    assert.ok(result.content[0].text.includes("nonexistent-xyz-lib"));
   });
 
   it("handles array response format", async () => {
@@ -62,7 +62,7 @@ describe("executeResolveLibraryId", () => {
 
     const result = await executeResolveLibraryId({ libraryName: "React", query: "hooks" }, fetchFn);
 
-    assert.ok(result.content.includes("/facebook/react"));
+    assert.ok(result.content[0].text.includes("/facebook/react"));
   });
 
   it("returns error message on API failure", async () => {
@@ -70,8 +70,8 @@ describe("executeResolveLibraryId", () => {
 
     const result = await executeResolveLibraryId({ libraryName: "React", query: "hooks" }, fetchFn);
 
-    assert.ok(result.content.includes("Error resolving library ID"));
-    assert.ok(result.content.includes("503"));
+    assert.ok(result.content[0].text.includes("Error resolving library ID"));
+    assert.ok(result.content[0].text.includes("503"));
   });
 });
 
@@ -94,8 +94,8 @@ describe("executeQueryDocs", () => {
       fetchFn,
     );
 
-    assert.ok(result.content.includes("Server Components"));
-    assert.ok(result.content.includes("server"));
+    assert.ok(result.content[0].text.includes("Server Components"));
+    assert.ok(result.content[0].text.includes("server"));
   });
 
   it("returns error for invalid libraryId format", async () => {
@@ -106,8 +106,8 @@ describe("executeQueryDocs", () => {
       fetchFn,
     );
 
-    assert.ok(result.content.includes("Invalid libraryId"));
-    assert.ok(result.content.includes("/org/project"));
+    assert.ok(result.content[0].text.includes("Invalid libraryId"));
+    assert.ok(result.content[0].text.includes("/org/project"));
   });
 
   it("handles string content response", async () => {
@@ -118,7 +118,7 @@ describe("executeQueryDocs", () => {
       fetchFn,
     );
 
-    assert.ok(result.content.includes("Next.js docs"));
+    assert.ok(result.content[0].text.includes("Next.js docs"));
   });
 
   it("returns error message on API failure", async () => {
@@ -129,7 +129,7 @@ describe("executeQueryDocs", () => {
       fetchFn,
     );
 
-    assert.ok(result.content.includes("Error querying docs"));
-    assert.ok(result.content.includes("404"));
+    assert.ok(result.content[0].text.includes("Error querying docs"));
+    assert.ok(result.content[0].text.includes("404"));
   });
 });

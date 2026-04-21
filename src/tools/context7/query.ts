@@ -3,6 +3,7 @@ import { Type } from "@sinclair/typebox";
 import { TOOL_NAMES } from "../../config/resource-metadata.js";
 import { type HttpFetchOptions, httpFetch } from "../_shared/http.js";
 import { registerTool } from "../_shared/register-tool.js";
+import { type TextToolResult, textResult } from "../_shared/text-result.js";
 
 export interface QueryDocsParams {
   libraryId: string;
@@ -12,14 +13,14 @@ export interface QueryDocsParams {
 export async function executeQueryDocs(
   params: QueryDocsParams,
   fetchFn: (opts: HttpFetchOptions) => ReturnType<typeof httpFetch> = httpFetch,
-): Promise<{ content: string }> {
+): Promise<TextToolResult> {
   const { libraryId, query } = params;
 
   // Validate libraryId format: must start with /
   if (!libraryId.startsWith("/")) {
-    return {
-      content: `Invalid libraryId "${libraryId}". Must be in /org/project format (e.g. /vercel/next.js). Use docs_resolve to get the correct ID.`,
-    };
+    return textResult(
+      `Invalid libraryId "${libraryId}". Must be in /org/project format (e.g. /vercel/next.js). Use docs_resolve to get the correct ID.`,
+    );
   }
 
   // Strip leading slash for path construction, then re-add
@@ -30,16 +31,14 @@ export async function executeQueryDocs(
   const result = await fetchFn({ url: url.toString() });
 
   if (!result.ok) {
-    return {
-      content: `Error querying docs for "${libraryId}": ${result.error}`,
-    };
+    return textResult(`Error querying docs for "${libraryId}": ${result.error}`);
   }
 
   const data = result.data;
 
   // Format the response
   if (typeof data === "string") {
-    return { content: data || `No documentation found for query: "${query}"` };
+    return textResult(data || `No documentation found for query: "${query}"`);
   }
 
   if (data && typeof data === "object") {
@@ -47,9 +46,7 @@ export async function executeQueryDocs(
 
     // Handle { snippets: [...] } or { sections: [...] } or { content: string }
     if (typeof obj.content === "string") {
-      return {
-        content: obj.content || `No documentation found for query: "${query}"`,
-      };
+      return textResult(obj.content || `No documentation found for query: "${query}"`);
     }
 
     const snippets =
@@ -71,16 +68,14 @@ export async function executeQueryDocs(
           parts.push(snippet, "");
         }
       }
-      return { content: parts.join("\n") };
+      return textResult(parts.join("\n"));
     }
 
     // Fallback: stringify
-    return {
-      content: JSON.stringify(data, null, 2),
-    };
+    return textResult(JSON.stringify(data, null, 2));
   }
 
-  return { content: `No documentation found for query: "${query}"` };
+  return textResult(`No documentation found for query: "${query}"`);
 }
 
 export function registerQueryDocsTool(pi: ExtensionAPI): void {

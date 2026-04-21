@@ -255,8 +255,8 @@ export function registerHashlineEditTool(pi: ExtensionAPI): void {
       "Edit files using LINE#ID format for precise, safe modifications. " +
       "Applies multiple edits bottom-up using anchors like '10#VK'. " +
       "Supports replace, append, prepend operations on single lines or ranges.",
-    inputSchema: HashlineEditSchema,
-    handler: async (input: HashlineEditInput) => {
+    parameters: HashlineEditSchema,
+    execute: async (_toolCallId: string, input: HashlineEditInput) => {
       const result = applyHashlineEdits(input);
       if (result.success) {
         return { content: [{ type: "text", text: result.message }] };

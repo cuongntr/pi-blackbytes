@@ -77,9 +77,12 @@ function extractAllowedTools(args: string[]): string[] {
 
 /** Builds a minimal fake ExtensionAPI that captures registered tools. */
 function makeFakePi(): {
-  registeredTools: Map<string, { execute: (p: any) => Promise<any> }>;
+  registeredTools: Map<string, { execute: (toolCallId: string, p: any) => Promise<any> }>;
 } & ExtensionAPI {
-  const registeredTools = new Map<string, { execute: (p: any) => Promise<any> }>();
+  const registeredTools = new Map<
+    string,
+    { execute: (toolCallId: string, p: any) => Promise<any> }
+  >();
   return {
     registeredTools,
     on: () => {},
@@ -89,7 +92,7 @@ function makeFakePi(): {
     registerProvider: () => {},
     registerCommand: () => {},
   } as unknown as {
-    registeredTools: Map<string, { execute: (p: any) => Promise<any> }>;
+    registeredTools: Map<string, { execute: (toolCallId: string, p: any) => Promise<any> }>;
   } & ExtensionAPI;
 }
 
@@ -199,11 +202,11 @@ describe("delegate_explore", () => {
     registerDecl(pi, exploreDeclaration, spawnFn);
     const tool = pi.registeredTools.get("delegate_explore")!;
 
-    const result = await tool.execute({ question: "Where is the login function?" });
+    const result = await tool.execute("test-call", { question: "Where is the login function?" });
 
     const allowedTools = extractAllowedTools(capturedArgs);
     assert.deepEqual(allowedTools.sort(), ["ast_search", "glob", "grep", "read"].sort());
-    assert.equal(result.content, "found it");
+    assert.equal(result.content[0].text, "found it");
   });
 
   it("returns error string on failure", async () => {
@@ -214,9 +217,12 @@ describe("delegate_explore", () => {
     registerDecl(pi, exploreDeclaration, spawnFn);
     const tool = pi.registeredTools.get("delegate_explore")!;
 
-    const result = await tool.execute({ question: "something" });
+    const result = await tool.execute("test-call", { question: "something" });
 
-    assert.ok(result.content.startsWith("Error:"), `Expected error prefix, got: ${result.content}`);
+    assert.ok(
+      result.content[0].text.startsWith("Error:"),
+      `Expected error prefix, got: ${result.content[0].text}`,
+    );
   });
 });
 
@@ -251,11 +257,11 @@ describe("delegate_oracle", () => {
     registerDecl(pi, oracleDeclaration, spawnFn);
     const tool = pi.registeredTools.get("delegate_oracle")!;
 
-    const result = await tool.execute({ question: "Why is this slow?" });
+    const result = await tool.execute("test-call", { question: "Why is this slow?" });
 
     const allowedTools = extractAllowedTools(capturedArgs);
     assert.deepEqual(allowedTools.sort(), ["ast_search", "glob", "grep", "read"].sort());
-    assert.equal(result.content, "oracle answer");
+    assert.equal(result.content[0].text, "oracle answer");
   });
 
   it("includes context in userPrompt when provided", async () => {
@@ -270,7 +276,7 @@ describe("delegate_oracle", () => {
     registerDecl(pi, oracleDeclaration, spawnFn);
     const tool = pi.registeredTools.get("delegate_oracle")!;
 
-    await tool.execute({ question: "What is wrong?", context: "Error: ENOMEM" });
+    await tool.execute("test-call", { question: "What is wrong?", context: "Error: ENOMEM" });
 
     // The user prompt (-p arg) should contain the context
     const pIdx = capturedArgs.indexOf("-p");
@@ -310,14 +316,14 @@ describe("delegate_librarian", () => {
     registerDecl(pi, librarianDeclaration, spawnFn);
     const tool = pi.registeredTools.get("delegate_librarian")!;
 
-    const result = await tool.execute({ question: "How does typebox work?" });
+    const result = await tool.execute("test-call", { question: "How does typebox work?" });
 
     const allowedTools = extractAllowedTools(capturedArgs);
     assert.ok(allowedTools.includes("docs_resolve"), "should include context7 resolve");
     assert.ok(allowedTools.includes("docs_query"), "should include context7 query");
     assert.ok(allowedTools.includes("web_search"), "should include websearch");
     assert.ok(allowedTools.includes("gh_search"), "should include gh_search");
-    assert.equal(result.content, "docs found");
+    assert.equal(result.content[0].text, "docs found");
   });
 
   it("returns error string on failure", async () => {
@@ -328,8 +334,8 @@ describe("delegate_librarian", () => {
     registerDecl(pi, librarianDeclaration, spawnFn);
     const tool = pi.registeredTools.get("delegate_librarian")!;
 
-    const result = await tool.execute({ question: "anything" });
-    assert.ok(result.content.startsWith("Error:"));
+    const result = await tool.execute("test-call", { question: "anything" });
+    assert.ok(result.content[0].text.startsWith("Error:"));
   });
 });
 
@@ -364,7 +370,7 @@ describe("delegate_general", () => {
     registerDecl(pi, generalDeclaration, spawnFn);
     const tool = pi.registeredTools.get("delegate_general")!;
 
-    await tool.execute({ task: "Fix the bug" });
+    await tool.execute("test-call", { task: "Fix the bug" });
 
     const allowedTools = extractAllowedTools(capturedArgs);
     const hasDelegateTool = allowedTools.some((t) => t.startsWith("delegate_"));
@@ -384,7 +390,7 @@ describe("delegate_general", () => {
     registerDecl(pi, generalDeclaration, spawnFn);
     const tool = pi.registeredTools.get("delegate_general")!;
 
-    await tool.execute({ task: "Fix the bug" });
+    await tool.execute("test-call", { task: "Fix the bug" });
 
     const allowedTools = new Set(extractAllowedTools(capturedArgs));
     for (const name of ALL_TOOL_NAMES) {
@@ -404,7 +410,7 @@ describe("delegate_general", () => {
     registerDecl(pi, generalDeclaration, spawnFn);
     const tool = pi.registeredTools.get("delegate_general")!;
 
-    await tool.execute({ task: "Implement X", context: "File is at src/foo.ts" });
+    await tool.execute("test-call", { task: "Implement X", context: "File is at src/foo.ts" });
 
     const pIdx = capturedArgs.indexOf("-p");
     const userPromptArg = pIdx !== -1 ? capturedArgs[pIdx + 1] : "";

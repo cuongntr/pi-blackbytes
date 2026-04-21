@@ -3,13 +3,14 @@ import { Type } from "@sinclair/typebox";
 import { TOOL_NAMES } from "../../config/resource-metadata.js";
 import { type HttpFetchOptions, httpFetch } from "../_shared/http.js";
 import { registerTool } from "../_shared/register-tool.js";
+import { type TextToolResult, textResult } from "../_shared/text-result.js";
 
 type FetchFn = (opts: HttpFetchOptions) => ReturnType<typeof httpFetch>;
 
 export async function executeWebsearchFetch(
   params: { url: string; timeout?: number },
   fetchFn: FetchFn = httpFetch,
-): Promise<{ content: string }> {
+): Promise<TextToolResult> {
   let { url } = params;
   const { timeout } = params;
 
@@ -25,11 +26,11 @@ export async function executeWebsearchFetch(
   });
 
   if (!result.ok) {
-    return { content: `Error fetching URL: ${result.error}` };
+    return textResult(`Error fetching URL: ${result.error}`);
   }
 
   const text = typeof result.data === "string" ? result.data : JSON.stringify(result.data);
-  return { content: text };
+  return textResult(text);
 }
 
 export function registerWebsearchFetchTool(pi: ExtensionAPI): void {

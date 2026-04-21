@@ -4,6 +4,7 @@ import { loadBlackbytesConfig } from "../../config/loader.js";
 import { TOOL_NAMES } from "../../config/resource-metadata.js";
 import { type HttpFetchOptions, httpFetch } from "../_shared/http.js";
 import { registerTool } from "../_shared/register-tool.js";
+import { type TextToolResult, textResult } from "../_shared/text-result.js";
 
 export interface SearchResult {
   title: string;
@@ -38,16 +39,15 @@ type FetchFn = (opts: HttpFetchOptions) => ReturnType<typeof httpFetch>;
 export async function executeWebsearchSearch(
   params: { query: string; numResults?: number; category?: "people" | "company" },
   fetchFn: FetchFn = httpFetch,
-): Promise<{ content: string }> {
+): Promise<TextToolResult> {
   const { query, numResults = 10, category } = params;
 
   const config = await loadBlackbytesConfig();
 
   if (!config.websearch) {
-    return {
-      content:
-        "Error: websearch is not configured. Add a 'websearch' section to your blackbytes config.",
-    };
+    return textResult(
+      "Error: websearch is not configured. Add a 'websearch' section to your blackbytes config.",
+    );
   }
 
   const { provider } = config.websearch;
@@ -55,7 +55,7 @@ export async function executeWebsearchSearch(
   if (provider === "exa") {
     const apiKey = config.websearch.exa_api_key;
     if (!apiKey) {
-      return { content: "Error: exa_api_key is missing from websearch config." };
+      return textResult("Error: exa_api_key is missing from websearch config.");
     }
 
     const body: Record<string, unknown> = { query, numResults };
@@ -72,7 +72,7 @@ export async function executeWebsearchSearch(
     });
 
     if (!result.ok) {
-      return { content: `Error from Exa API: ${result.error}` };
+      return textResult(`Error from Exa API: ${result.error}`);
     }
 
     const data = result.data as { results?: ExaResult[] };
@@ -82,12 +82,12 @@ export async function executeWebsearchSearch(
       snippet: r.text ?? r.snippet ?? r.highlights?.[0] ?? "",
     }));
 
-    return { content: formatResults(rawResults) };
+    return textResult(formatResults(rawResults));
   }
   // tavily
   const apiKey = config.websearch.tavily_api_key;
   if (!apiKey) {
-    return { content: "Error: tavily_api_key is missing from websearch config." };
+    return textResult("Error: tavily_api_key is missing from websearch config.");
   }
 
   const body: Record<string, unknown> = { query, max_results: numResults, api_key: apiKey };
@@ -100,7 +100,7 @@ export async function executeWebsearchSearch(
   });
 
   if (!result.ok) {
-    return { content: `Error from Tavily API: ${result.error}` };
+    return textResult(`Error from Tavily API: ${result.error}`);
   }
 
   const data = result.data as { results?: TavilyResult[] };
@@ -110,7 +110,7 @@ export async function executeWebsearchSearch(
     snippet: r.content ?? r.snippet ?? "",
   }));
 
-  return { content: formatResults(rawResults) };
+  return textResult(formatResults(rawResults));
 }
 
 export function registerWebsearchSearchTool(pi: ExtensionAPI): void {

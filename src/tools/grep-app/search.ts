@@ -3,6 +3,7 @@ import { Type } from "@sinclair/typebox";
 import { TOOL_NAMES } from "../../config/resource-metadata.js";
 import { type HttpFetchOptions, httpFetch } from "../_shared/http.js";
 import { registerTool } from "../_shared/register-tool.js";
+import { type TextToolResult, textResult } from "../_shared/text-result.js";
 
 export interface GrepAppParams {
   query: string;
@@ -23,7 +24,7 @@ export interface GrepAppHit {
 export async function executeGrepAppSearch(
   params: GrepAppParams,
   fetchFn: (opts: HttpFetchOptions) => ReturnType<typeof httpFetch> = httpFetch,
-): Promise<{ content: string }> {
+): Promise<TextToolResult> {
   const {
     query,
     language,
@@ -51,7 +52,7 @@ export async function executeGrepAppSearch(
   const result = await fetchFn({ url: url.toString() });
 
   if (!result.ok) {
-    return { content: `Error searching GitHub: ${result.error}` };
+    return textResult(`Error searching GitHub: ${result.error}`);
   }
 
   const data = result.data as Record<string, unknown>;
@@ -61,7 +62,7 @@ export async function executeGrepAppSearch(
   const hits: GrepAppHit[] = (hitsWrapper?.hits as GrepAppHit[]) ?? [];
 
   if (!Array.isArray(hits) || hits.length === 0) {
-    return { content: `No results found for query: "${query}"` };
+    return textResult(`No results found for query: "${query}"`);
   }
 
   const parts: string[] = [
@@ -83,7 +84,7 @@ export async function executeGrepAppSearch(
     parts.push("");
   }
 
-  return { content: parts.join("\n") };
+  return textResult(parts.join("\n"));
 }
 
 export function registerGrepAppSearchTool(pi: ExtensionAPI): void {

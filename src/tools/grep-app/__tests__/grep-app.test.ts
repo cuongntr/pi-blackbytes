@@ -49,10 +49,10 @@ describe("executeGrepAppSearch", () => {
 
     const result = await executeGrepAppSearch({ query: "useState(" }, fetchFn);
 
-    assert.ok(result.content.includes("facebook/react"));
-    assert.ok(result.content.includes("useState.js"));
-    assert.ok(result.content.includes("useState(initialValue)"));
-    assert.ok(result.content.includes("42"));
+    assert.ok(result.content[0].text.includes("facebook/react"));
+    assert.ok(result.content[0].text.includes("useState.js"));
+    assert.ok(result.content[0].text.includes("useState(initialValue)"));
+    assert.ok(result.content[0].text.includes("42"));
   });
 
   it("constructs URL with correct query parameters", async () => {
@@ -88,7 +88,7 @@ describe("executeGrepAppSearch", () => {
 
     const result = await executeGrepAppSearch({ query: "very_unlikely_pattern_xyz_123" }, fetchFn);
 
-    assert.ok(result.content.includes("No results found"));
+    assert.ok(result.content[0].text.includes("No results found"));
   });
 
   it("returns error message on API failure", async () => {
@@ -96,7 +96,7 @@ describe("executeGrepAppSearch", () => {
 
     const result = await executeGrepAppSearch({ query: "useState(" }, fetchFn);
 
-    assert.ok(result.content.includes("Error searching GitHub"));
-    assert.ok(result.content.includes("429"));
+    assert.ok(result.content[0].text.includes("Error searching GitHub"));
+    assert.ok(result.content[0].text.includes("429"));
   });
 });

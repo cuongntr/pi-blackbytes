@@ -34,7 +34,7 @@ export function registerSubAgent(
     name: declaration.toolName,
     description: declaration.description,
     parameters: declaration.parameters,
-    execute: async (params: Record<string, unknown>) => {
+    execute: async (_toolCallId: string, params: Record<string, unknown>) => {
       const systemPrompt =
         declaration.systemPrompt ??
         (declaration.systemPromptPath
@@ -67,8 +67,9 @@ export function registerSubAgent(
         spawnFn,
       );
 
+      const text = result.success ? result.content : `Error: ${result.content}`;
       return {
-        content: result.success ? result.content : `Error: ${result.content}`,
+        content: [{ type: "text" as const, text }],
       };
     },
   });

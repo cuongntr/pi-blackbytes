@@ -64,9 +64,12 @@ function extractAllowedTools(args: string[]): string[] {
 }
 
 function makeFakePi(): {
-  registeredTools: Map<string, { execute: (p: any) => Promise<any> }>;
+  registeredTools: Map<string, { execute: (toolCallId: string, p: any) => Promise<any> }>;
 } & ExtensionAPI {
-  const registeredTools = new Map<string, { execute: (p: any) => Promise<any> }>();
+  const registeredTools = new Map<
+    string,
+    { execute: (toolCallId: string, p: any) => Promise<any> }
+  >();
   return {
     registeredTools,
     on: () => {},
@@ -76,7 +79,7 @@ function makeFakePi(): {
     registerProvider: () => {},
     registerCommand: () => {},
   } as unknown as {
-    registeredTools: Map<string, { execute: (p: any) => Promise<any> }>;
+    registeredTools: Map<string, { execute: (toolCallId: string, p: any) => Promise<any> }>;
   } & ExtensionAPI;
 }
 
@@ -141,7 +144,7 @@ describe("registerSubAgent", () => {
     registerSubAgent(pi, testDecl, { spawnFn });
 
     const tool = pi.registeredTools.get("delegate_explore")!;
-    await tool.execute({ question: "Where is the auth module?" });
+    await tool.execute("test-call", { question: "Where is the auth module?" });
 
     // -p <userPrompt> should be the question
     const pIdx = capturedArgs.indexOf("-p");
@@ -160,7 +163,7 @@ describe("registerSubAgent", () => {
     registerSubAgent(pi, testDecl, { spawnFn });
 
     const tool = pi.registeredTools.get("delegate_explore")!;
-    await tool.execute({ question: "test" });
+    await tool.execute("test-call", { question: "test" });
 
     const tools = extractAllowedTools(capturedArgs);
     assert.deepEqual(tools, ["read", "grep", "glob", "ast_search"]);
@@ -187,7 +190,7 @@ describe("registerSubAgent", () => {
     registerSubAgent(pi, dynamicDecl, { spawnFn });
 
     const tool = pi.registeredTools.get("delegate_explore")!;
-    await tool.execute({ task: "find something" });
+    await tool.execute("test-call", { task: "find something" });
 
     const tools = extractAllowedTools(capturedArgs);
     assert.deepEqual(tools, ["read", "grep"]);
@@ -215,7 +218,7 @@ describe("registerSubAgent", () => {
     registerSubAgent(pi, declWithOverrides, { spawnFn });
 
     const tool = pi.registeredTools.get("delegate_explore")!;
-    await tool.execute({ question: "test" });
+    await tool.execute("test-call", { question: "test" });
 
     const modelIdx = capturedArgs.indexOf("--model");
     assert.ok(modelIdx >= 0, "should pass --model");
@@ -247,7 +250,7 @@ describe("registerSubAgent", () => {
     registerSubAgent(pi, declWithAsyncOverrides, { spawnFn });
 
     const tool = pi.registeredTools.get("delegate_explore")!;
-    await tool.execute({ question: "test" });
+    await tool.execute("test-call", { question: "test" });
 
     const modelIdx = capturedArgs.indexOf("--model");
     assert.ok(modelIdx >= 0, "should pass --model");
@@ -262,9 +265,9 @@ describe("registerSubAgent", () => {
     registerSubAgent(pi, testDecl, { spawnFn });
 
     const tool = pi.registeredTools.get("delegate_explore")!;
-    const result = await tool.execute({ question: "test" });
+    const result = await tool.execute("test-call", { question: "test" });
 
-    assert.match(result.content, /^Error:/);
+    assert.match(result.content[0].text, /^Error:/);
   });
 
   it("returns success content on runNestedPi success", async () => {
@@ -275,9 +278,9 @@ describe("registerSubAgent", () => {
     registerSubAgent(pi, testDecl, { spawnFn });
 
     const tool = pi.registeredTools.get("delegate_explore")!;
-    const result = await tool.execute({ question: "test" });
+    const result = await tool.execute("test-call", { question: "test" });
 
-    assert.equal(result.content, "found it!");
+    assert.equal(result.content[0].text, "found it!");
   });
 
   it("refuses nested invocation at depth >= 1", async () => {
@@ -289,9 +292,9 @@ describe("registerSubAgent", () => {
     registerSubAgent(pi, testDecl, { spawnFn });
 
     const tool = pi.registeredTools.get("delegate_explore")!;
-    const result = await tool.execute({ question: "test" });
+    const result = await tool.execute("test-call", { question: "test" });
 
-    assert.match(result.content, /Error:.*recursion/);
+    assert.match(result.content[0].text, /Error:.*recursion/);
   });
 
   it("reads system prompt from declaration path", async () => {
@@ -305,7 +308,7 @@ describe("registerSubAgent", () => {
     registerSubAgent(pi, testDecl, { spawnFn });
 
     const tool = pi.registeredTools.get("delegate_explore")!;
-    await tool.execute({ question: "test" });
+    await tool.execute("test-call", { question: "test" });
 
     // --system-prompt should be passed with non-empty content
     const spIdx = capturedArgs.indexOf("--system-prompt");

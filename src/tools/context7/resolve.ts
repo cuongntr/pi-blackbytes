@@ -3,6 +3,7 @@ import { Type } from "@sinclair/typebox";
 import { TOOL_NAMES } from "../../config/resource-metadata.js";
 import { type HttpFetchOptions, httpFetch } from "../_shared/http.js";
 import { registerTool } from "../_shared/register-tool.js";
+import { type TextToolResult, textResult } from "../_shared/text-result.js";
 
 export interface ResolveParams {
   libraryName: string;
@@ -18,7 +19,7 @@ export interface LibraryResult {
 export async function executeResolveLibraryId(
   params: ResolveParams,
   fetchFn: (opts: HttpFetchOptions) => ReturnType<typeof httpFetch> = httpFetch,
-): Promise<{ content: string }> {
+): Promise<TextToolResult> {
   const { libraryName, query } = params;
 
   const url = new URL("https://context7.com/api/v1/search");
@@ -27,7 +28,7 @@ export async function executeResolveLibraryId(
   const result = await fetchFn({ url: url.toString() });
 
   if (!result.ok) {
-    return { content: `Error resolving library ID: ${result.error}` };
+    return textResult(`Error resolving library ID: ${result.error}`);
   }
 
   const data = result.data as Record<string, unknown>;
@@ -58,9 +59,7 @@ export async function executeResolveLibraryId(
   }
 
   if (results.length === 0) {
-    return {
-      content: `No libraries found for "${libraryName}". Try a different search term.`,
-    };
+    return textResult(`No libraries found for "${libraryName}". Try a different search term.`);
   }
 
   // Pick best match — first result is ranked by relevance
@@ -82,7 +81,7 @@ export async function executeResolveLibraryId(
     }
   }
 
-  return { content: lines.join("\n") };
+  return textResult(lines.join("\n"));
 }
 
 export function registerResolveLibraryIdTool(pi: ExtensionAPI): void {

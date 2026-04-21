@@ -4,6 +4,7 @@ import { Type } from "@sinclair/typebox";
 import fg from "fast-glob";
 import { TOOL_NAMES } from "../../config/resource-metadata.js";
 import { registerTool } from "../_shared/register-tool.js";
+import { type TextToolResult, textResult } from "../_shared/text-result.js";
 
 const RESULT_CAP = 100;
 const TIMEOUT_MS = 60_000;
@@ -13,7 +14,7 @@ interface GlobParams {
   path?: string;
 }
 
-async function executeGlob(params: GlobParams): Promise<{ content: string }> {
+async function executeGlob(params: GlobParams): Promise<TextToolResult> {
   const { pattern, path: cwd } = params;
 
   try {
@@ -47,12 +48,10 @@ async function executeGlob(params: GlobParams): Promise<{ content: string }> {
     withMtime.sort((a, b) => b.mtime - a.mtime);
     const capped = withMtime.slice(0, RESULT_CAP).map((x) => x.file);
 
-    return {
-      content: capped.length > 0 ? capped.join("\n") : "(no matches)",
-    };
+    return textResult(capped.length > 0 ? capped.join("\n") : "(no matches)");
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
-    return { content: `Error: ${message}` };
+    return textResult(`Error: ${message}`);
   }
 }
 

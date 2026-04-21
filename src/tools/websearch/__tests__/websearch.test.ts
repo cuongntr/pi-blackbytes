@@ -69,9 +69,12 @@ describe("web_search", () => {
           mockFetch,
         );
 
-        assert.ok(result.content.includes("Test Page"), "Should include title");
-        assert.ok(result.content.includes("https://example.com"), "Should include url");
-        assert.ok(result.content.includes("A snippet about tests."), "Should include snippet");
+        assert.ok(result.content[0].text.includes("Test Page"), "Should include title");
+        assert.ok(result.content[0].text.includes("https://example.com"), "Should include url");
+        assert.ok(
+          result.content[0].text.includes("A snippet about tests."),
+          "Should include snippet",
+        );
       });
     });
 
@@ -81,7 +84,10 @@ describe("web_search", () => {
 
         const result = await executeWebsearchSearch({ query: "test" }, mockFetch);
 
-        assert.ok(result.content.includes("exa_api_key is missing"), result.content);
+        assert.ok(
+          result.content[0].text.includes("exa_api_key is missing"),
+          result.content[0].text,
+        );
       });
     });
   });
@@ -104,9 +110,12 @@ describe("web_search", () => {
 
           const result = await executeWebsearchSearch({ query: "tavily query" }, mockFetch);
 
-          assert.ok(result.content.includes("Tavily Result"), "Should include title");
-          assert.ok(result.content.includes("https://tavily.com/page"), "Should include url");
-          assert.ok(result.content.includes("Some content."), "Should include snippet");
+          assert.ok(result.content[0].text.includes("Tavily Result"), "Should include title");
+          assert.ok(
+            result.content[0].text.includes("https://tavily.com/page"),
+            "Should include url",
+          );
+          assert.ok(result.content[0].text.includes("Some content."), "Should include snippet");
         },
       );
     });
@@ -117,7 +126,10 @@ describe("web_search", () => {
 
         const result = await executeWebsearchSearch({ query: "test" }, mockFetch);
 
-        assert.ok(result.content.includes("tavily_api_key is missing"), result.content);
+        assert.ok(
+          result.content[0].text.includes("tavily_api_key is missing"),
+          result.content[0].text,
+        );
       });
     });
   });
@@ -128,7 +140,10 @@ describe("web_search", () => {
 
       const result = await executeWebsearchSearch({ query: "test" }, mockFetch);
 
-      assert.ok(result.content.includes("websearch is not configured"), result.content);
+      assert.ok(
+        result.content[0].text.includes("websearch is not configured"),
+        result.content[0].text,
+      );
     });
   });
 
@@ -137,7 +152,7 @@ describe("web_search", () => {
       const mockFetch: MockFetch = async () => makeErrorResult("Network error: connection refused");
 
       const result = await executeWebsearchSearch({ query: "fail" }, mockFetch);
-      assert.ok(result.content.includes("Error from Exa API"), result.content);
+      assert.ok(result.content[0].text.includes("Error from Exa API"), result.content[0].text);
     });
   });
 });
@@ -151,7 +166,7 @@ describe("web_fetch", () => {
 
     const result = await executeWebsearchFetch({ url: "https://example.com" }, mockFetch);
 
-    assert.ok(result.content.includes("Hello world"), "Should include page content");
+    assert.ok(result.content[0].text.includes("Hello world"), "Should include page content");
   });
 
   it("upgrades http:// to https://", async () => {
@@ -171,7 +186,7 @@ describe("web_fetch", () => {
     const mockFetch: MockFetch = async () => makeErrorResult("Timeout");
 
     const result = await executeWebsearchFetch({ url: "https://example.com" }, mockFetch);
-    assert.ok(result.content.includes("Error fetching URL"), result.content);
+    assert.ok(result.content[0].text.includes("Error fetching URL"), result.content[0].text);
   });
 
   it("passes timeout in milliseconds to httpFetch", async () => {

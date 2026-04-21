@@ -18,7 +18,6 @@ const SAFE_ENV_VARS = [
   "SHELL",
   "TERM",
   "PI_AGENT_DIR",
-  "PI_NESTED_DEPTH",
   "NODE_ENV",
 ] as const;
 

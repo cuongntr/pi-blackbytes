@@ -274,10 +274,12 @@ describe("runNestedPi", () => {
 
   it("--thinking flag is passed when reasoningEffort is set", async () => {
     let capturedArgs: string[] | undefined;
+    let capturedEnv: NodeJS.ProcessEnv | undefined;
 
     const fakeChild = makeFakeChild({ stdoutData: "ok", exitCode: 0 });
-    const spawnFn = ((_cmd: string, args: string[]) => {
+    const spawnFn = ((_cmd: string, args: string[], opts: { env?: NodeJS.ProcessEnv }) => {
       capturedArgs = args;
+      capturedEnv = opts.env;
       return fakeChild;
     }) as unknown as SpawnFn;
 
@@ -294,10 +296,11 @@ describe("runNestedPi", () => {
     const thinkingIdx = capturedArgs!.indexOf("--thinking");
     assert.ok(thinkingIdx !== -1, "--thinking flag should be present");
     assert.equal(capturedArgs![thinkingIdx + 1], "high", "--thinking value should be 'high'");
-    // Must NOT set it via env var anymore
+    // Must NOT set it via spawn env (old approach) — reasoning effort must go via --thinking flag
     assert.equal(
-      (capturedArgs as string[]).filter((a) => a === "BLACKBYTES_REASONING_EFFORT").length,
-      0,
+      capturedEnv!.BLACKBYTES_REASONING_EFFORT,
+      undefined,
+      "BLACKBYTES_REASONING_EFFORT must not be in spawn env",
     );
   });
 

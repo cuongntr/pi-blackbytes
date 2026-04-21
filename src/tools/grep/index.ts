@@ -3,6 +3,7 @@ import { readFile, readdir, stat } from "node:fs/promises";
 import { join, relative } from "node:path";
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { Type } from "@sinclair/typebox";
+import { TOOL_NAMES } from "../../config/resource-metadata.js";
 import { registerTool } from "../_shared/register-tool.js";
 
 type OutputMode = "content" | "files_with_matches" | "count";
@@ -247,8 +248,8 @@ async function executeGrep(params: GrepParams): Promise<{ content: string }> {
 // ---------------------------------------------------------------------------
 
 export function registerGrepTool(pi: ExtensionAPI): void {
-  registerTool(pi, "grep", {
-    name: "grep",
+  registerTool(pi, TOOL_NAMES.GREP, {
+    name: TOOL_NAMES.GREP,
     description:
       "Search file contents using regular expressions. Uses ripgrep (rg) when available for speed, falls back to Node.js implementation. Supports content, files_with_matches, and count output modes. Use context to show surrounding lines.",
     parameters: Type.Object({

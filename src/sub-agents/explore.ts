@@ -1,4 +1,5 @@
 import { Type } from "@sinclair/typebox";
+import { TOOL_NAMES } from "../config/resource-metadata.js";
 import { defineSubAgent } from "./declaration.js";
 
 const EXPLORE_SYSTEM_PROMPT = `# Explore — Sub-Agent Persona
@@ -13,11 +14,11 @@ You are spawned by the primary Bytes agent to handle broad codebase searches. Yo
 
 **Read-only tools only:**
 - \`read\` — read file contents
-- \`glob\` — find files by name pattern
-- \`grep\` — search file contents by regex
-- \`ast_grep_search\` — AST-aware pattern search
+- \`${TOOL_NAMES.GLOB}\` — find files by name pattern
+- \`${TOOL_NAMES.GREP}\` — search file contents by regex
+- \`${TOOL_NAMES.AST_SEARCH}\` — AST-aware pattern search
 
-**You MUST NOT use any write or edit tools.** Do not use \`write\`, \`edit\`, \`hashline_edit\`, \`ast_grep_replace\`, \`bash\`, or any tool that modifies files or runs commands.
+**You MUST NOT use any write or edit tools.** Do not use \`write\`, \`edit\`, \`${TOOL_NAMES.HASHLINE_EDIT}\`, \`${TOOL_NAMES.AST_REPLACE}\`, \`bash\`, or any tool that modifies files or runs commands.
 
 ## Behavior
 
@@ -56,6 +57,6 @@ export const exploreDeclaration = defineSubAgent<{ question: string }>({
     }),
   }),
   systemPrompt: EXPLORE_SYSTEM_PROMPT,
-  allowedTools: ["read", "grep", "glob", "ast_grep_search"],
+  allowedTools: ["read", TOOL_NAMES.GREP, TOOL_NAMES.GLOB, TOOL_NAMES.AST_SEARCH],
   buildUserPrompt: (p) => p.question,
 });

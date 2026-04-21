@@ -28,14 +28,7 @@ describe("bytes overlay rendering", () => {
     for (const family of ["claude", "gpt", "gemini"] as const) {
       const prompt = renderPrompt(
         family,
-        [
-          "hashline_edit",
-          "websearch_search",
-          "websearch_fetch",
-          "context7_resolve_library_id",
-          "context7_query_docs",
-          "grep_app_search_github",
-        ],
+        ["hashline_edit", "web_search", "web_fetch", "docs_resolve", "docs_query", "gh_search"],
         ["explore", "oracle", "librarian", "general"],
       );
 
@@ -52,14 +45,7 @@ describe("bytes overlay rendering", () => {
   it("omits delegation guidance when sub-agents are unavailable", () => {
     const prompt = renderPrompt(
       "claude",
-      [
-        "hashline_edit",
-        "websearch_search",
-        "websearch_fetch",
-        "context7_resolve_library_id",
-        "context7_query_docs",
-        "grep_app_search_github",
-      ],
+      ["hashline_edit", "web_search", "web_fetch", "docs_resolve", "docs_query", "gh_search"],
       [],
     );
 
@@ -70,13 +56,7 @@ describe("bytes overlay rendering", () => {
   it("omits hashline workflow when hashline_edit is unavailable", () => {
     const prompt = renderPrompt(
       "claude",
-      [
-        "websearch_search",
-        "websearch_fetch",
-        "context7_resolve_library_id",
-        "context7_query_docs",
-        "grep_app_search_github",
-      ],
+      ["web_search", "web_fetch", "docs_resolve", "docs_query", "gh_search"],
       ["explore"],
     );
 

@@ -1,9 +1,8 @@
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { Type } from "@sinclair/typebox";
+import { TOOL_NAMES } from "../../config/resource-metadata.js";
 import { type HttpFetchOptions, httpFetch } from "../_shared/http.js";
 import { registerTool } from "../_shared/register-tool.js";
-
-const TOOL_NAME = "context7_query_docs";
 
 export interface QueryDocsParams {
   libraryId: string;
@@ -19,7 +18,7 @@ export async function executeQueryDocs(
   // Validate libraryId format: must start with /
   if (!libraryId.startsWith("/")) {
     return {
-      content: `Invalid libraryId "${libraryId}". Must be in /org/project format (e.g. /vercel/next.js). Use context7_resolve_library_id to get the correct ID.`,
+      content: `Invalid libraryId "${libraryId}". Must be in /org/project format (e.g. /vercel/next.js). Use docs_resolve to get the correct ID.`,
     };
   }
 
@@ -85,10 +84,10 @@ export async function executeQueryDocs(
 }
 
 export function registerQueryDocsTool(pi: ExtensionAPI): void {
-  registerTool(pi, TOOL_NAME, {
-    name: TOOL_NAME,
+  registerTool(pi, TOOL_NAMES.DOCS_QUERY, {
+    name: TOOL_NAMES.DOCS_QUERY,
     description:
-      "Retrieves up-to-date documentation and code examples from Context7 for a library. Requires a Context7-compatible library ID in /org/project format — use context7_resolve_library_id first if you don't have the ID.",
+      "Retrieves up-to-date documentation and code examples from Context7 for a library. Requires a Context7-compatible library ID in /org/project format — use docs_resolve first if you don't have the ID.",
     parameters: Type.Object({
       libraryId: Type.String({
         description:

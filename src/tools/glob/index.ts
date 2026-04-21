@@ -2,6 +2,7 @@ import { stat } from "node:fs/promises";
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { Type } from "@sinclair/typebox";
 import fg from "fast-glob";
+import { TOOL_NAMES } from "../../config/resource-metadata.js";
 import { registerTool } from "../_shared/register-tool.js";
 
 const RESULT_CAP = 100;
@@ -56,8 +57,8 @@ async function executeGlob(params: GlobParams): Promise<{ content: string }> {
 }
 
 export function registerGlobTool(pi: ExtensionAPI): void {
-  registerTool(pi, "glob", {
-    name: "glob",
+  registerTool(pi, TOOL_NAMES.GLOB, {
+    name: TOOL_NAMES.GLOB,
     description:
       "Fast file pattern matching. Supports glob patterns like **/*.js or src/**/*.ts. Returns matching file paths sorted by modification time (most recent first), capped at 100 results.",
     parameters: Type.Object({

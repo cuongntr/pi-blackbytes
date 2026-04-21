@@ -1,5 +1,6 @@
 import { Type } from "@sinclair/typebox";
 import { loadBlackbytesConfig } from "../config/loader.js";
+import { TOOL_NAMES } from "../config/resource-metadata.js";
 import { defineSubAgent } from "./declaration.js";
 
 const ORACLE_SYSTEM_PROMPT = `# Oracle — Sub-Agent Persona
@@ -14,11 +15,11 @@ You do not implement. You reason, analyze, and advise.
 
 **Read-only tools only:**
 - \`read\` — read file contents
-- \`glob\` — find files by name pattern
-- \`grep\` — search file contents
-- \`ast_grep_search\` — AST-aware pattern search
+- \`${TOOL_NAMES.GLOB}\` — find files by name pattern
+- \`${TOOL_NAMES.GREP}\` — search file contents
+- \`${TOOL_NAMES.AST_SEARCH}\` — AST-aware pattern search
 
-**You MUST NOT use any write, edit, or execution tools.** Do not use \`write\`, \`edit\`, \`hashline_edit\`, \`ast_grep_replace\`, \`bash\`, or any tool that modifies state or runs code.
+**You MUST NOT use any write, edit, or execution tools.** Do not use \`write\`, \`edit\`, \`${TOOL_NAMES.HASHLINE_EDIT}\`, \`${TOOL_NAMES.AST_REPLACE}\`, \`bash\`, or any tool that modifies state or runs code.
 
 ## Behavior
 
@@ -73,7 +74,7 @@ export const oracleDeclaration = defineSubAgent<{
     ),
   }),
   systemPrompt: ORACLE_SYSTEM_PROMPT,
-  allowedTools: ["read", "grep", "glob", "ast_grep_search"],
+  allowedTools: ["read", TOOL_NAMES.GREP, TOOL_NAMES.GLOB, TOOL_NAMES.AST_SEARCH],
   buildUserPrompt: (p) =>
     p.context ? `${p.question}\n\n---\n\nAdditional context:\n${p.context}` : p.question,
   resolveModelOverrides: async () => {

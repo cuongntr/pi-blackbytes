@@ -26,21 +26,21 @@ function makeMockPi() {
   };
 }
 
-describe("ast_grep_search tool", () => {
+describe("ast_search tool", () => {
   beforeEach(() => {
     _resetEnabledSet();
   });
 
-  it("registers ast_grep_search when enabled", () => {
+  it("registers ast_search when enabled", () => {
     initEnabledSet(makeConfig({}));
     const { pi, registered } = makeMockPi();
     registerAstGrepSearchTool(pi as any);
     assert.equal(registered.length, 1);
-    assert.equal(registered[0].name, "ast_grep_search");
+    assert.equal(registered[0].name, "ast_search");
   });
 
-  it("does not register ast_grep_search when disabled", () => {
-    initEnabledSet(makeConfig({ disabled_tools: ["ast_grep_search"] }));
+  it("does not register ast_search when disabled", () => {
+    initEnabledSet(makeConfig({ disabled_tools: ["ast_search"] }));
     const { pi, registered } = makeMockPi();
     registerAstGrepSearchTool(pi as any);
     assert.equal(registered.length, 0);
@@ -81,7 +81,7 @@ describe("ast_grep_search tool", () => {
     const tool = registered[0];
     assert.ok(tool.parameters, "should have parameters");
     assert.ok(tool.description, "should have description");
-    assert.equal(tool.name, "ast_grep_search");
+    assert.equal(tool.name, "ast_search");
 
     const props = tool.parameters.properties;
     assert.ok(props.pattern, "should have pattern param");
@@ -92,21 +92,21 @@ describe("ast_grep_search tool", () => {
   });
 });
 
-describe("ast_grep_replace tool", () => {
+describe("ast_replace tool", () => {
   beforeEach(() => {
     _resetEnabledSet();
   });
 
-  it("registers ast_grep_replace when enabled", () => {
+  it("registers ast_replace when enabled", () => {
     initEnabledSet(makeConfig({}));
     const { pi, registered } = makeMockPi();
     registerAstGrepReplaceTool(pi as any);
     assert.equal(registered.length, 1);
-    assert.equal(registered[0].name, "ast_grep_replace");
+    assert.equal(registered[0].name, "ast_replace");
   });
 
-  it("does not register ast_grep_replace when disabled", () => {
-    initEnabledSet(makeConfig({ disabled_tools: ["ast_grep_replace"] }));
+  it("does not register ast_replace when disabled", () => {
+    initEnabledSet(makeConfig({ disabled_tools: ["ast_replace"] }));
     const { pi, registered } = makeMockPi();
     registerAstGrepReplaceTool(pi as any);
     assert.equal(registered.length, 0);

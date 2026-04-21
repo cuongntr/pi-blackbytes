@@ -37,7 +37,7 @@ describe("DELEGABLE_TOOL_NAMES", () => {
 describe("isDelegableTool", () => {
   it("returns true for extension tools", () => {
     assert.equal(isDelegableTool("grep"), true);
-    assert.equal(isDelegableTool("ast_grep_search"), true);
+    assert.equal(isDelegableTool("ast_search"), true);
   });
 
   it("returns true for Pi defaults", () => {
@@ -82,8 +82,8 @@ describe("validateToolNames", () => {
 
 describe("validateBuiltinToolNames", () => {
   it("returns valid names for a clean list", () => {
-    const result = validateBuiltinToolNames(["read", "grep", "glob", "ast_grep_search"]);
-    assert.deepEqual(result, ["read", "grep", "glob", "ast_grep_search"]);
+    const result = validateBuiltinToolNames(["read", "grep", "glob", "ast_search"]);
+    assert.deepEqual(result, ["read", "grep", "glob", "ast_search"]);
   });
 
   it("throws on unknown names", () => {
@@ -106,7 +106,7 @@ describe("validateBuiltinToolNames", () => {
 // ---------------------------------------------------------------------------
 
 describe("resolveToolStrategy", () => {
-  const enabledTools = new Set(["grep", "glob", "ast_grep_search", "websearch_search"]);
+  const enabledTools = new Set(["grep", "glob", "ast_search", "web_search"]);
 
   describe("allowlist", () => {
     it("returns the explicit list unchanged", () => {
@@ -125,13 +125,10 @@ describe("resolveToolStrategy", () => {
 
   describe("denylist", () => {
     it("returns enabled + Pi defaults minus denied tools", () => {
-      const result = resolveToolStrategy(
-        { kind: "denylist", tools: ["websearch_search"] },
-        enabledTools,
-      );
+      const result = resolveToolStrategy({ kind: "denylist", tools: ["web_search"] }, enabledTools);
       assert.ok(result.includes("grep"));
       assert.ok(result.includes("read")); // Pi default included
-      assert.ok(!result.includes("websearch_search")); // denied
+      assert.ok(!result.includes("web_search")); // denied
     });
 
     it("excludes delegate_* even if in enabledTools", () => {

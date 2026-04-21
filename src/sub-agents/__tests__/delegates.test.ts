@@ -202,7 +202,7 @@ describe("delegate_explore", () => {
     const result = await tool.execute({ question: "Where is the login function?" });
 
     const allowedTools = extractAllowedTools(capturedArgs);
-    assert.deepEqual(allowedTools.sort(), ["ast_grep_search", "glob", "grep", "read"].sort());
+    assert.deepEqual(allowedTools.sort(), ["ast_search", "glob", "grep", "read"].sort());
     assert.equal(result.content, "found it");
   });
 
@@ -254,7 +254,7 @@ describe("delegate_oracle", () => {
     const result = await tool.execute({ question: "Why is this slow?" });
 
     const allowedTools = extractAllowedTools(capturedArgs);
-    assert.deepEqual(allowedTools.sort(), ["ast_grep_search", "glob", "grep", "read"].sort());
+    assert.deepEqual(allowedTools.sort(), ["ast_search", "glob", "grep", "read"].sort());
     assert.equal(result.content, "oracle answer");
   });
 
@@ -313,13 +313,10 @@ describe("delegate_librarian", () => {
     const result = await tool.execute({ question: "How does typebox work?" });
 
     const allowedTools = extractAllowedTools(capturedArgs);
-    assert.ok(
-      allowedTools.includes("context7_resolve_library_id"),
-      "should include context7 resolve",
-    );
-    assert.ok(allowedTools.includes("context7_query_docs"), "should include context7 query");
-    assert.ok(allowedTools.includes("websearch_search"), "should include websearch");
-    assert.ok(allowedTools.includes("grep_app_search_github"), "should include grep_app");
+    assert.ok(allowedTools.includes("docs_resolve"), "should include context7 resolve");
+    assert.ok(allowedTools.includes("docs_query"), "should include context7 query");
+    assert.ok(allowedTools.includes("web_search"), "should include websearch");
+    assert.ok(allowedTools.includes("gh_search"), "should include gh_search");
     assert.equal(result.content, "docs found");
   });
 

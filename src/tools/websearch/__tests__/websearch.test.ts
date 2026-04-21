@@ -51,9 +51,9 @@ async function withConfig(config: unknown, fn: (agentDir: string) => Promise<voi
   }
 }
 
-// --- websearch_search tests ---
+// --- web_search tests ---
 
-describe("websearch_search", () => {
+describe("web_search", () => {
   describe("exa provider", () => {
     it("returns formatted results from Exa", async () => {
       await withConfig({ websearch: { provider: "exa", exa_api_key: "test-key" } }, async () => {
@@ -142,9 +142,9 @@ describe("websearch_search", () => {
   });
 });
 
-// --- websearch_fetch tests ---
+// --- web_fetch tests ---
 
-describe("websearch_fetch", () => {
+describe("web_fetch", () => {
   it("fetches and returns content from a URL", async () => {
     const mockFetch: MockFetch = async (_opts) =>
       makeOkResult("<html><body>Hello world</body></html>");

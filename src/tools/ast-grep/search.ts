@@ -1,5 +1,6 @@
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { Type } from "@sinclair/typebox";
+import { TOOL_NAMES } from "../../config/resource-metadata.js";
 import { registerTool } from "../_shared/register-tool.js";
 import { AST_GREP_LANGUAGES, detectBinary, runAstGrep } from "./helpers.js";
 
@@ -35,8 +36,8 @@ function formatMatches(matches: AstGrepMatch[]): string {
 }
 
 export function registerAstGrepSearchTool(pi: ExtensionAPI): void {
-  registerTool(pi, "ast_grep_search", {
-    name: "ast_grep_search",
+  registerTool(pi, TOOL_NAMES.AST_SEARCH, {
+    name: TOOL_NAMES.AST_SEARCH,
     description:
       "Search code patterns across filesystem using AST-aware matching. Supports 25 languages. Use meta-variables: $VAR (single node), $$$ (multiple nodes). IMPORTANT: Patterns must be complete AST nodes (valid code). Examples: 'console.log($MSG)', 'def $FUNC($$$):', 'async function $NAME($$$)'",
     parameters: Type.Object({

@@ -1,6 +1,7 @@
 import { readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { type Static, Type } from "@sinclair/typebox";
+import { TOOL_NAMES } from "../../config/resource-metadata.js";
 import { computeCID } from "../../utils/cid.js";
 import { registerTool } from "../_shared/register-tool.js";
 
@@ -248,8 +249,8 @@ export function applyHashlineEdits(input: HashlineEditInput): ToolResult {
 // ---------------------------------------------------------------------------
 
 export function registerHashlineEditTool(pi: ExtensionAPI): void {
-  registerTool(pi, "hashline_edit", {
-    name: "hashline_edit",
+  registerTool(pi, TOOL_NAMES.HASHLINE_EDIT, {
+    name: TOOL_NAMES.HASHLINE_EDIT,
     description:
       "Edit files using LINE#ID format for precise, safe modifications. " +
       "Applies multiple edits bottom-up using anchors like '10#VK'. " +

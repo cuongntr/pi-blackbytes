@@ -89,7 +89,7 @@ const testDecl = defineSubAgent<{ question: string }>({
     question: Type.String({ description: "The question" }),
   }),
   systemPromptPath: "prompts/explore.md",
-  allowedTools: ["read", "grep", "glob", "ast_grep_search"],
+  allowedTools: ["read", "grep", "glob", "ast_search"],
   buildUserPrompt: (p) => p.question,
 });
 
@@ -163,7 +163,7 @@ describe("registerSubAgent", () => {
     await tool.execute({ question: "test" });
 
     const tools = extractAllowedTools(capturedArgs);
-    assert.deepEqual(tools, ["read", "grep", "glob", "ast_grep_search"]);
+    assert.deepEqual(tools, ["read", "grep", "glob", "ast_search"]);
   });
 
   it("resolves dynamic allowedTools at execution time", async () => {

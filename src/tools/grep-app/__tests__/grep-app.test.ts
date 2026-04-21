@@ -28,7 +28,7 @@ function makeCaptureFetch(data: unknown) {
   return { fetchFn, getCapturedUrl: () => capturedUrl };
 }
 
-// ─── grep_app_search_github ─────────────────────────────────────────────────
+// ─── gh_search ─────────────────────────────────────────────────
 
 describe("executeGrepAppSearch", () => {
   it("returns formatted results on successful search", async () => {

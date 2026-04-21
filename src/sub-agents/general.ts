@@ -1,5 +1,6 @@
 import { Type } from "@sinclair/typebox";
 import { getEnabledSet } from "../config/enabled-set.js";
+import { TOOL_NAMES } from "../config/resource-metadata.js";
 import { defineSubAgent } from "./declaration.js";
 import { resolveToolStrategy } from "./delegable-tools.js";
 
@@ -13,18 +14,18 @@ You are the General sub-agent: a focused implementation executor. You receive we
 
 **Full tool access:**
 - \`read\` — read file contents
-- \`glob\` — find files by pattern
-- \`grep\` — search file contents
-- \`ast_grep_search\` — AST-aware search
-- \`ast_grep_replace\` — AST-aware bulk replace
+- \`${TOOL_NAMES.GLOB}\` — find files by pattern
+- \`${TOOL_NAMES.GREP}\` — search file contents
+- \`${TOOL_NAMES.AST_SEARCH}\` — AST-aware search
+- \`${TOOL_NAMES.AST_REPLACE}\` — AST-aware bulk replace
 - \`write\` — write files
 - \`edit\` — precise string replacement in files
-- \`hashline_edit\` — line-precise edits
+- \`${TOOL_NAMES.HASHLINE_EDIT}\` — line-precise edits
 - \`bash\` — run shell commands (build, test, lint, git)
-- \`websearch_search\` — web search
-- \`websearch_fetch\` — fetch web page content
-- \`context7_resolve_library_id\` + \`context7_query_docs\` — library documentation
-- \`grep_app_search_github\` — GitHub code search across public repos
+- \`${TOOL_NAMES.WEB_SEARCH}\` — web search
+- \`${TOOL_NAMES.WEB_FETCH}\` — fetch web page content
+- \`${TOOL_NAMES.DOCS_RESOLVE}\` + \`${TOOL_NAMES.DOCS_QUERY}\` — library documentation
+- \`${TOOL_NAMES.GH_SEARCH}\` — GitHub code search across public repos
 
 ## Behavior
 

@@ -1,9 +1,8 @@
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { Type } from "@sinclair/typebox";
+import { TOOL_NAMES } from "../../config/resource-metadata.js";
 import { type HttpFetchOptions, httpFetch } from "../_shared/http.js";
 import { registerTool } from "../_shared/register-tool.js";
-
-const TOOL_NAME = "context7_resolve_library_id";
 
 export interface ResolveParams {
   libraryName: string;
@@ -87,10 +86,10 @@ export async function executeResolveLibraryId(
 }
 
 export function registerResolveLibraryIdTool(pi: ExtensionAPI): void {
-  registerTool(pi, TOOL_NAME, {
-    name: TOOL_NAME,
+  registerTool(pi, TOOL_NAMES.DOCS_RESOLVE, {
+    name: TOOL_NAMES.DOCS_RESOLVE,
     description:
-      "Resolves a package/product name to a Context7-compatible library ID. Call this before context7_query_docs to get the correct library ID in /org/project format.",
+      "Resolves a package/product name to a Context7-compatible library ID. Call this before docs_query to get the correct library ID in /org/project format.",
     parameters: Type.Object({
       libraryName: Type.String({
         description: "Library name to search for (e.g. 'Next.js', 'React', 'Express')",

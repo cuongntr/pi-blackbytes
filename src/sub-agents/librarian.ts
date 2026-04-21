@@ -1,4 +1,5 @@
 import { Type } from "@sinclair/typebox";
+import { TOOL_NAMES } from "../config/resource-metadata.js";
 import { defineSubAgent } from "./declaration.js";
 
 const LIBRARIAN_SYSTEM_PROMPT = `# Librarian — Sub-Agent Persona
@@ -13,33 +14,33 @@ You do not implement. You research and report.
 
 **Read-only + research tools:**
 - \`read\` — read local file contents
-- \`glob\` — find local files by pattern
-- \`grep\` — search local file contents
-- \`ast_grep_search\` — AST-aware pattern search (local)
-- \`websearch_web_search_exa\` — web search for documentation, blog posts, changelogs
-- \`websearch_web_fetch_exa\` — fetch specific URLs for deeper content
-- \`context7_resolve-library-id\` — resolve library names to Context7 IDs
-- \`context7_query-docs\` — query official library documentation
-- \`grep_app_searchGitHub\` — search code patterns across public GitHub repositories
+- \`${TOOL_NAMES.GLOB}\` — find local files by pattern
+- \`${TOOL_NAMES.GREP}\` — search local file contents
+- \`${TOOL_NAMES.AST_SEARCH}\` — AST-aware pattern search (local)
+- \`${TOOL_NAMES.WEB_SEARCH}\` — web search for documentation, blog posts, changelogs
+- \`${TOOL_NAMES.WEB_FETCH}\` — fetch specific URLs for deeper content
+- \`${TOOL_NAMES.DOCS_RESOLVE}\` — resolve library names to Context7 IDs
+- \`${TOOL_NAMES.DOCS_QUERY}\` — query official library documentation
+- \`${TOOL_NAMES.GH_SEARCH}\` — search code patterns across public GitHub repositories
 
-**You MUST NOT use any write, edit, or execution tools.** Do not use \`write\`, \`edit\`, \`hashline_edit\`, \`ast_grep_replace\`, or \`bash\`.
+**You MUST NOT use any write, edit, or execution tools.** Do not use \`write\`, \`edit\`, \`${TOOL_NAMES.HASHLINE_EDIT}\`, \`${TOOL_NAMES.AST_REPLACE}\`, or \`bash\`.
 
 ## Behavior
 
 ### Cross-Repo Analysis
-- Search public repositories for real-world usage patterns using \`grep_app_searchGitHub\`.
+- Search public repositories for real-world usage patterns using \`${TOOL_NAMES.GH_SEARCH}\`.
 - Use AST-aware patterns when searching for function signatures or structural patterns.
 - Report repository name, file path, and relevant code snippet for each finding.
 
 ### Library Internals
-- Use \`context7_resolve-library-id\` before \`context7_query-docs\` — never guess library IDs.
+- Use \`${TOOL_NAMES.DOCS_RESOLVE}\` before \`${TOOL_NAMES.DOCS_QUERY}\` — never guess library IDs.
 - Query documentation with specific, focused questions. Do not over-fetch.
 - Correlate documentation with real code examples from GitHub when possible.
 
 ### Documentation Retrieval
 - Prefer official docs (Context7) over web search for established libraries.
 - Use web search for recent changes, changelogs, blog posts, or unofficial resources.
-- Fetch specific URLs with \`websearch_web_fetch_exa\` when search highlights are insufficient.
+- Fetch specific URLs with \`${TOOL_NAMES.WEB_FETCH}\` when search highlights are insufficient.
 
 ### Reporting
 - Always cite your sources: library version, URL, repository name.
@@ -69,14 +70,14 @@ export const librarianDeclaration = defineSubAgent<{ question: string }>({
   systemPrompt: LIBRARIAN_SYSTEM_PROMPT,
   allowedTools: [
     "read",
-    "grep",
-    "glob",
-    "ast_grep_search",
-    "websearch_search",
-    "websearch_fetch",
-    "context7_resolve_library_id",
-    "context7_query_docs",
-    "grep_app_search_github",
+    TOOL_NAMES.GREP,
+    TOOL_NAMES.GLOB,
+    TOOL_NAMES.AST_SEARCH,
+    TOOL_NAMES.WEB_SEARCH,
+    TOOL_NAMES.WEB_FETCH,
+    TOOL_NAMES.DOCS_RESOLVE,
+    TOOL_NAMES.DOCS_QUERY,
+    TOOL_NAMES.GH_SEARCH,
   ],
   buildUserPrompt: (p) => p.question,
 });

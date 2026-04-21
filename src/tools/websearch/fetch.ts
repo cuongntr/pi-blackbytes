@@ -1,5 +1,6 @@
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { Type } from "@sinclair/typebox";
+import { TOOL_NAMES } from "../../config/resource-metadata.js";
 import { type HttpFetchOptions, httpFetch } from "../_shared/http.js";
 import { registerTool } from "../_shared/register-tool.js";
 
@@ -32,8 +33,8 @@ export async function executeWebsearchFetch(
 }
 
 export function registerWebsearchFetchTool(pi: ExtensionAPI): void {
-  registerTool(pi, "websearch_fetch", {
-    name: "websearch_fetch",
+  registerTool(pi, TOOL_NAMES.WEB_FETCH, {
+    name: TOOL_NAMES.WEB_FETCH,
     description:
       "Fetch content from a URL and return it as text. Automatically upgrades http:// to https://.",
     parameters: Type.Object({

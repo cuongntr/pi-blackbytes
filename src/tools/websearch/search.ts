@@ -1,6 +1,7 @@
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { Type } from "@sinclair/typebox";
 import { loadBlackbytesConfig } from "../../config/loader.js";
+import { TOOL_NAMES } from "../../config/resource-metadata.js";
 import { type HttpFetchOptions, httpFetch } from "../_shared/http.js";
 import { registerTool } from "../_shared/register-tool.js";
 
@@ -113,8 +114,8 @@ export async function executeWebsearchSearch(
 }
 
 export function registerWebsearchSearchTool(pi: ExtensionAPI): void {
-  registerTool(pi, "websearch_search", {
-    name: "websearch_search",
+  registerTool(pi, TOOL_NAMES.WEB_SEARCH, {
+    name: TOOL_NAMES.WEB_SEARCH,
     description:
       "Search the web for any topic. Returns a list of relevant results with titles, URLs, and snippets. Supports Exa and Tavily providers.",
     parameters: Type.Object({

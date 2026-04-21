@@ -110,7 +110,7 @@ describe("loadYamlDeclarations", () => {
   });
 
   it("supports denied_tools with dynamic resolver", async () => {
-    const yaml = validYaml({ denied_tools: ["ast_grep_search"] });
+    const yaml = validYaml({ denied_tools: ["ast_search"] });
     await writeYaml(tmpDir, "agent.yaml", yaml);
 
     const declarations = await loadYamlDeclarations();

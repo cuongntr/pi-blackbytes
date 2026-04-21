@@ -20,7 +20,7 @@ function makeErrorFetch(error: string) {
   });
 }
 
-// ─── context7_resolve_library_id ────────────────────────────────────────────
+// ─── docs_resolve ────────────────────────────────────────────
 
 describe("executeResolveLibraryId", () => {
   it("returns best match library ID on success", async () => {
@@ -75,7 +75,7 @@ describe("executeResolveLibraryId", () => {
   });
 });
 
-// ─── context7_query_docs ────────────────────────────────────────────────────
+// ─── docs_query ────────────────────────────────────────────────────
 
 describe("executeQueryDocs", () => {
   it("returns formatted documentation on success", async () => {

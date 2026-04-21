@@ -41,7 +41,7 @@ describe("enabled-set", () => {
   it("default config enables all tools, subAgents, and skills", () => {
     const set = computeEnabledSet(defaultConfig);
     assert.ok(set.tools.has("hashline_edit"));
-    assert.ok(set.tools.has("grep_app_search_github"));
+    assert.ok(set.tools.has("gh_search"));
     assert.equal(set.tools.size, 10);
     assert.ok(set.subAgents.has("explore"));
     assert.ok(set.subAgents.has("oracle"));
@@ -177,11 +177,11 @@ describe("enabled-set", () => {
         ...defaultConfig,
         disabled_tools: [
           "hashline_edit",
-          "websearch_search",
-          "websearch_fetch",
-          "context7_resolve_library_id",
-          "context7_query_docs",
-          "grep_app_search_github",
+          "web_search",
+          "web_fetch",
+          "docs_resolve",
+          "docs_query",
+          "gh_search",
         ],
         disabled_sub_agents: ["explore", "oracle", "librarian", "general"],
       });
@@ -200,7 +200,7 @@ describe("enabled-set", () => {
       seedBuiltinAgents();
       const set = computeEnabledSet({
         ...defaultConfig,
-        disabled_tools: ["context7_query_docs", "websearch_search"],
+        disabled_tools: ["docs_query", "web_search"],
       });
       const flags = derivePromptFeatureFlags(set.tools, set.subAgents);
 

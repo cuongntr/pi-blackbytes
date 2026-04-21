@@ -1,9 +1,8 @@
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { Type } from "@sinclair/typebox";
+import { TOOL_NAMES } from "../../config/resource-metadata.js";
 import { type HttpFetchOptions, httpFetch } from "../_shared/http.js";
 import { registerTool } from "../_shared/register-tool.js";
-
-const TOOL_NAME = "grep_app_search_github";
 
 export interface GrepAppParams {
   query: string;
@@ -88,8 +87,8 @@ export async function executeGrepAppSearch(
 }
 
 export function registerGrepAppSearchTool(pi: ExtensionAPI): void {
-  registerTool(pi, TOOL_NAME, {
-    name: TOOL_NAME,
+  registerTool(pi, TOOL_NAMES.GH_SEARCH, {
+    name: TOOL_NAMES.GH_SEARCH,
     description:
       "Search code patterns across public GitHub repositories using grep.app. Returns matching code snippets with repo, file, and line number context. Use for finding real-world usage examples of APIs, libraries, or patterns.",
     parameters: Type.Object({

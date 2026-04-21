@@ -5,6 +5,19 @@ import type { PromptFeatureFlags } from "../prompts/bytes/types.js";
 
 export type PromptFeatureKey = keyof PromptFeatureFlags;
 
+export const TOOL_NAMES = {
+  HASHLINE_EDIT: "hashline_edit",
+  AST_SEARCH: "ast_search",
+  AST_REPLACE: "ast_replace",
+  GREP: "grep",
+  GLOB: "glob",
+  WEB_SEARCH: "web_search",
+  WEB_FETCH: "web_fetch",
+  DOCS_RESOLVE: "docs_resolve",
+  DOCS_QUERY: "docs_query",
+  GH_SEARCH: "gh_search",
+} as const;
+
 export interface ToolMeta {
   readonly name: string;
   readonly promptFeatures?: readonly PromptFeatureKey[];
@@ -24,30 +37,30 @@ export interface SubAgentMeta {
 }
 
 export const BUNDLED_TOOLS: readonly ToolMeta[] = [
-  { name: "hashline_edit", promptFeatures: ["hashlineEdit"] },
-  { name: "ast_grep_search" },
-  { name: "ast_grep_replace" },
-  { name: "grep" },
-  { name: "glob" },
+  { name: TOOL_NAMES.HASHLINE_EDIT, promptFeatures: ["hashlineEdit"] },
+  { name: TOOL_NAMES.AST_SEARCH },
+  { name: TOOL_NAMES.AST_REPLACE },
+  { name: TOOL_NAMES.GREP },
+  { name: TOOL_NAMES.GLOB },
 ];
 
 export const TOOL_GROUPS: readonly ToolGroupMeta[] = [
   {
     name: "websearch",
     description: "web search and page fetching",
-    tools: ["websearch_search", "websearch_fetch"],
+    tools: [TOOL_NAMES.WEB_SEARCH, TOOL_NAMES.WEB_FETCH],
     promptFeatures: ["webSearch"],
   },
   {
     name: "context7",
     description: "library/framework documentation lookup",
-    tools: ["context7_resolve_library_id", "context7_query_docs"],
+    tools: [TOOL_NAMES.DOCS_RESOLVE, TOOL_NAMES.DOCS_QUERY],
     promptFeatures: ["documentationLookup"],
   },
   {
     name: "grep_app",
     description: "GitHub code search across public repositories",
-    tools: ["grep_app_search_github"],
+    tools: [TOOL_NAMES.GH_SEARCH],
     promptFeatures: ["githubCodeSearch"],
   },
 ];
@@ -133,25 +146,15 @@ export function isBundledTool(name: string): boolean {
   return bundledSet.has(name);
 }
 
-function createEmptyPromptFeatureFlags(): PromptFeatureFlags {
-  return {
-    hashlineEdit: false,
-    subagentDelegation: false,
-    documentationLookup: false,
-    githubCodeSearch: false,
-    webSearch: false,
-  };
-}
-
 export function derivePromptFeatureFlags(
   enabledTools: ReadonlySet<string>,
   enabledSubAgents: ReadonlySet<string>,
 ): PromptFeatureFlags {
   return {
-    hashlineEdit: enabledTools.has("hashline_edit"),
+    hashlineEdit: enabledTools.has(TOOL_NAMES.HASHLINE_EDIT),
     subagentDelegation: registeredAgents.some((agent) => enabledSubAgents.has(agent.name)),
-    documentationLookup: enabledTools.has("context7_query_docs"),
-    githubCodeSearch: enabledTools.has("grep_app_search_github"),
-    webSearch: enabledTools.has("websearch_search") || enabledTools.has("websearch_fetch"),
+    documentationLookup: enabledTools.has(TOOL_NAMES.DOCS_QUERY),
+    githubCodeSearch: enabledTools.has(TOOL_NAMES.GH_SEARCH),
+    webSearch: enabledTools.has(TOOL_NAMES.WEB_SEARCH) || enabledTools.has(TOOL_NAMES.WEB_FETCH),
   };
 }

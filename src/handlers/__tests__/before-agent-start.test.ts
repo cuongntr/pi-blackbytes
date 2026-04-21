@@ -68,7 +68,7 @@ describe("injectPromptAugmentation", () => {
 
   it("disabled tool group is excluded when all its tools are disabled", () => {
     seedBuiltinAgents();
-    initEnabledSet(makeConfig({ disabled_tools: ["grep_app_search_github"] }));
+    initEnabledSet(makeConfig({ disabled_tools: ["gh_search"] }));
     const result = injectPromptAugmentation("prompt");
     assert.ok(!result.includes("grep_app"), "disabled tool group not listed");
     assert.ok(result.includes("hashline_edit"), "bundled tools still present");
@@ -76,19 +76,13 @@ describe("injectPromptAugmentation", () => {
 
   it("resource block lists exact enabled tools for partially enabled groups", () => {
     seedBuiltinAgents();
-    initEnabledSet(makeConfig({ disabled_tools: ["websearch_search", "context7_query_docs"] }));
+    initEnabledSet(makeConfig({ disabled_tools: ["web_search", "docs_query"] }));
     const result = injectPromptAugmentation("prompt");
 
-    assert.ok(result.includes("websearch (web search and page fetching): websearch_fetch"));
-    assert.ok(!result.includes("websearch (web search and page fetching): websearch_search"));
-    assert.ok(
-      result.includes(
-        "context7 (library/framework documentation lookup): context7_resolve_library_id",
-      ),
-    );
-    assert.ok(
-      !result.includes("context7 (library/framework documentation lookup): context7_query_docs"),
-    );
+    assert.ok(result.includes("websearch (web search and page fetching): web_fetch"));
+    assert.ok(!result.includes("websearch (web search and page fetching): web_search"));
+    assert.ok(result.includes("context7 (library/framework documentation lookup): docs_resolve"));
+    assert.ok(!result.includes("context7 (library/framework documentation lookup): docs_query"));
   });
 
   it("disabled sub-agent is excluded from resources block", () => {
@@ -148,11 +142,11 @@ it("renders capability-aware prompt sections from enabled resources", () => {
     makeConfig({
       disabled_tools: [
         "hashline_edit",
-        "websearch_search",
-        "websearch_fetch",
-        "context7_resolve_library_id",
-        "context7_query_docs",
-        "grep_app_search_github",
+        "web_search",
+        "web_fetch",
+        "docs_resolve",
+        "docs_query",
+        "gh_search",
       ],
       disabled_sub_agents: ["explore", "oracle", "librarian", "general"],
     }),
@@ -169,20 +163,16 @@ it("renders capability-aware prompt sections from enabled resources", () => {
 
 it("does not advertise docs lookup when only context7 resolve is enabled", () => {
   seedBuiltinAgents();
-  initEnabledSet(makeConfig({ disabled_tools: ["context7_query_docs"] }));
+  initEnabledSet(makeConfig({ disabled_tools: ["docs_query"] }));
   const result = injectPromptAugmentation("prompt");
 
   assert.ok(!result.includes("Documentation lookup may be available"));
-  assert.ok(
-    result.includes(
-      "context7 (library/framework documentation lookup): context7_resolve_library_id",
-    ),
-  );
+  assert.ok(result.includes("context7 (library/framework documentation lookup): docs_resolve"));
 });
 
 it("does not advertise web lookup when websearch is fully disabled", () => {
   seedBuiltinAgents();
-  initEnabledSet(makeConfig({ disabled_tools: ["websearch_search", "websearch_fetch"] }));
+  initEnabledSet(makeConfig({ disabled_tools: ["web_search", "web_fetch"] }));
   const result = injectPromptAugmentation("prompt");
 
   assert.ok(!result.includes("Web lookup capabilities may be available"));

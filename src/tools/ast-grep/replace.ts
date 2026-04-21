@@ -1,11 +1,12 @@
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { Type } from "@sinclair/typebox";
+import { TOOL_NAMES } from "../../config/resource-metadata.js";
 import { registerTool } from "../_shared/register-tool.js";
 import { AST_GREP_LANGUAGES, detectBinary, runAstGrep } from "./helpers.js";
 
 export function registerAstGrepReplaceTool(pi: ExtensionAPI): void {
-  registerTool(pi, "ast_grep_replace", {
-    name: "ast_grep_replace",
+  registerTool(pi, TOOL_NAMES.AST_REPLACE, {
+    name: TOOL_NAMES.AST_REPLACE,
     description:
       "Replace code patterns across filesystem with AST-aware rewriting. Dry-run by default. Use meta-variables in rewrite to preserve matched content. Example: pattern='console.log($MSG)' rewrite='logger.info($MSG)'",
     parameters: Type.Object({

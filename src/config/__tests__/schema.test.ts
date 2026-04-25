@@ -13,6 +13,7 @@ describe("BlackbytesConfigSchema", () => {
       assert.equal(result.value.copilot_initiator_header, true);
       assert.equal(result.value.websearch, undefined);
       assert.equal(result.value.context7, undefined);
+      assert.equal(result.value.system_prompt_log, undefined);
       assert.equal(result.value.sub_agents, undefined);
     }
   });
@@ -42,6 +43,11 @@ describe("BlackbytesConfigSchema", () => {
       copilot_initiator_header: false,
       websearch: { provider: "exa", exa_api_key: "key123" },
       context7: { api_key: "c7key" },
+      system_prompt_log: {
+        enabled: true,
+        path: "./system-prompts.jsonl",
+        capture_provider_system: true,
+      },
       sub_agents: {
         myAgent: { model: "gpt-4o", reasoningEffort: "high", temperature: 0.7 },
       },
@@ -55,6 +61,12 @@ describe("BlackbytesConfigSchema", () => {
       assert.equal(result.value.websearch?.provider, "exa");
       assert.equal(result.value.websearch?.exa_api_key, "key123");
       assert.equal(result.value.context7?.api_key, "c7key");
+      assert.equal(result.value.system_prompt_log?.enabled, true);
+      assert.equal(result.value.system_prompt_log?.path, "./system-prompts.jsonl");
+      assert.equal(result.value.system_prompt_log?.capture_agent_start, true);
+      assert.equal(result.value.system_prompt_log?.capture_provider_system, true);
+      assert.equal(result.value.system_prompt_log?.include_nested, false);
+      assert.equal(result.value.system_prompt_log?.dedupe, true);
       assert.equal(result.value.sub_agents?.myAgent?.model, "gpt-4o");
     }
   });

@@ -1,4 +1,5 @@
 import type {
+  AgentStartEvent,
   BeforeAgentStartEvent,
   BeforeProviderRequestEvent,
   ExtensionAPI,
@@ -14,6 +15,10 @@ import { getLogger } from "../shared/logger.js";
 import { setModelFamily } from "../shared/model-capability.js";
 import { getModelFamily } from "../shared/model-capability.js";
 import { resetSessionRuntimeState } from "../shared/session-state.js";
+import {
+  captureAgentStartSystemPrompt,
+  captureProviderSystemPrompts,
+} from "../shared/system-prompt-log.js";
 import { declarationToMeta } from "../sub-agents/declaration.js";
 import { setYamlDiagnostics } from "../sub-agents/diagnostics.js";
 import { exploreDeclaration } from "../sub-agents/explore.js";
@@ -42,6 +47,12 @@ import { type ToolResultEvent as LocalToolResultEvent, processToolResult } from 
 interface ModelSelectEvent {
   model: { id: string };
 }
+
+interface BeforeAgentStartResult {
+  systemPrompt?: string;
+}
+
+type ToolResultResult = Partial<Pick<PiToolResultEvent, "content" | "details" | "isError">>;
 
 /** Builtin sub-agent declarations, assembled before enablement. */
 const BUILTIN_DECLARATIONS = [
@@ -110,12 +121,20 @@ export async function handleSessionStart(
 export async function handleBeforeAgentStart(
   event: BeforeAgentStartEvent,
   ctx: ExtensionContext,
-): Promise<void> {
+): Promise<BeforeAgentStartResult> {
   const modelId = ctx.model?.id;
   if (modelId) {
     setModelFamily(modelId);
   }
-  event.systemPrompt = injectPromptAugmentation(event.systemPrompt, modelId);
+  return { systemPrompt: injectPromptAugmentation(event.systemPrompt, modelId) };
+}
+
+export async function handleAgentStart(
+  _event: AgentStartEvent,
+  ctx: ExtensionContext,
+): Promise<void> {
+  const config = await loadBlackbytesConfig();
+  await captureAgentStartSystemPrompt(config, ctx);
 }
 
 export async function handleModelSelect(
@@ -127,7 +146,7 @@ export async function handleModelSelect(
 
 export async function handleBeforeProviderRequest(
   event: BeforeProviderRequestEvent,
-  _ctx: ExtensionContext,
+  ctx: ExtensionContext,
 ): Promise<void> {
   const payload = event.payload as Record<string, unknown> | null | undefined;
   if (!payload) return;
@@ -136,20 +155,26 @@ export async function handleBeforeProviderRequest(
   // Sub-agents receive reasoning effort via --thinking CLI flag instead (see runner.ts).
   const reasoningEffort = process.env.BLACKBYTES_REASONING_EFFORT;
   mapReasoningEffort(payload, reasoningEffort, family);
+
+  const config = await loadBlackbytesConfig();
+  await captureProviderSystemPrompts(config, payload, ctx);
 }
 
 export async function handleToolResult(
   event: PiToolResultEvent,
   _ctx: ExtensionContext,
-): Promise<void> {
+): Promise<ToolResultResult | undefined> {
   const config = await loadBlackbytesConfig();
   const modified = processToolResult(event as LocalToolResultEvent, {
     hashline_edit: config.hashline_edit,
   });
   if (modified) {
-    // Apply modifications back to the mutable event
+    // Apply modifications back to the mutable event for local tests and return
+    // the result for Pi's return-based tool_result contract.
     (event as LocalToolResultEvent).content = modified.content;
+    return { content: modified.content as PiToolResultEvent["content"] };
   }
+  return undefined;
 }
 
 export async function handleSessionShutdown(

@@ -34,8 +34,7 @@ async function waitForEnabledSet(timeoutMs = 3000): Promise<void> {
 }
 
 /**
- * Wait for mock.emit() to finish for async handlers wrapped by bootstrap's wrap().
- * Since wrap() swallows errors and returns void, we poll with a small delay.
+ * Small compatibility delay for async handler side effects in older mock flows.
  */
 async function settle(ms = 100): Promise<void> {
   await new Promise<void>((r) => setTimeout(r, ms));

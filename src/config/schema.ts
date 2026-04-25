@@ -18,6 +18,16 @@ export const BlackbytesConfigSchema = z
         api_key: z.string().optional(),
       })
       .optional(),
+    system_prompt_log: z
+      .object({
+        enabled: z.boolean().default(false),
+        path: z.string().min(1, "path must be non-empty").optional(),
+        capture_agent_start: z.boolean().default(true),
+        capture_provider_system: z.boolean().default(false),
+        include_nested: z.boolean().default(false),
+        dedupe: z.boolean().default(true),
+      })
+      .optional(),
     sub_agents: z
       .record(
         z.string(),

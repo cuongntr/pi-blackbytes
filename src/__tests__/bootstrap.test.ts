@@ -9,6 +9,7 @@ import { bootstrap } from "../bootstrap.js";
 const EXPECTED_EVENTS = [
   "session_start",
   "before_agent_start",
+  "agent_start",
   "model_select",
   "before_provider_request",
   "tool_result",
@@ -48,11 +49,6 @@ describe("bootstrap", () => {
     assert.ok(capturedHandler, "session_start handler should be registered");
 
     // Calling the handler should not throw even if the underlying async handler rejects.
-    // The wrap() function schedules rejection handling via .catch(), so the call itself
-    // is synchronous and safe.
-    assert.doesNotThrow(() => capturedHandler!());
-
-    // Give microtasks a chance to settle.
-    await new Promise((r) => setTimeout(r, 10));
+    await assert.doesNotReject(async () => capturedHandler!());
   });
 });

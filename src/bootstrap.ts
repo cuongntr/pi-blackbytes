@@ -2,6 +2,7 @@ import type { ExtensionAPI, ExtensionContext } from "@mariozechner/pi-coding-age
 import { handleBlackbytesStatus } from "./commands/blackbytes-status.js";
 import { registerSetupModelsCommand } from "./commands/setup-models.js";
 import {
+  handleAgentStart,
   handleBeforeAgentStart,
   handleBeforeProviderRequest,
   handleModelSelect,
@@ -11,12 +12,14 @@ import {
 } from "./handlers/index.js";
 
 // Utility function to wrap event handlers with error handling
-function wrap<E>(
+function wrap<E, R>(
   eventName: string,
-  handler: (event: E, ctx: ExtensionContext) => Promise<void>,
-): (event: E, ctx: ExtensionContext) => void {
-  return (event: E, ctx: ExtensionContext) => {
-    handler(event, ctx).catch((err: unknown) => {
+  handler: (event: E, ctx: ExtensionContext) => Promise<R> | R,
+): (event: E, ctx: ExtensionContext) => Promise<R | undefined> {
+  return async (event: E, ctx: ExtensionContext) => {
+    try {
+      return await handler(event, ctx);
+    } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
       console.error(`[pi-blackbytes] Error in ${eventName} handler:`, err);
       try {
@@ -24,7 +27,8 @@ function wrap<E>(
       } catch {
         // ignore secondary errors from notify
       }
-    });
+      return undefined;
+    }
   };
 }
 
@@ -34,6 +38,7 @@ export function bootstrap(pi: ExtensionAPI): void {
     wrap("session_start", (event, ctx) => handleSessionStart(pi, event, ctx)),
   );
   pi.on("before_agent_start", wrap("before_agent_start", handleBeforeAgentStart));
+  pi.on("agent_start", wrap("agent_start", handleAgentStart));
   pi.on("model_select", wrap("model_select", handleModelSelect));
   pi.on("before_provider_request", wrap("before_provider_request", handleBeforeProviderRequest));
   pi.on("tool_result", wrap("tool_result", handleToolResult));

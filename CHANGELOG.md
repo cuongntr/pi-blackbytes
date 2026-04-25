@@ -2,9 +2,14 @@
 
 ## Unreleased
 
+### Added
+
+- Optional `blackbytes.system_prompt_log` JSONL capture for full Pi-effective system prompts at `agent_start`, with optional provider-serialized system-field capture at `before_provider_request`.
+
 ### Changed
 
 - `/setup-models` now maps Blackbytes sub-agents to models already available in Pi instead of collecting provider credentials or writing provider/package defaults into the Blackbytes config.
+- Extension event wrappers now await handlers and preserve return values so return-based Pi hooks such as `before_agent_start` and `tool_result` work correctly.
 
 ### Phase 2 closure summary
 

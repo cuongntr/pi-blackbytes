@@ -43,6 +43,14 @@ Blackbytes reads the top-level `blackbytes` object from the Pi settings file.
     "context7": {
       "api_key": "YOUR_CONTEXT7_KEY"
     },
+    "system_prompt_log": {
+      "enabled": false,
+      "path": "~/.pi/logs/pi-blackbytes-system-prompts.jsonl",
+      "capture_agent_start": true,
+      "capture_provider_system": false,
+      "include_nested": false,
+      "dedupe": true
+    },
     "sub_agents": {
       "oracle": {
         "model": "openai/gpt-5.4",
@@ -71,6 +79,12 @@ Blackbytes reads the top-level `blackbytes` object from the Pi settings file.
 | `websearch.exa_api_key` | `string` | Exa credential |
 | `websearch.tavily_api_key` | `string` | Tavily credential |
 | `context7.api_key` | `string` | Context7 credential |
+| `system_prompt_log.enabled` | `boolean` | Opt-in full system-prompt capture to a JSONL file. Defaults to `false` because prompts may contain project context or secrets. |
+| `system_prompt_log.path` | `string` | Optional log file path. Defaults to `~/.pi/logs/pi-blackbytes-system-prompts.jsonl`; relative paths resolve against the current working directory. |
+| `system_prompt_log.capture_agent_start` | `boolean` | Capture Pi's final effective system prompt at `agent_start` (after `before_agent_start` chaining). Defaults to `true`. |
+| `system_prompt_log.capture_provider_system` | `boolean` | Also capture provider-serialized system/developer/systemInstruction fields at `before_provider_request`. Defaults to `false`; user messages are not logged by the extractor. |
+| `system_prompt_log.include_nested` | `boolean` | Include nested sub-agent Pi sessions (`PI_NESTED_DEPTH > 0`). Defaults to `false`. |
+| `system_prompt_log.dedupe` | `boolean` | Avoid repeated identical prompt entries per session/source/provider shape. Defaults to `true`. |
 | `sub_agents.<name>.model` | `string` | Per-agent model override, preferably the canonical Pi model reference `provider/model-id` selected by `/setup-models`. Omit/clear to inherit the host Pi model. |
 | `sub_agents.<name>.reasoningEffort` | `string` | Per-agent reasoning override passed to nested sessions |
 | `sub_agents.<name>.timeoutMs` | `integer` (1..3600000) | Per-agent execution timeout in milliseconds. Builtin defaults: explore=120000, librarian=240000, oracle=300000, general=600000. YAML equivalent: `timeout_ms`. |
@@ -85,6 +99,7 @@ Blackbytes reads the top-level `blackbytes` object from the Pi settings file.
 - Unknown keys inside `blackbytes` are preserved by the parser, so wizard-managed passthrough values can coexist with the validated Blackbytes settings.
 - `disabled_tools` uses public tool names such as `hashline_edit` or `docs_query`. Disabled tools are enforced through every nested delegate path — builtin agents, and both the default and allowlist/denylist forms of YAML agents.
 - `disabled_sub_agents` uses agent names, not tool names: `explore`, `oracle`, `librarian`, `general`.
+- `system_prompt_log` is intentionally opt-in. The `agent_start` capture is the canonical Pi-effective prompt; provider capture is only for verifying serialization and extracts system-like fields instead of dumping the full provider payload.
 - `temperature` is accepted by the schema for forward-compatibility but is NOT applied. See `/blackbytes-status` → "Reserved / Unsupported Settings" for details.
 
 ## Tool surface

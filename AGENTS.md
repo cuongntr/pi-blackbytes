@@ -78,6 +78,7 @@ Core settings:
 - `copilot_initiator_header`
 - `websearch.provider`, `websearch.exa_api_key`, `websearch.tavily_api_key`
 - `context7.api_key`
+- `system_prompt_log.enabled`, `.path`, `.capture_agent_start`, `.capture_provider_system`, `.include_nested`, `.dedupe` (opt-in JSONL capture of full system prompts; provider capture extracts only system-like fields)
 - `sub_agents.<name>.model`
 - `sub_agents.<name>.reasoningEffort`
 - `sub_agents.<name>.timeoutMs` (per-agent timeout, 1..3600000 ms; YAML uses `timeout_ms`. Builtin defaults: explore=120000, librarian=240000, oracle=300000, general=600000)

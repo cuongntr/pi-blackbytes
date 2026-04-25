@@ -1,5 +1,9 @@
 import { type EnabledSet, getEnabledSet } from "../config/enabled-set.js";
 import { loadBlackbytesConfig } from "../config/loader.js";
+import {
+  getSystemPromptLogConfig,
+  resolveSystemPromptLogPath,
+} from "../shared/system-prompt-log.js";
 import { type YamlDiagnostics, getYamlDiagnostics } from "../sub-agents/diagnostics.js";
 import { getAgentSnapshot } from "../sub-agents/snapshot.js";
 import type { AgentSnapshot } from "../sub-agents/snapshot.js";
@@ -199,6 +203,17 @@ export async function handleBlackbytesStatus(): Promise<string> {
     : ["### Sub-Agent Snapshot", "_Not initialized yet (session_start has not run)._"];
 
   const yamlLines = buildYamlDiagnosticsSection(getYamlDiagnostics());
+  const systemPromptLog = getSystemPromptLogConfig(config);
+  const systemPromptLogPath = resolveSystemPromptLogPath(systemPromptLog.path, process.cwd());
+  const systemPromptLogLines = [
+    "### System Prompt Log",
+    `- enabled: ${systemPromptLog.enabled}`,
+    `- path: \`${systemPromptLogPath}\``,
+    `- capture_agent_start: ${systemPromptLog.capture_agent_start}`,
+    `- capture_provider_system: ${systemPromptLog.capture_provider_system}`,
+    `- include_nested: ${systemPromptLog.include_nested}`,
+    `- dedupe: ${systemPromptLog.dedupe}`,
+  ];
 
   const lines: string[] = [
     "## Blackbytes Status",
@@ -211,6 +226,8 @@ export async function handleBlackbytesStatus(): Promise<string> {
     "",
     "### Enabled Skills",
     ...[...enabledSet.skills].map((s) => `- ${s}`),
+    "",
+    ...systemPromptLogLines,
     "",
     ...reservedLines,
     "",

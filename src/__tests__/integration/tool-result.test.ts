@@ -162,9 +162,11 @@ describe("integration: tool_result", () => {
       await mock.emit("tool_result", event);
       await settle();
 
-      // Handler is wired (handler doesn't mutate event in-place, but fires without error)
+      // Handler is wired, mutates the mock event for local compatibility, and returns
+      // the rewritten result for Pi's return-based tool_result contract.
       const toolResultReg = mock.calls.on.find((c) => c.event === "tool_result");
       assert.ok(toolResultReg, "bootstrap should register a tool_result handler");
+      assert.match(event.content![0].text!, /^1#[A-Z]{2}\|line A/);
     } finally {
       await fs.rm(subDir, { recursive: true, force: true });
     }

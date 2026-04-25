@@ -76,6 +76,7 @@ Important keys:
 - `websearch.exa_api_key`
 - `websearch.tavily_api_key`
 - `context7.api_key`
+- `system_prompt_log.*` (opt-in system prompt capture)
 - `sub_agents.<name>.model`
 - `sub_agents.<name>.reasoningEffort`
 - `sub_agents.<name>.temperature`

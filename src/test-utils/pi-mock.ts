@@ -4,7 +4,7 @@ export interface MockPiCalls {
   registerTool: unknown[];
   registerCommand: unknown[];
   registerProvider: Array<{ name: string; opts: unknown }>;
-  on: Array<{ event: string; handler: (...args: any[]) => void | Promise<void> }>;
+  on: Array<{ event: string; handler: (...args: any[]) => unknown | Promise<unknown> }>;
   setActiveTools: unknown[][];
   appendEntry: unknown[];
 }
@@ -13,7 +13,7 @@ export interface MockPi {
   registerTool(definition: unknown): void;
   registerCommand(definition: unknown): void;
   registerProvider(name: string, opts: unknown): void;
-  on(event: string, handler: (...args: any[]) => void | Promise<void>): void;
+  on(event: string, handler: (...args: any[]) => unknown | Promise<unknown>): void;
   setActiveTools(...args: unknown[]): void;
   appendEntry(...args: unknown[]): void;
   /** Recorded calls for assertions */
@@ -32,7 +32,7 @@ export function createMockPi(): MockPi & ExtensionAPI {
     appendEntry: [],
   };
 
-  const handlers = new Map<string, Array<(...args: any[]) => void | Promise<void>>>();
+  const handlers = new Map<string, Array<(...args: any[]) => unknown | Promise<unknown>>>();
 
   // Default ctx supplied when tests emit events without an explicit ctx.
   // Mirrors what Pi's runtime always provides to handlers.
@@ -61,7 +61,7 @@ export function createMockPi(): MockPi & ExtensionAPI {
       calls.registerProvider.push({ name, opts });
     },
 
-    on(event: string, handler: (...args: any[]) => void | Promise<void>): void {
+    on(event: string, handler: (...args: any[]) => unknown | Promise<unknown>): void {
       calls.on.push({ event, handler });
       const list = handlers.get(event) ?? [];
       list.push(handler);
@@ -76,15 +76,27 @@ export function createMockPi(): MockPi & ExtensionAPI {
       calls.appendEntry.push(args);
     },
 
-    emit(event: string, ...args: unknown[]): void | Promise<void> {
+    async emit(event: string, ...args: unknown[]): Promise<void> {
       const list = handlers.get(event);
       if (!list || list.length === 0) return;
-      // Pi runtime always passes (event, ctx); supply default ctx when not provided
+      // Pi runtime always passes (event, ctx); supply default ctx when not provided.
+      // Run handlers sequentially so return-based hooks (notably before_agent_start)
+      // can be chained like Pi's ExtensionRunner.
       const callArgs: unknown[] = args.length >= 2 ? args : [args[0], defaultCtx];
-      const results = list.map((h) => h(...callArgs));
-      const promises = results.filter((r): r is Promise<void> => r instanceof Promise);
-      if (promises.length > 0) {
-        return Promise.all(promises).then(() => undefined);
+      for (const handler of list) {
+        const result = await handler(...callArgs);
+        if (event === "before_agent_start" && result && typeof result === "object") {
+          const systemPrompt = (result as { systemPrompt?: unknown }).systemPrompt;
+          const eventArg = callArgs[0];
+          if (
+            typeof systemPrompt === "string" &&
+            eventArg &&
+            typeof eventArg === "object" &&
+            "systemPrompt" in eventArg
+          ) {
+            (eventArg as { systemPrompt: string }).systemPrompt = systemPrompt;
+          }
+        }
       }
     },
   };

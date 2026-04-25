@@ -8,6 +8,15 @@ import type { ExtensionAPI, ExtensionCommandContext } from "@mariozechner/pi-cod
 import { registerSetupModelsCommand } from "../../commands/setup-models.js";
 import { loadBlackbytesConfig } from "../../config/loader.js";
 
+const CLAUDE_MODEL = {
+  provider: "anthropic",
+  id: "claude-sonnet-4-5",
+  name: "Claude Sonnet 4.5",
+  reasoning: true,
+  input: ["text", "image"],
+};
+const CLAUDE_LABEL = "anthropic/claude-sonnet-4-5 — Claude Sonnet 4.5 (thinking, image)";
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -74,6 +83,11 @@ function buildMockCtx(responses: {
   const notifications: Array<{ msg: string; level: string }> = [];
 
   const ctx = {
+    modelRegistry: {
+      refresh: () => {},
+      getError: () => undefined,
+      getAvailable: () => [CLAUDE_MODEL],
+    },
     ui: {
       select: async (_title: string, _opts: string[]) => {
         const v = selects.shift();
@@ -227,11 +241,10 @@ describe("integration: setup-models wizard", () => {
     };
     writeSettingsSync(tmpDir, JSON.stringify(existing));
 
-    // No existing blackbytes block → no overwrite confirm
+    // No existing blackbytes.sub_agents block → no overwrite confirm.
     await runWizard({
-      selects: ["GitHub Copilot", "None", "Medium"], // provider, websearch, reasoning
-      inputs: ["claude-opus-4-5"], // default model
-      confirms: [false], // context7 = no
+      selects: ["Use one model for all sub-agents", CLAUDE_LABEL],
+      confirms: [false], // configure per-agent reasoning = no
     });
 
     const written = readSettingsJson(tmpDir);
@@ -242,8 +255,7 @@ describe("integration: setup-models wizard", () => {
 
   it("7. atomic write — final file is valid JSON, no .tmp file left behind", async () => {
     await runWizard({
-      selects: ["GitHub Copilot", "None", "Medium"],
-      inputs: ["claude-opus-4-5"],
+      selects: ["Use one model for all sub-agents", CLAUDE_LABEL],
       confirms: [false],
     });
 
@@ -262,28 +274,31 @@ describe("integration: setup-models wizard", () => {
     assert.equal(fs.existsSync(`${settingsPath}.tmp`), false, ".tmp file must not remain");
   });
 
-  it("8. duplicate package entries deduped after wizard write", async () => {
-    // Seed existing blackbytes with packages already containing "anthropic" twice
+  it("8. wizard maps models without writing provider/package configuration", async () => {
     writeSettingsSync(
       tmpDir,
       JSON.stringify({
-        blackbytes: { packages: ["anthropic", "anthropic"] },
+        blackbytes: { packages: ["custom-pass-through", "custom-pass-through"] },
       }),
     );
 
-    // Has existing blackbytes → wizard confirms overwrite first
     await runWizard({
-      selects: ["Anthropic", "None", "Medium"], // provider, websearch, reasoning
-      inputs: ["sk-ant-key", "claude-opus-4-5"], // api key, model
-      confirms: [true, false], // overwrite=yes, context7=no
+      selects: ["Use one model for all sub-agents", CLAUDE_LABEL],
+      confirms: [false], // configure reasoning = no
     });
 
     const written = readSettingsJson(tmpDir);
     const bb = written.blackbytes as Record<string, unknown>;
-    const packages = bb.packages as string[];
+    const subAgents = bb.sub_agents as Record<string, Record<string, unknown>>;
 
-    assert.ok(Array.isArray(packages), "packages must be an array");
-    const anthropicCount = packages.filter((p) => p === "anthropic").length;
-    assert.equal(anthropicCount, 1, "anthropic must appear exactly once (deduped)");
+    assert.equal(subAgents.oracle.model, "anthropic/claude-sonnet-4-5");
+    assert.deepEqual(
+      bb.packages,
+      ["custom-pass-through", "custom-pass-through"],
+      "unknown passthrough keys are preserved, not managed as provider packages",
+    );
+    assert.equal("anthropic_api_key" in bb, false, "provider keys are not written");
+    assert.equal("openai_api_key" in bb, false, "provider keys are not written");
+    assert.equal("default_model" in bb, false, "top-level default_model is not written");
   });
 });

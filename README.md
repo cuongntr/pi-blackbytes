@@ -16,13 +16,13 @@ Run the setup wizard after installation:
 /setup-models
 ```
 
-The wizard configures provider credentials, websearch, optional Context7 access, and Blackbytes-specific settings in `~/.pi/agent/settings.json` (or `$PI_AGENT_DIR/settings.json`).
+The wizard maps Blackbytes sub-agents to models that Pi already has available in its model registry. Provider credentials and model availability remain Pi-level concerns (for example `/model`, `/login`, or `~/.pi/agent/models.json`); Blackbytes only stores per-sub-agent overrides in `~/.pi/agent/settings.json` (or `$PI_AGENT_DIR/settings.json`).
 
 ## Pi commands
 
 | Command | Purpose |
 |---|---|
-| `/setup-models` | Interactive setup for provider keys, websearch, Context7, and related Blackbytes settings |
+| `/setup-models` | Interactive mapping from Pi-available models to Blackbytes sub-agents (`blackbytes.sub_agents.<name>.model`) |
 | `/blackbytes-status` | Print enabled tools, enabled sub-agents, enabled skills, Sub-Agent Snapshot (model/reasoning/allowed tools per agent), YAML diagnostics, and the current redacted `blackbytes` config |
 
 ## Configuration
@@ -71,7 +71,7 @@ Blackbytes reads the top-level `blackbytes` object from the Pi settings file.
 | `websearch.exa_api_key` | `string` | Exa credential |
 | `websearch.tavily_api_key` | `string` | Tavily credential |
 | `context7.api_key` | `string` | Context7 credential |
-| `sub_agents.<name>.model` | `string` | Per-agent model override |
+| `sub_agents.<name>.model` | `string` | Per-agent model override, preferably the canonical Pi model reference `provider/model-id` selected by `/setup-models`. Omit/clear to inherit the host Pi model. |
 | `sub_agents.<name>.reasoningEffort` | `string` | Per-agent reasoning override passed to nested sessions |
 | `sub_agents.<name>.timeoutMs` | `integer` (1..3600000) | Per-agent execution timeout in milliseconds. Builtin defaults: explore=120000, librarian=240000, oracle=300000, general=600000. YAML equivalent: `timeout_ms`. |
 | `sub_agents.<name>.fallbackModels` | `string[]` (max 5) | Ordered list of fallback models tried on `provider_or_model_unavailable` failures. Read-only agents only (`general` and mutating YAML agents are ineligible). YAML equivalent: `fallback_models`. |

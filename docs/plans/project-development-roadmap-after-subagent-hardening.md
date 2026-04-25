@@ -40,12 +40,13 @@ If any of those remain unfinished, finish them before starting this roadmap.
 3. **Agent usefulness over feature count** — add features only when they materially improve real coding workflows.
 4. **Local-first reliability** — failures should be diagnosable from status output, structured details, and tests.
 5. **Minimal dependency growth** — avoid heavy runtime dependencies unless a feature cannot be built safely otherwise.
+6. **Prompt-driven workflow** — keep everyday coding workflow in the dynamic Bytes system prompt; roadmap items should add only the runtime support that prompt cannot provide by itself.
 
 ## 4. Roadmap Overview
 
 | Horizon | Theme | Outcome |
 |---|---|---|
-| Phase 3 | Controlled orchestration | Safe parallel delegation and better multi-agent ergonomics |
+| Phase 3 | Controlled orchestration | Safe read-only parallel delegation, structured results, and capability/status polish |
 | Phase 4 | Isolation and side-effect safety | Worktree/sandbox support for write-capable agents |
 | Phase 5 | Runtime performance and UX | Optional in-process runner, richer progress, better status |
 | Phase 6 | Ecosystem and extensibility | Stable user-agent format, templates, optional cross-extension integration |
@@ -55,31 +56,31 @@ If any of those remain unfinished, finish them before starting this roadmap.
 
 ### Goal
 
-Add limited orchestration features without introducing background lifecycle complexity yet.
+Add the smallest runtime primitives needed to support the existing dynamic Bytes workflow. Do not create a separate workflow layer: the system prompt remains the source of truth for context gathering, planning, delegation, verification, review, language matching, and communication style.
 
 ### Candidate work
 
-1. **`delegate_parallel` for read-only agents first**
+1. **Structured delegate result model**
+   - Standardize result status: success, failure, timeout, canceled, skipped.
+   - Preserve current Pi tool result shape while keeping internal structured metadata.
+   - Include synthesis-friendly metadata where useful: task label, agent name, concise summary, evidence, risks, and suggested next action.
+
+2. **`delegate_parallel` for read-only agents first**
    - Accept a bounded list of tasks.
    - Run only `explore`, `oracle`, `librarian`, and read-only YAML agents initially.
    - Enforce max concurrency and total timeout budget.
    - Return ordered results with per-task status.
+   - Require the parent agent to synthesize results instead of forwarding raw nested output.
 
-2. **Multi-agent review patterns**
-   - Add docs/examples for common patterns:
-     - exploration fanout
-     - implementation review
-     - design critique
-     - library research plus local code search
-   - Prefer documentation and examples before adding more runtime features.
-
-3. **Structured delegate result model**
-   - Standardize result status: success, failure, timeout, canceled, skipped.
-   - Preserve current Pi tool result shape while keeping internal structured metadata.
-
-4. **Capability matrix in status**
+3. **Capability matrix in status**
    - Show each agent's resolved tool class, model, fallback status, timeout, prompt mode, and write capability.
+   - Show enough capability information for the dynamic prompt/status surfaces to stay aligned with actual runtime state.
    - Keep status redacted and prompt-free.
+
+4. **Minimal workflow examples**
+   - Keep docs/examples lightweight and tied to existing prompt behavior: exploration fanout, implementation review, design critique, and library research plus local code search.
+   - Document when not to parallelize: tiny single-file edits, unclear goals, tasks with shared write targets, or cases where synthesis would cost more than direct work.
+   - Avoid duplicating the full Bytes system prompt in roadmap docs.
 
 ### Guardrails
 
@@ -87,11 +88,15 @@ Add limited orchestration features without introducing background lifecycle comp
 - No background jobs yet.
 - No recursive delegation.
 - No unbounded fanout.
+- Do not introduce runtime workflow modes unless the dynamic prompt cannot express the behavior adequately.
 
 ### Acceptance criteria
 
 - Parallel read-only tasks are deterministic and bounded.
 - Any task failure is isolated to that task and reported clearly.
+- Parent-thread synthesis is concise and structured; raw nested output is not dumped into the final context.
+- Partial failure and contradictory-result scenarios are covered by tests or golden examples.
+- Capability/status output reflects actual enabled resources and redaction boundaries.
 - `delegate_parallel` refuses write-capable agents unless explicitly disabled by design.
 - Full verification passes: `bun run lint`, `bun run build`, `bun run test`.
 
@@ -112,6 +117,7 @@ Make write-capable subagents safer so future parallel/background workflows can i
    - Instead of letting isolated agents directly mutate the main workspace, collect diffs.
    - Parent agent or user decides whether to apply.
    - Start with `general` only.
+   - Include recovery metadata: changed files, validation run, known failures, and whether the diff was applied to the main workspace.
 
 3. **Side-effect-aware fallback for write agents**
    - Only after isolation or patch handoff exists.
@@ -121,6 +127,11 @@ Make write-capable subagents safer so future parallel/background workflows can i
    - Detect dirty worktree before isolation.
    - Avoid deleting user files during cleanup.
    - Never run destructive git commands without explicit user request.
+
+5. **Recovery workflow**
+   - Document how users inspect, reject, or revert agent-produced changes.
+   - Prefer patch handoff and explicit apply steps for isolated agents.
+   - If host undo APIs are available, evaluate them as UX sugar rather than the primary safety mechanism.
 
 ### Guardrails
 
@@ -134,6 +145,7 @@ Make write-capable subagents safer so future parallel/background workflows can i
 - Cleanup is safe and tested.
 - Dirty-worktree scenarios are handled explicitly.
 - Write-agent fallback remains disabled unless isolation is active.
+- Users can identify which files an isolated write-capable agent changed and can reject the result without mutating the main workspace.
 
 ## 7. Phase 5 — Runtime Performance and UX
 
@@ -281,7 +293,7 @@ Recommended next steps after finishing the current hardening plan:
    - structured delegate result model
    - capability matrix/status polish
    - `delegate_parallel` for read-only agents only
-   - docs/examples for fanout workflows
+   - lightweight docs/examples for bounded fanout workflows
 
 3. Before any write-capable parallel/background work, complete Phase 4 isolation design.
 
@@ -299,12 +311,14 @@ The project is progressing in the right direction if:
 - Failures are reported with enough detail to fix config, model, or CLI issues quickly.
 - The codebase remains small enough that new contributors can understand registration, runner, loader, and status flows in one sitting.
 - Tests continue to define the safety contract for tools, recursion, config parsing, diagnostics, fallback, and isolation.
+- The dynamic Bytes system prompt remains the source of truth for everyday workflow.
+- Roadmap features only add runtime support, safety, and observability around it.
 
 ## 13. Roadmap Review Cadence
 
 Review this roadmap after each major phase:
 
-- After Phase 3: decide whether parallel read-only delegation is enough or whether write isolation is worth the complexity.
+- After Phase 3: decide whether parallel read-only delegation materially improves the existing prompt-driven workflow or whether status/result polish is enough.
 - After Phase 4: decide whether background agents become safe and useful.
 - After Phase 5: decide whether in-process execution should remain optional, become default, or be abandoned.
 - After Phase 6: decide whether ecosystem integration has real users.

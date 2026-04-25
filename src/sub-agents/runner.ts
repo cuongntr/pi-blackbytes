@@ -1,6 +1,6 @@
 import { spawn as nodeSpawn } from "node:child_process";
 import type { SpawnOptions } from "node:child_process";
-import type { DelegateResult, RunNestedPiOptions } from "./types.js";
+import type { DelegateResult, PiSessionEvent, RunNestedPiOptions } from "./types.js";
 
 export type { RunNestedPiOptions, DelegateResult };
 
@@ -45,7 +45,7 @@ function truncateMiddle(text: string, maxChars = MAX_DISPLAY_DETAIL_CHARS): stri
   return text.slice(0, headChars) + TRUNCATION_MARKER + text.slice(-tailChars);
 }
 
-function redactFailureText(text: string): string {
+export function redactDelegateText(text: string): string {
   return text
     .replace(
       /(\b[A-Z0-9_]*(?:API_KEY|TOKEN|SECRET|PASSWORD|CREDENTIAL|KEY)[A-Z0-9_]*\s*[=:]\s*)(?:"[^"]*"|'[^']*'|[^\s'",}]+)/gi,
@@ -72,7 +72,7 @@ function classifyFailure(
 }
 
 export function formatDelegateFailure(result: DelegateResult): string {
-  const details = result.details ? truncateMiddle(redactFailureText(result.details)) : undefined;
+  const details = result.details ? truncateMiddle(redactDelegateText(result.details)) : undefined;
   const kind = result.failureKind ? ` (${result.failureKind})` : "";
   if (!details) return `Error: ${result.content}${kind}`;
   return `Error: ${result.content}${kind}\nDetails:\n${details}`;
@@ -132,6 +132,8 @@ export async function runNestedPi(
     systemPrompt,
     "--no-session",
     "--no-context-files",
+    "--mode",
+    "json",
   ];
 
   if (model) {
@@ -232,10 +234,68 @@ export async function runNestedPi(
       requestTermination("cancelled");
     }
 
+    let lineBuffer = "";
+    let finalAssistantText = "";
+
+    const handleLine = (line: string): void => {
+      const trimmed = line.trim();
+      if (!trimmed) return;
+      // Skip non-JSON banner/warning lines that pi-blackbytes or upstream
+      // print before/around the JSONL stream.
+      if (!trimmed.startsWith("{")) return;
+      let event: PiSessionEvent;
+      try {
+        event = JSON.parse(trimmed) as PiSessionEvent;
+      } catch {
+        return;
+      }
+      if (!event || typeof event !== "object" || typeof event.type !== "string") return;
+
+      // Capture the final assistant text from agent_end.messages so we can
+      // return clean content (without JSONL noise) to the calling LLM.
+      if (event.type === "agent_end") {
+        const messages = event.messages;
+        if (Array.isArray(messages)) {
+          for (let i = messages.length - 1; i >= 0; i--) {
+            const msg = messages[i] as { role?: unknown; content?: unknown } | undefined;
+            if (!msg || msg.role !== "assistant") continue;
+            if (Array.isArray(msg.content)) {
+              const text = msg.content
+                .filter(
+                  (c): c is { type: "text"; text: string } =>
+                    !!c &&
+                    typeof c === "object" &&
+                    (c as { type?: unknown }).type === "text" &&
+                    typeof (c as { text?: unknown }).text === "string",
+                )
+                .map((c) => c.text)
+                .join("");
+              if (text) finalAssistantText = text;
+            }
+            break;
+          }
+        }
+      }
+
+      try {
+        onUpdate?.(event);
+      } catch {
+        // Swallow callback errors so a buggy progress reporter cannot break
+        // the nested Pi run. The reporter is responsible for its own safety.
+      }
+    };
+
     child.stdout!.on("data", (chunk: Buffer) => {
       const text = chunk.toString();
       stdout = appendBounded(stdout, text);
-      onUpdate?.(text);
+      lineBuffer += text;
+      let idx = lineBuffer.indexOf("\n");
+      while (idx !== -1) {
+        const line = lineBuffer.slice(0, idx);
+        lineBuffer = lineBuffer.slice(idx + 1);
+        handleLine(line);
+        idx = lineBuffer.indexOf("\n");
+      }
     });
 
     child.stderr!.on("data", (chunk: Buffer) => {
@@ -248,8 +308,14 @@ export async function runNestedPi(
         return;
       }
 
+      // Flush any trailing buffered line that didn't end in newline.
+      if (lineBuffer.length > 0) {
+        handleLine(lineBuffer);
+        lineBuffer = "";
+      }
+
       if (_code === 0) {
-        finish({ success: true, content: stdout });
+        finish({ success: true, content: finalAssistantText || stdout });
       } else {
         finish({
           success: false,

@@ -1,9 +1,13 @@
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { Type } from "@sinclair/typebox";
 import { TOOL_NAMES } from "../../config/resource-metadata.js";
+import { compactDetails, renderCompactResult } from "../_shared/compact-result.js";
 import { type HttpFetchOptions, httpFetch } from "../_shared/http.js";
 import { registerTool } from "../_shared/register-tool.js";
 import { type TextToolResult, textResult } from "../_shared/text-result.js";
+
+const COMPACT_HIT_LIMIT = 5;
+const FULL_HIT_LIMIT = 20;
 
 export interface GrepAppParams {
   query: string;
@@ -65,26 +69,39 @@ export async function executeGrepAppSearch(
     return textResult(`No results found for query: "${query}"`);
   }
 
-  const parts: string[] = [
-    `Search results for "${query}" on grep.app (${hits.length} results):`,
-    "",
-  ];
+  const formatHits = (limit: number): string => {
+    const parts: string[] = [
+      `Search results for "${query}" on grep.app (${hits.length} results, showing ${Math.min(
+        limit,
+        hits.length,
+      )}):`,
+      "",
+    ];
 
-  for (const hit of hits.slice(0, 20)) {
-    const repoName = hit.repo?.name ?? "unknown";
-    const fileName = hit.file?.name ?? "unknown";
-    parts.push(`### ${repoName} — ${fileName}`);
+    for (const hit of hits.slice(0, limit)) {
+      const repoName = hit.repo?.name ?? "unknown";
+      const fileName = hit.file?.name ?? "unknown";
+      parts.push(`### ${repoName} — ${fileName}`);
 
-    const lines = hit.lines ?? {};
-    const lineEntries = Object.entries(lines).sort(([a], [b]) => Number(a) - Number(b));
+      const lines = hit.lines ?? {};
+      const lineEntries = Object.entries(lines).sort(([a], [b]) => Number(a) - Number(b));
 
-    for (const [lineNum, lineContent] of lineEntries) {
-      parts.push(`  ${lineNum}: ${lineContent}`);
+      for (const [lineNum, lineContent] of lineEntries) {
+        parts.push(`  ${lineNum}: ${lineContent}`);
+      }
+      parts.push("");
     }
-    parts.push("");
-  }
 
-  return textResult(parts.join("\n"));
+    if (hits.length > limit) {
+      parts.push(`[${hits.length - limit} more result(s) hidden. Expand with ctrl+o for details.]`);
+    }
+
+    return parts.join("\n");
+  };
+
+  const summary = formatHits(COMPACT_HIT_LIMIT);
+  const fullText = formatHits(FULL_HIT_LIMIT);
+  return textResult(summary, compactDetails(fullText, summary));
 }
 
 export function registerGrepAppSearchTool(pi: ExtensionAPI): void {
@@ -125,5 +142,6 @@ export function registerGrepAppSearchTool(pi: ExtensionAPI): void {
       ),
     }),
     execute: (params: GrepAppParams) => executeGrepAppSearch(params),
+    renderResult: renderCompactResult,
   });
 }

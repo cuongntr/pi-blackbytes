@@ -26,18 +26,18 @@ export async function executeWebsearchFetch(
   });
 
   if (!result.ok) {
-    return textResult(`Error fetching URL: ${result.error}`);
+    const status = result.status !== undefined ? `error HTTP ${result.status}` : "error";
+    return textResult(`Fetched ${url}: ${status} (${result.error})`);
   }
 
-  const text = typeof result.data === "string" ? result.data : JSON.stringify(result.data);
-  return textResult(text);
+  return textResult(`Fetched ${url}: HTTP ${result.status}`);
 }
 
 export function registerWebsearchFetchTool(pi: ExtensionAPI): void {
   registerTool(pi, TOOL_NAMES.WEB_FETCH, {
     name: TOOL_NAMES.WEB_FETCH,
     description:
-      "Fetch content from a URL and return it as text. Automatically upgrades http:// to https://.",
+      "Fetch a URL and report the final URL and HTTP status. Automatically upgrades http:// to https://.",
     parameters: Type.Object({
       url: Type.String({ description: "The URL to fetch" }),
       timeout: Type.Optional(Type.Number({ description: "Timeout in seconds (max 120)" })),

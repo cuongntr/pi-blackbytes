@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Changed
+
+- `/setup-models` now maps Blackbytes sub-agents to models already available in Pi instead of collecting provider credentials or writing provider/package defaults into the Blackbytes config.
+
 ### Phase 2 closure summary
 
 All five Phase 2 beads are resolved:

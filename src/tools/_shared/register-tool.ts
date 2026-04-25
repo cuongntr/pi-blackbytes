@@ -12,5 +12,19 @@ export function registerTool(pi: ExtensionAPI, name: string, definition: any): v
   if (!getEnabledSet().tools.has(name)) {
     return;
   }
+
+  // Pi calls tool executors as (toolCallId, params, signal, onUpdate, ctx). Several local
+  // tools are implemented as simple pure executors that accept only params. Adapt those at
+  // registration time while preserving already Pi-shaped executors like hashline_edit.
+  if (typeof definition.execute === "function" && definition.execute.length <= 1) {
+    const execute = definition.execute;
+    pi.registerTool({
+      ...definition,
+      execute: (_toolCallId: unknown, params: unknown) =>
+        execute(params === undefined && typeof _toolCallId === "object" ? _toolCallId : params),
+    });
+    return;
+  }
+
   pi.registerTool(definition);
 }

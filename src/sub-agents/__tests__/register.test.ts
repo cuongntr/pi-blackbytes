@@ -360,6 +360,114 @@ describe("registerSubAgent", () => {
     assert.equal(result.content[0].text, "found it!");
   });
 
+  it("streams safe collapsed progress updates with expandable details", async () => {
+    initEnabledSet(defaultConfig);
+    const pi = makeFakePi();
+    const events = [
+      { type: "message_start", message: { model: "resolved-model" } },
+      {
+        type: "message_update",
+        assistantMessageEvent: {
+          type: "text_delta",
+          contentIndex: 0,
+          delta: "OPENAI_API_KEY=secret-token\n",
+          partial: {},
+        },
+      },
+      {
+        type: "message_update",
+        assistantMessageEvent: {
+          type: "text_delta",
+          contentIndex: 0,
+          delta: "useful output",
+          partial: {},
+        },
+      },
+      {
+        type: "agent_end",
+        messages: [
+          {
+            role: "assistant",
+            content: [{ type: "text", text: "OPENAI_API_KEY=secret-token\nuseful output" }],
+          },
+        ],
+      },
+    ];
+    const stdoutData = `${events.map((e) => JSON.stringify(e)).join("\n")}\n`;
+    const spawnFn = makeCapturingSpawnFn({ stdoutData, exitCode: 0 });
+    const updates: Array<{ content: Array<{ text: string }>; details: any }> = [];
+
+    registerSubAgent(pi, testDecl, { spawnFn });
+
+    const tool = pi.registeredTools.get("delegate_explore")!;
+    const result = await tool.execute(
+      "test-call",
+      { question: "test" },
+      undefined,
+      (update: { content: Array<{ text: string }>; details: any }) => updates.push(update),
+      { cwd: "/tmp/host-workspace" },
+    );
+
+    assert.equal(result.content[0].text, "OPENAI_API_KEY=secret-token\nuseful output");
+    assert.ok(updates.length >= 3, "should emit start, running, and completed updates");
+    assert.match(updates[0]!.content[0]!.text, /Sub-agent explore starting/);
+    assert.equal(updates[0]!.details.status, "starting");
+    assert.equal(updates[0]!.details.cwd, "/tmp/host-workspace");
+    assert.deepEqual(updates[0]!.details.allowedTools, ["ast_search", "glob", "grep", "read"]);
+
+    const running = updates.filter((u) => u.details.status === "running").at(-1)!;
+    assert.match(running.content[0]!.text, /Sub-agent explore running/);
+    assert.match(running.details.outputPreview, /OPENAI_API_KEY=\[REDACTED\]/);
+    assert.doesNotMatch(running.details.outputPreview, /secret-token/);
+    assert.match(running.details.outputPreview, /useful output/);
+
+    const finalUpdate = updates.at(-1)!;
+    assert.equal(finalUpdate.details.status, "completed");
+    assert.deepEqual(finalUpdate.details.attemptedModels, ["(host model)"]);
+  });
+
+  it("bounds sub-agent progress preview without changing runner result semantics", async () => {
+    initEnabledSet(defaultConfig);
+    const pi = makeFakePi();
+    const hugeText = `text-head-${"x".repeat(9_000)}-text-tail`;
+    const events = [
+      {
+        type: "message_update",
+        assistantMessageEvent: {
+          type: "text_delta",
+          contentIndex: 0,
+          delta: hugeText,
+          partial: {},
+        },
+      },
+      {
+        type: "agent_end",
+        messages: [{ role: "assistant", content: [{ type: "text", text: hugeText }] }],
+      },
+    ];
+    const stdoutData = `${events.map((e) => JSON.stringify(e)).join("\n")}\n`;
+    const spawnFn = makeCapturingSpawnFn({ stdoutData, exitCode: 0 });
+    const updates: Array<{ details: any }> = [];
+
+    registerSubAgent(pi, testDecl, { spawnFn });
+
+    const tool = pi.registeredTools.get("delegate_explore")!;
+    const result = await tool.execute(
+      "test-call",
+      { question: "test" },
+      undefined,
+      (update: { details: any }) => updates.push(update),
+    );
+
+    assert.match(result.content[0].text, /text-head/);
+    assert.match(result.content[0].text, /text-tail/);
+    const running = updates.filter((u) => u.details.status === "running").at(-1)!;
+    assert.ok(running.details.outputPreview.length <= 8_192);
+    assert.match(running.details.outputPreview, /text-head/);
+    assert.match(running.details.outputPreview, /text-tail/);
+    assert.match(running.details.outputPreview, /truncated/);
+  });
+
   it("refuses nested invocation at depth >= 1", async () => {
     initEnabledSet(defaultConfig);
     process.env.PI_NESTED_DEPTH = "1";

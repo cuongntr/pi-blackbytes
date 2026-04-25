@@ -21,7 +21,7 @@ Run in order: `lint -> build -> test`.
 
 ### Pi commands
 
-- `/setup-models` — interactive settings wizard
+- `/setup-models` — interactive Pi-model-to-sub-agent mapping wizard
 - `/blackbytes-status` — print enabled resources and redacted config
 
 ## Architecture

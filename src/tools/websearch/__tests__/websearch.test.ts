@@ -160,13 +160,14 @@ describe("web_search", () => {
 // --- web_fetch tests ---
 
 describe("web_fetch", () => {
-  it("fetches and returns content from a URL", async () => {
+  it("fetches a URL and returns only URL/status", async () => {
     const mockFetch: MockFetch = async (_opts) =>
       makeOkResult("<html><body>Hello world</body></html>");
 
     const result = await executeWebsearchFetch({ url: "https://example.com" }, mockFetch);
 
-    assert.ok(result.content[0].text.includes("Hello world"), "Should include page content");
+    assert.equal(result.content[0].text, "Fetched https://example.com: HTTP 200");
+    assert.ok(!result.content[0].text.includes("Hello world"), "Should not include page content");
   });
 
   it("upgrades http:// to https://", async () => {
@@ -182,11 +183,11 @@ describe("web_fetch", () => {
     assert.equal(capturedUrl, "https://example.com/page");
   });
 
-  it("returns error on fetch failure", async () => {
+  it("returns URL/status/error on fetch failure", async () => {
     const mockFetch: MockFetch = async () => makeErrorResult("Timeout");
 
     const result = await executeWebsearchFetch({ url: "https://example.com" }, mockFetch);
-    assert.ok(result.content[0].text.includes("Error fetching URL"), result.content[0].text);
+    assert.equal(result.content[0].text, "Fetched https://example.com: error (Timeout)");
   });
 
   it("passes timeout in milliseconds to httpFetch", async () => {

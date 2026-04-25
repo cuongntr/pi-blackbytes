@@ -9,17 +9,66 @@ import type { ExtensionAPI, ExtensionCommandContext } from "@mariozechner/pi-cod
 // Test helpers
 // --------------------------------------------------------------------------
 
+interface MockModel {
+  provider: string;
+  id: string;
+  name: string;
+  reasoning: boolean;
+  input: string[];
+}
+
+const CLAUDE_MODEL: MockModel = {
+  provider: "anthropic",
+  id: "claude-sonnet-4-5",
+  name: "Claude Sonnet 4.5",
+  reasoning: true,
+  input: ["text", "image"],
+};
+
+const GPT_MODEL: MockModel = {
+  provider: "openai",
+  id: "gpt-5.1",
+  name: "GPT 5.1",
+  reasoning: true,
+  input: ["text"],
+};
+
+const COPILOT_MODEL: MockModel = {
+  provider: "github-copilot",
+  id: "gpt-5-mini",
+  name: "GPT 5 Mini (Copilot)",
+  reasoning: false,
+  input: ["text"],
+};
+
+const CLAUDE_LABEL = "anthropic/claude-sonnet-4-5 — Claude Sonnet 4.5 (thinking, image)";
+const GPT_LABEL = "openai/gpt-5.1 — GPT 5.1 (thinking)";
+const COPILOT_CURRENT_LABEL = "github-copilot/gpt-5-mini — GPT 5 Mini (Copilot) [current]";
+const INHERIT_LABEL = "Inherit host model (no override)";
+
 interface MockUI {
   selectResponses: string[];
   inputResponses: string[];
   confirmResponses: boolean[];
   notifications: Array<{ message: string; level?: string }>;
+  selectCalls: Array<{ title: string; options: string[] }>;
 }
 
-function makeMockCtx(ui: MockUI): ExtensionCommandContext {
+function makeMockCtx(
+  ui: MockUI,
+  models: MockModel[] = [CLAUDE_MODEL, GPT_MODEL],
+  currentModel?: MockModel,
+): ExtensionCommandContext {
   return {
+    model: currentModel,
+    modelRegistry: {
+      refresh: () => {},
+      getError: () => undefined,
+      getAvailable: () => models,
+    },
     ui: {
-      select: async (_title: string, _opts: string[]) => {
+      select: async (title: string, opts: string[]) => {
+        ui.selectCalls.push({ title, options: opts });
         const r = ui.selectResponses.shift();
         if (r === undefined) throw new Error("No more select responses");
         return r;
@@ -68,11 +117,13 @@ function makeMockPi(): { pi: ExtensionAPI; commands: CapturedCommand[] } {
   return { pi, commands };
 }
 
-async function invokeSetupModels(ui: MockUI, settingsPath: string): Promise<void> {
+async function invokeSetupModels(
+  ui: MockUI,
+  settingsPath: string,
+  models?: MockModel[],
+  currentModel?: MockModel,
+): Promise<void> {
   process.env.PI_AGENT_DIR = path.dirname(settingsPath);
-  // Ensure filename is settings.json
-  const dir = path.dirname(settingsPath);
-  process.env.PI_AGENT_DIR = dir;
 
   const { registerSetupModelsCommand } = await import("../setup-models.js");
   const { pi, commands } = makeMockPi();
@@ -81,29 +132,34 @@ async function invokeSetupModels(ui: MockUI, settingsPath: string): Promise<void
   const cmd = commands.find((c) => c.name === "setup-models");
   assert.ok(cmd, "setup-models command should be registered");
 
-  const ctx = makeMockCtx(ui);
+  const ctx = makeMockCtx(ui, models, currentModel);
   await cmd.handler("", ctx);
 }
 
-// Minimal UI responses that complete a full wizard flow
 function minimalUI(overrides: Partial<MockUI> = {}): MockUI {
   return {
-    // select: provider, websearch, reasoning
-    selectResponses: ["Anthropic", "None", "Medium"],
-    // input: anthropic key, default model
-    inputResponses: ["sk-ant-test-key", "claude-opus-4-5"],
-    // confirm: overwrite existing? (only asked when keys exist), context7?
-    confirmResponses: [false],
+    selectResponses: ["Use one model for all sub-agents", CLAUDE_LABEL],
+    inputResponses: [],
+    confirmResponses: [false], // configure per-agent reasoning? no
     notifications: [],
+    selectCalls: [],
     ...overrides,
   };
+}
+
+function readJson(settingsPath: string): Record<string, unknown> {
+  return JSON.parse(fs.readFileSync(settingsPath, "utf8")) as Record<string, unknown>;
+}
+
+function cleanup(dir: string): void {
+  fs.rmSync(dir, { recursive: true, force: true });
 }
 
 // --------------------------------------------------------------------------
 // Tests
 // --------------------------------------------------------------------------
 
-test("setup-models: missing settings file — creates new one with blackbytes block", async () => {
+test("setup-models: missing settings file — creates sub-agent model mappings", async () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "pi-bb-test-"));
   const settingsPath = path.join(dir, "settings.json");
 
@@ -112,13 +168,21 @@ test("setup-models: missing settings file — creates new one with blackbytes bl
 
   assert.ok(fs.existsSync(settingsPath), "settings.json should be created");
 
-  const written = JSON.parse(fs.readFileSync(settingsPath, "utf8")) as Record<string, unknown>;
+  const written = readJson(settingsPath);
   assert.ok("blackbytes" in written, "should have blackbytes key");
   const bb = written.blackbytes as Record<string, unknown>;
-  assert.ok("anthropic_api_key" in bb, "should have anthropic_api_key");
-  assert.equal(bb.anthropic_api_key, "sk-ant-test-key");
+  const subAgents = bb.sub_agents as Record<string, Record<string, unknown>>;
 
-  fs.rmSync(dir, { recursive: true });
+  for (const name of ["explore", "oracle", "librarian", "general"]) {
+    assert.equal(subAgents[name]?.model, "anthropic/claude-sonnet-4-5");
+  }
+
+  assert.equal("anthropic_api_key" in bb, false, "must not write provider keys");
+  assert.equal("openai_api_key" in bb, false, "must not write provider keys");
+  assert.equal("default_model" in bb, false, "must not write obsolete default_model");
+  assert.equal("packages" in bb, false, "must not write provider packages");
+
+  cleanup(dir);
 });
 
 test("setup-models: malformed settings file — notifies user and aborts without destroying file", async () => {
@@ -133,135 +197,255 @@ test("setup-models: malformed settings file — notifies user and aborts without
     inputResponses: [],
     confirmResponses: [],
     notifications: [],
+    selectCalls: [],
   };
 
   await invokeSetupModels(ui, settingsPath);
 
-  // File should be untouched (still malformed)
   const stillBad = fs.readFileSync(settingsPath, "utf8");
   assert.equal(stillBad, badJson, "malformed file should not be modified");
 
-  // Should have notified error
   const errorNotif = ui.notifications.find((n) => n.level === "error");
   assert.ok(errorNotif, "should emit an error notification");
   assert.ok(
-    errorNotif.message.includes("malformed") ||
-      errorNotif.message.includes("aborted") ||
-      errorNotif.message.includes("Setup aborted"),
+    errorNotif.message.includes("malformed") || errorNotif.message.includes("Setup aborted"),
     `notification: ${errorNotif.message}`,
   );
 
-  fs.rmSync(dir, { recursive: true });
+  cleanup(dir);
 });
 
-test("setup-models: preserves existing non-blackbytes keys", async () => {
+test("setup-models: preserves existing non-blackbytes and Blackbytes settings", async () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "pi-bb-test-"));
   const settingsPath = path.join(dir, "settings.json");
 
   const existing = {
     other_extension: { foo: "bar" },
     theme: "dark",
+    blackbytes: {
+      websearch: { provider: "exa", exa_api_key: "exa-secret" },
+      context7: { api_key: "ctx7-secret" },
+      disabled_tools: ["gh_search"],
+    },
   };
   fs.writeFileSync(settingsPath, JSON.stringify(existing), "utf8");
 
   const ui = minimalUI();
   await invokeSetupModels(ui, settingsPath);
 
-  const written = JSON.parse(fs.readFileSync(settingsPath, "utf8")) as Record<string, unknown>;
-  assert.equal((written.other_extension as any)?.foo, "bar", "should preserve other_extension");
-  assert.equal(written.theme, "dark", "should preserve theme");
-  assert.ok("blackbytes" in written, "should add blackbytes block");
+  const written = readJson(settingsPath);
+  assert.deepEqual(written.other_extension, existing.other_extension, "other_extension preserved");
+  assert.equal(written.theme, "dark", "theme preserved");
+  const bb = written.blackbytes as Record<string, unknown>;
+  assert.deepEqual(bb.websearch, existing.blackbytes.websearch, "websearch preserved");
+  assert.deepEqual(bb.context7, existing.blackbytes.context7, "context7 preserved");
+  assert.deepEqual(bb.disabled_tools, ["gh_search"], "disabled_tools preserved");
 
-  fs.rmSync(dir, { recursive: true });
+  cleanup(dir);
 });
 
-test("setup-models: atomic write uses .tmp file", async () => {
+test("setup-models: atomic write uses .tmp file and private mode for new settings", async () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "pi-bb-test-"));
   const settingsPath = path.join(dir, "settings.json");
   const tmpPath = `${settingsPath}.tmp`;
 
-  const tmpWasWritten = false;
-
-  // Patch fs.renameSync to detect tmp file
-  const origRename = fs.renameSync.bind(fs);
-  const origWrite = fs.writeFileSync.bind(fs);
-
-  // We verify by checking that after the command, the .tmp file no longer
-  // exists (it was renamed to the real file) and the real file exists.
   const ui = minimalUI();
   await invokeSetupModels(ui, settingsPath);
 
-  // The .tmp file should be gone (renamed to final)
   assert.ok(!fs.existsSync(tmpPath), ".tmp file should not remain after atomic write");
   assert.ok(fs.existsSync(settingsPath), "final settings.json should exist");
+  assert.equal(fs.statSync(settingsPath).mode & 0o777, 0o600, "new settings should be private");
 
-  fs.rmSync(dir, { recursive: true });
+  cleanup(dir);
 });
 
-test("setup-models: dedupes packages array", async () => {
+test("setup-models: preserves symlinked settings.json and target file mode", async () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "pi-bb-test-"));
+  const targetDir = path.join(dir, "target");
+  fs.mkdirSync(targetDir);
+  const targetPath = path.join(targetDir, "settings.json");
   const settingsPath = path.join(dir, "settings.json");
+  fs.writeFileSync(targetPath, JSON.stringify({ theme: "dark" }), "utf8");
+  fs.chmodSync(targetPath, 0o640);
+  fs.symlinkSync(targetPath, settingsPath);
 
-  // Existing blackbytes with packages already containing "anthropic"
-  const existing = {
-    blackbytes: {
-      packages: ["anthropic", "some-other"],
-    },
-  };
-  fs.writeFileSync(settingsPath, JSON.stringify(existing), "utf8");
-
-  // confirmResponses: [true (overwrite existing?), false (context7?)]
-  const ui = minimalUI({
-    confirmResponses: [true, false],
-  });
+  const ui = minimalUI();
   await invokeSetupModels(ui, settingsPath);
 
-  const written = JSON.parse(fs.readFileSync(settingsPath, "utf8")) as Record<string, unknown>;
-  const bb = written.blackbytes as Record<string, unknown>;
-  const packages = bb.packages as string[];
-  const anthropicCount = packages.filter((p) => p === "anthropic").length;
-  assert.equal(anthropicCount, 1, "anthropic should appear only once in packages");
-  assert.ok(packages.includes("some-other"), "existing packages entry preserved");
+  assert.equal(fs.lstatSync(settingsPath).isSymbolicLink(), true, "settings symlink is preserved");
+  assert.equal(fs.statSync(targetPath).mode & 0o777, 0o640, "target mode is preserved");
+  const written = readJson(targetPath);
+  assert.equal(written.theme, "dark");
+  assert.ok((written.blackbytes as Record<string, unknown>).sub_agents);
 
-  fs.rmSync(dir, { recursive: true });
+  cleanup(dir);
 });
 
-test("setup-models: confirm before overwrite of existing blackbytes key", async () => {
+test("setup-models: confirms before updating existing sub-agent mappings", async () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "pi-bb-test-"));
   const settingsPath = path.join(dir, "settings.json");
 
   const existing = {
     blackbytes: {
-      default_model: "gpt-4o",
+      sub_agents: {
+        oracle: { model: "openai/old-model", timeoutMs: 12345 },
+      },
     },
   };
   fs.writeFileSync(settingsPath, JSON.stringify(existing), "utf8");
 
-  // User says NO to overwrite
   const ui: MockUI = {
     selectResponses: [],
     inputResponses: [],
-    confirmResponses: [false], // decline overwrite
+    confirmResponses: [false],
     notifications: [],
+    selectCalls: [],
   };
 
   await invokeSetupModels(ui, settingsPath);
 
-  // File should be unchanged
-  const afterRun = JSON.parse(fs.readFileSync(settingsPath, "utf8")) as Record<string, unknown>;
-  const bb = afterRun.blackbytes as Record<string, unknown>;
-  assert.equal(
-    bb.default_model,
-    "gpt-4o",
-    "existing config should not be changed when user declines",
-  );
-
-  // Should have a cancellation notification
-  const cancelNotif = ui.notifications.find(
-    (n) =>
-      n.message.toLowerCase().includes("cancel") || n.message.toLowerCase().includes("no changes"),
-  );
+  assert.deepEqual(readJson(settingsPath), existing, "settings should remain unchanged");
+  const cancelNotif = ui.notifications.find((n) => n.message.toLowerCase().includes("cancel"));
   assert.ok(cancelNotif, "should emit cancellation notification");
 
-  fs.rmSync(dir, { recursive: true });
+  cleanup(dir);
+});
+
+test("setup-models: per-agent mode maps different Pi models and can clear one override", async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "pi-bb-test-"));
+  const settingsPath = path.join(dir, "settings.json");
+
+  const ui = minimalUI({
+    selectResponses: [
+      "Choose model for each sub-agent",
+      CLAUDE_LABEL,
+      GPT_LABEL,
+      INHERIT_LABEL,
+      CLAUDE_LABEL,
+    ],
+    confirmResponses: [false], // configure reasoning? no
+  });
+  await invokeSetupModels(ui, settingsPath);
+
+  const bb = readJson(settingsPath).blackbytes as Record<string, unknown>;
+  const subAgents = bb.sub_agents as Record<string, Record<string, unknown>>;
+
+  assert.equal(subAgents.explore.model, "anthropic/claude-sonnet-4-5");
+  assert.equal(subAgents.oracle.model, "openai/gpt-5.1");
+  assert.equal(subAgents.librarian, undefined, "inherit should remove empty agent override");
+  assert.equal(subAgents.general.model, "anthropic/claude-sonnet-4-5");
+
+  cleanup(dir);
+});
+
+test("setup-models: optional reasoning setup writes per-agent reasoningEffort", async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "pi-bb-test-"));
+  const settingsPath = path.join(dir, "settings.json");
+
+  const ui = minimalUI({
+    selectResponses: [
+      "Use one model for all sub-agents",
+      CLAUDE_LABEL,
+      "minimal",
+      "high",
+      "medium",
+      "off",
+    ],
+    confirmResponses: [true], // configure reasoning
+  });
+  await invokeSetupModels(ui, settingsPath);
+
+  const bb = readJson(settingsPath).blackbytes as Record<string, unknown>;
+  const subAgents = bb.sub_agents as Record<string, Record<string, unknown>>;
+
+  assert.equal(subAgents.explore.reasoningEffort, "minimal");
+  assert.equal(subAgents.oracle.reasoningEffort, "high");
+  assert.equal(subAgents.librarian.reasoningEffort, "medium");
+  assert.equal(subAgents.general.reasoningEffort, "off");
+
+  cleanup(dir);
+});
+
+test("setup-models: includes the current Pi model even when getAvailable() is empty", async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "pi-bb-test-"));
+  const settingsPath = path.join(dir, "settings.json");
+
+  const ui = minimalUI({
+    selectResponses: ["Use one model for all sub-agents", COPILOT_CURRENT_LABEL],
+    confirmResponses: [false],
+  });
+  await invokeSetupModels(ui, settingsPath, [], COPILOT_MODEL);
+
+  const bb = readJson(settingsPath).blackbytes as Record<string, unknown>;
+  const subAgents = bb.sub_agents as Record<string, Record<string, unknown>>;
+  assert.equal(subAgents.oracle.model, "github-copilot/gpt-5-mini");
+
+  cleanup(dir);
+});
+
+test("setup-models: can remove legacy provider/default keys from the old wizard", async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "pi-bb-test-"));
+  const settingsPath = path.join(dir, "settings.json");
+
+  fs.writeFileSync(
+    settingsPath,
+    JSON.stringify({
+      blackbytes: {
+        anthropic_api_key: "sk-ant-old",
+        openai_api_key: "sk-old",
+        default_model: "claude-opus-4-5",
+        reasoning_effort: "medium",
+        packages: ["anthropic", "custom"],
+        websearch: { provider: "exa", exa_api_key: "exa-secret" },
+      },
+    }),
+    "utf8",
+  );
+
+  const ui = minimalUI({
+    confirmResponses: [false, true], // reasoning=no, remove legacy keys=yes
+  });
+  await invokeSetupModels(ui, settingsPath);
+
+  const bb = readJson(settingsPath).blackbytes as Record<string, unknown>;
+  assert.equal("anthropic_api_key" in bb, false);
+  assert.equal("openai_api_key" in bb, false);
+  assert.equal("default_model" in bb, false);
+  assert.equal("reasoning_effort" in bb, false);
+  assert.deepEqual(bb.packages, ["custom"], "custom passthrough package entries are preserved");
+  assert.deepEqual(bb.websearch, { provider: "exa", exa_api_key: "exa-secret" });
+
+  cleanup(dir);
+});
+
+test("setup-models: no available models still allows clearing all model overrides", async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "pi-bb-test-"));
+  const settingsPath = path.join(dir, "settings.json");
+
+  fs.writeFileSync(
+    settingsPath,
+    JSON.stringify({
+      blackbytes: {
+        sub_agents: {
+          oracle: { model: "openai/old", timeoutMs: 12345 },
+          stale_yaml_agent: { model: "anthropic/old" },
+        },
+      },
+    }),
+    "utf8",
+  );
+
+  const ui = minimalUI({
+    selectResponses: ["Clear all model overrides (inherit host model)"],
+    confirmResponses: [true, false], // update existing mappings=yes, configure reasoning=no
+  });
+  await invokeSetupModels(ui, settingsPath, []);
+
+  const bb = readJson(settingsPath).blackbytes as Record<string, unknown>;
+  const subAgents = bb.sub_agents as Record<string, Record<string, unknown>>;
+  assert.deepEqual(subAgents, { oracle: { timeoutMs: 12345 } });
+  assert.deepEqual(ui.selectCalls[0]?.options, ["Clear all model overrides (inherit host model)"]);
+  assert.ok(ui.notifications.some((n) => n.level === "warning"));
+
+  cleanup(dir);
 });

@@ -1,9 +1,18 @@
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { Type } from "@sinclair/typebox";
 import { TOOL_NAMES } from "../../config/resource-metadata.js";
+import { compactDetails, compactText, renderCompactResult } from "../_shared/compact-result.js";
 import { type HttpFetchOptions, httpFetch } from "../_shared/http.js";
 import { registerTool } from "../_shared/register-tool.js";
 import { type TextToolResult, textResult } from "../_shared/text-result.js";
+
+const DOCS_QUERY_TOKEN_LIMIT = "4000";
+const DOCS_QUERY_COMPACT_CHARS = 3500;
+
+function compactDocsResult(fullText: string): TextToolResult {
+  const summary = compactText(fullText, DOCS_QUERY_COMPACT_CHARS);
+  return textResult(summary, compactDetails(fullText, summary));
+}
 
 export interface QueryDocsParams {
   libraryId: string;
@@ -26,7 +35,7 @@ export async function executeQueryDocs(
   // Strip leading slash for path construction, then re-add
   const url = new URL(`https://context7.com/api/v1${libraryId}`);
   url.searchParams.set("query", query);
-  url.searchParams.set("tokens", "10000");
+  url.searchParams.set("tokens", DOCS_QUERY_TOKEN_LIMIT);
 
   const result = await fetchFn({ url: url.toString() });
 
@@ -38,7 +47,8 @@ export async function executeQueryDocs(
 
   // Format the response
   if (typeof data === "string") {
-    return textResult(data || `No documentation found for query: "${query}"`);
+    const fullText = data || `No documentation found for query: "${query}"`;
+    return compactDocsResult(fullText);
   }
 
   if (data && typeof data === "object") {
@@ -46,7 +56,8 @@ export async function executeQueryDocs(
 
     // Handle { snippets: [...] } or { sections: [...] } or { content: string }
     if (typeof obj.content === "string") {
-      return textResult(obj.content || `No documentation found for query: "${query}"`);
+      const fullText = obj.content || `No documentation found for query: "${query}"`;
+      return compactDocsResult(fullText);
     }
 
     const snippets =
@@ -68,11 +79,11 @@ export async function executeQueryDocs(
           parts.push(snippet, "");
         }
       }
-      return textResult(parts.join("\n"));
+      return compactDocsResult(parts.join("\n"));
     }
 
     // Fallback: stringify
-    return textResult(JSON.stringify(data, null, 2));
+    return compactDocsResult(JSON.stringify(data, null, 2));
   }
 
   return textResult(`No documentation found for query: "${query}"`);
@@ -94,5 +105,6 @@ export function registerQueryDocsTool(pi: ExtensionAPI): void {
       }),
     }),
     execute: (params: QueryDocsParams) => executeQueryDocs(params),
+    renderResult: renderCompactResult,
   });
 }

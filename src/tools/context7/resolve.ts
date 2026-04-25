@@ -64,12 +64,12 @@ export async function executeResolveLibraryId(
 
   // Pick best match — first result is ranked by relevance
   const best = results[0];
-  const others = results.slice(1, 5);
+  const others = results.slice(1, 4);
 
   const lines: string[] = [
     `Best match for "${libraryName}" (query: "${query}"):`,
     `  Library ID: ${best.id}`,
-    `  Name: ${best.name}`,
+    `  Name: ${best.name ?? "(unknown)"}`,
   ];
   if (best.description) {
     lines.push(`  Description: ${best.description}`);
@@ -77,7 +77,7 @@ export async function executeResolveLibraryId(
   if (others.length > 0) {
     lines.push("", "Other matches:");
     for (const lib of others) {
-      lines.push(`  ${lib.id}  — ${lib.name}`);
+      lines.push(`  ${lib.id}  — ${lib.name ?? "(unknown)"}`);
     }
   }
 

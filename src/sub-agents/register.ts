@@ -8,10 +8,248 @@ import type { SubAgentDeclaration } from "./declaration.js";
 import { finalizeNestedTools } from "./delegable-tools.js";
 import { type FallbackResult, executeWithFallback, formatAttempts } from "./fallback.js";
 import { buildSystemPrompt } from "./prompt-builder.js";
-import { type SpawnFn, formatDelegateFailure, runNestedPi } from "./runner.js";
+import { buildSubAgentRenderResult } from "./render.js";
+import { type SpawnFn, formatDelegateFailure, redactDelegateText, runNestedPi } from "./runner.js";
 import { getAgentSnapshotFor } from "./snapshot.js";
+import type { PiSessionEvent } from "./types.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
+
+type SubAgentProgressStatus =
+  | "starting"
+  | "running"
+  | "completed"
+  | "failed"
+  | "cancelled"
+  | "timed_out";
+
+interface SubAgentProgressUsage {
+  readonly input?: number;
+  readonly output?: number;
+  readonly total?: number;
+  readonly cost?: number;
+}
+
+interface SubAgentProgressDetails {
+  readonly agent: string;
+  readonly status: SubAgentProgressStatus;
+  readonly model?: string;
+  readonly cwd?: string;
+  readonly allowedTools: readonly string[];
+  readonly elapsedMs: number;
+  readonly outputChars: number;
+  readonly outputPreview?: string;
+  readonly attemptedModels?: readonly string[];
+  readonly currentTool?: string;
+  readonly usage?: SubAgentProgressUsage;
+}
+
+type AgentToolUpdate = (update: {
+  content: Array<{ type: "text"; text: string }>;
+  details: SubAgentProgressDetails;
+}) => void;
+
+const MAX_PROGRESS_PREVIEW_CHARS = 8_192;
+const TRUNCATION_MARKER = "\n[... truncated ...]\n";
+
+function isAgentToolUpdate(value: unknown): value is AgentToolUpdate {
+  return typeof value === "function";
+}
+
+function appendBoundedRaw(current: string, chunk: string): string {
+  const combined = current + chunk;
+  if (combined.length <= MAX_PROGRESS_PREVIEW_CHARS) return combined;
+
+  const keepChars = MAX_PROGRESS_PREVIEW_CHARS - TRUNCATION_MARKER.length;
+  const headChars = Math.floor(keepChars / 2);
+  const tailChars = keepChars - headChars;
+  return combined.slice(0, headChars) + TRUNCATION_MARKER + combined.slice(-tailChars);
+}
+
+function formatElapsed(ms: number): string {
+  return `${(ms / 1000).toFixed(1)}s`;
+}
+
+function formatProgressSummary(details: SubAgentProgressDetails): string {
+  const status = details.status;
+  const captured =
+    details.outputChars > 0
+      ? `, ${details.outputChars.toLocaleString("en-US")} chars captured`
+      : "";
+  return `Sub-agent ${details.agent} ${status} (${formatElapsed(details.elapsedMs)}${captured})`;
+}
+
+function createProgressReporter(opts: {
+  readonly agent: string;
+  readonly model?: string;
+  readonly cwd?: string;
+  readonly allowedTools: readonly string[];
+  readonly onUpdate?: unknown;
+}) {
+  const onUpdateRaw = isAgentToolUpdate(opts.onUpdate) ? opts.onUpdate : undefined;
+  const startedAt = Date.now();
+  let rawPreview = "";
+  let outputChars = 0;
+  let currentModel = opts.model;
+  let currentTool: string | undefined;
+  let usage: SubAgentProgressUsage | undefined;
+  let onUpdate: AgentToolUpdate | undefined = onUpdateRaw;
+
+  const safeUpdate = (payload: {
+    content: Array<{ type: "text"; text: string }>;
+    details: SubAgentProgressDetails;
+  }) => {
+    if (!onUpdate) return;
+    try {
+      onUpdate(payload);
+    } catch (err) {
+      // Disable further updates so a buggy host UI cannot keep throwing on every chunk.
+      onUpdate = undefined;
+      getLogger().warn("Sub-agent progress onUpdate callback threw; disabling progress updates", {
+        agent: opts.agent,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  };
+
+  const buildDetails = (
+    status: SubAgentProgressStatus,
+    attemptedModels?: readonly string[],
+  ): SubAgentProgressDetails => {
+    const preview = rawPreview ? redactDelegateText(rawPreview) : "";
+    return {
+      agent: opts.agent,
+      status,
+      model: currentModel,
+      cwd: opts.cwd,
+      allowedTools: opts.allowedTools,
+      elapsedMs: Date.now() - startedAt,
+      outputChars,
+      outputPreview: preview || undefined,
+      attemptedModels,
+      currentTool,
+      usage,
+    };
+  };
+
+  const emit = (status: SubAgentProgressStatus, attemptedModels?: readonly string[]) => {
+    if (!onUpdate) return;
+    const details = buildDetails(status, attemptedModels);
+    safeUpdate({
+      content: [{ type: "text", text: formatProgressSummary(details) }],
+      details,
+    });
+  };
+
+  const appendDelta = (delta: string) => {
+    outputChars += delta.length;
+    rawPreview = appendBoundedRaw(rawPreview, delta);
+  };
+
+  const isStringRecord = (v: unknown): v is Record<string, unknown> => !!v && typeof v === "object";
+
+  const handleEvent = (event: PiSessionEvent): void => {
+    let changed = false;
+    switch (event.type) {
+      case "message_start": {
+        const message = event.message;
+        if (isStringRecord(message) && typeof message.model === "string") {
+          if (message.model !== currentModel) {
+            currentModel = message.model;
+            changed = true;
+          }
+        }
+        break;
+      }
+      case "message_update": {
+        const ame = event.assistantMessageEvent;
+        if (isStringRecord(ame)) {
+          const ameType = ame.type;
+          if (ameType === "text_delta" && typeof ame.delta === "string") {
+            appendDelta(ame.delta);
+            changed = true;
+          } else if (ameType === "thinking_delta" && typeof ame.delta === "string") {
+            // Surface thinking deltas in the same preview so the UI shows
+            // progress even before the assistant emits visible text.
+            appendDelta(ame.delta);
+            changed = true;
+          } else if (ameType === "toolcall_end" && isStringRecord(ame.toolCall)) {
+            const tc = ame.toolCall as Record<string, unknown>;
+            if (typeof tc.name === "string") {
+              currentTool = tc.name;
+              changed = true;
+            }
+          }
+        }
+        break;
+      }
+      case "message_end": {
+        const message = event.message;
+        if (isStringRecord(message) && isStringRecord(message.usage)) {
+          const u = message.usage as Record<string, unknown>;
+          const cost = isStringRecord(u.cost)
+            ? (u.cost as Record<string, unknown>).total
+            : undefined;
+          // Accumulate across turns: message_end fires once per assistant
+          // message and a single sub-agent run usually has many turns
+          // (think -> tool -> think -> tool -> answer). Replacing on every
+          // turn would underreport totals by ~10x.
+          const turnInput = typeof u.input === "number" ? u.input : 0;
+          const turnOutput = typeof u.output === "number" ? u.output : 0;
+          const turnTotal = typeof u.totalTokens === "number" ? u.totalTokens : 0;
+          const turnCost = typeof cost === "number" ? cost : 0;
+          usage = {
+            input: (usage?.input ?? 0) + turnInput,
+            output: (usage?.output ?? 0) + turnOutput,
+            total: (usage?.total ?? 0) + turnTotal,
+            cost: (usage?.cost ?? 0) + turnCost,
+          };
+          changed = true;
+        }
+        break;
+      }
+      case "tool_execution_start": {
+        if (typeof event.toolName === "string") {
+          currentTool = event.toolName;
+          changed = true;
+        }
+        break;
+      }
+      case "tool_execution_end": {
+        if (currentTool !== undefined) {
+          currentTool = undefined;
+          changed = true;
+        }
+        break;
+      }
+      default:
+        // session, agent_start, turn_start, turn_end, agent_end,
+        // tool_execution_update, extension_ui_request, etc. -> nothing to do.
+        break;
+    }
+    if (changed) emit("running");
+  };
+
+  return {
+    start() {
+      emit("starting");
+    },
+    setModel(model: string | undefined) {
+      currentModel = model;
+    },
+    handleEvent,
+    finish(status: SubAgentProgressStatus, attemptedModels?: readonly string[]) {
+      emit(status, attemptedModels);
+    },
+  };
+}
+
+function statusFromResult(result: FallbackResult): SubAgentProgressStatus {
+  if (result.success) return "completed";
+  if (result.failureKind === "cancelled") return "cancelled";
+  if (result.failureKind === "timed_out") return "timed_out";
+  return "failed";
+}
 
 export interface RegisterSubAgentOptions {
   /** Override the default spawn function (for testing). */
@@ -37,13 +275,16 @@ export function registerSubAgent(
 
   (pi.registerTool as (def: unknown) => void)({
     name: declaration.toolName,
+    label: declaration.name,
     description: declaration.description,
     parameters: declaration.parameters,
+    renderShell: "default",
+    renderResult: buildSubAgentRenderResult(),
     execute: async (
       _toolCallId: string,
       params: Record<string, unknown>,
       signal?: AbortSignal,
-      _onUpdate?: unknown,
+      onUpdate?: unknown,
       ctx?: { cwd?: string },
     ) => {
       try {
@@ -140,6 +381,15 @@ export function registerSubAgent(
             }
           : ((await declaration.resolveModelOverrides?.()) ?? {});
 
+        const progress = createProgressReporter({
+          agent: declaration.name,
+          model: overrides.model,
+          cwd: ctx?.cwd,
+          allowedTools,
+          onUpdate,
+        });
+        progress.start();
+
         const baseRunOpts = {
           systemPrompt: finalSystemPrompt,
           userPrompt,
@@ -149,43 +399,60 @@ export function registerSubAgent(
           allowedTools,
           cwd: ctx?.cwd,
           signal,
+          onUpdate: (event: PiSessionEvent) => progress.handleEvent(event),
         };
 
         let result: FallbackResult;
-        if (snapshot) {
-          if (
-            snapshot.fallbackModels &&
-            snapshot.fallbackModels.length > 0 &&
-            !snapshot.fallbackEligible
-          ) {
-            getLogger().warn(
-              "Sub-agent has fallbackModels configured but is ineligible; ignoring fallback chain",
-              {
-                agent: declaration.name,
-                fallbackModels: [...snapshot.fallbackModels],
+        try {
+          if (snapshot) {
+            if (
+              snapshot.fallbackModels &&
+              snapshot.fallbackModels.length > 0 &&
+              !snapshot.fallbackEligible
+            ) {
+              getLogger().warn(
+                "Sub-agent has fallbackModels configured but is ineligible; ignoring fallback chain",
+                {
+                  agent: declaration.name,
+                  fallbackModels: [...snapshot.fallbackModels],
+                },
+              );
+            }
+            result = await executeWithFallback({
+              snapshot,
+              runOpts: baseRunOpts,
+              runner: (o) => {
+                // Reflect the actual model used per attempt in live progress details.
+                progress.setModel(o.model);
+                return runNestedPi(o, spawnFn);
               },
-            );
+            });
+          } else {
+            // Legacy path: no snapshot available (e.g. older tests).
+            const r = await runNestedPi(baseRunOpts, spawnFn);
+            result = {
+              ...r,
+              attemptedModels: [
+                {
+                  model: overrides.model,
+                  status: r.success ? "success" : (r.failureKind ?? "failed"),
+                  retriable: false,
+                  durationMs: 0,
+                },
+              ],
+            };
           }
-          result = await executeWithFallback({
-            snapshot,
-            runOpts: baseRunOpts,
-            runner: (o) => runNestedPi(o, spawnFn),
-          });
-        } else {
-          // Legacy path: no snapshot available (e.g. older tests).
-          const r = await runNestedPi(baseRunOpts, spawnFn);
-          result = {
-            ...r,
-            attemptedModels: [
-              {
-                model: overrides.model,
-                status: r.success ? "success" : (r.failureKind ?? "failed"),
-                retriable: false,
-                durationMs: 0,
-              },
-            ],
-          };
+        } catch (err) {
+          // Unexpected throw after progress.start(): emit terminal progress so
+          // the host UI does not show this delegate as still running, then rethrow
+          // to the outer catch which produces the controlled tool result.
+          progress.finish("failed");
+          throw err;
         }
+        progress.finish(
+          statusFromResult(result),
+          result.attemptedModels.map((attempt) => attempt.model ?? "(host model)"),
+        );
 
         let text: string;
         if (result.success) {

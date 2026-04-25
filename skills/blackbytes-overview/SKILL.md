@@ -8,7 +8,7 @@ Blackbytes extends Pi with a local-first engineering toolset, HTTP-backed resear
 
 | Command | Purpose |
 |---|---|
-| `/setup-models` | Configure provider keys, websearch, Context7, and related Blackbytes settings |
+| `/setup-models` | Map Blackbytes sub-agents to models already available in Pi (`blackbytes.sub_agents.<name>.model`) |
 | `/blackbytes-status` | Show enabled tools, enabled sub-agents, enabled skills, and the current redacted config |
 
 ---

@@ -8,6 +8,7 @@ import type {
   SessionShutdownEvent,
   SessionStartEvent,
 } from "@mariozechner/pi-coding-agent";
+import { setupBranding } from "../branding.js";
 import { initEnabledSet } from "../config/enabled-set.js";
 import { loadBlackbytesConfig } from "../config/loader.js";
 import { registerSubAgentMeta } from "../config/resource-metadata.js";
@@ -118,6 +119,9 @@ export async function handleSessionStart(
     registerSubAgentMeta(declarationToMeta(decl));
     registerSubAgent(pi, decl);
   }
+
+  // Branding widget below the editor
+  setupBranding(_ctx);
 }
 
 export async function handleBeforeAgentStart(

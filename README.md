@@ -271,7 +271,7 @@ Recommended verification order:
 
 The extension bootstraps from `src/index.ts` and wires the core session handlers in `src/bootstrap.ts`:
 
-- `session_start` loads config, computes the enabled set, registers tools, and registers delegate agents
+- `session_start` loads config, computes the enabled set, registers tools, registers delegate agents, and sets up the `✦ Bytes ✦` branding widget
 - `before_agent_start` renders the capability-aware Bytes v2 overlay, injects `<available_resources>`, and uses a minimal safe fallback if the enabled set is unavailable
 - `agent_start` captures Pi's final effective system prompt to the configured JSONL log when `system_prompt_log.enabled` is true
 - `model_select` caches the current model family for later requests
@@ -280,6 +280,10 @@ The extension bootstraps from `src/index.ts` and wires the core session handlers
 - `session_shutdown` flushes the buffered logger
 
 Bytes prompt variants live under `src/system-prompt/bytes/` (`default.ts`, `gpt.ts`, `gemini.ts`) and are dispatched by model family resolved from the active model id. Nested delegate sessions are spawned by `src/sub-agents/runner.ts` with `--no-session`, `--no-context-files`, and (when reasoning is configured) `--thinking <effort>`.
+
+## Branding
+
+A gradient `✦ Bytes ✦` badge renders right-aligned above the chat input editor in interactive mode. The badge uses fixed 24-bit RGB colors (violet → indigo → sky → cyan gradient, bold) and is independent of the active theme. It is not shown in print mode (`-p`) or JSON mode.
 
 ## Troubleshooting
 

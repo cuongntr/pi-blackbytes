@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.2.1 (2026-04-26)
+
+### Added
+
+- **Branding widget**: a gradient `✦ Bytes ✦` badge renders right-aligned above the chat input editor in interactive mode. Uses fixed 24-bit RGB colors (violet → indigo → sky → cyan) with bold text, independent of the active theme. Skipped in print mode and JSON mode.
+
+### Internal
+
+- New `src/branding.ts` module with gradient rendering utilities and widget setup.
+- `handleSessionStart()` calls `setupBranding()` after tool and sub-agent registration.
+
 ## 0.2.0 (2026-04-26)
 
 ### Added

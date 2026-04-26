@@ -28,7 +28,7 @@ Run in order: `lint -> build -> test`.
 
 ```text
 src/index.ts -> bootstrap(pi) -> wires 7 event handlers + 2 commands:
-  session_start           -> loads config, computes enabled set, registers tools/sub-agents
+  session_start           -> loads config, computes enabled set, registers tools/sub-agents, sets up branding widget
   before_agent_start      -> renders capability-aware Bytes v2 overlay + <available_resources>
   agent_start             -> captures Pi-effective system prompt to JSONL when system_prompt_log.enabled
   model_select            -> tracks current model family

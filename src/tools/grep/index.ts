@@ -4,6 +4,7 @@ import { join, relative } from "node:path";
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { Type } from "@sinclair/typebox";
 import { TOOL_NAMES } from "../../config/resource-metadata.js";
+import { makeRenderCall, str } from "../_shared/call-render.js";
 import { registerTool } from "../_shared/register-tool.js";
 import { type ToolResultStats, renderStatsResult } from "../_shared/stats-render.js";
 import { type TextToolResult, textResult } from "../_shared/text-result.js";
@@ -365,6 +366,16 @@ export function registerGrepTool(pi: ExtensionAPI): void {
       ),
     }),
     execute: executeGrep,
+    renderCall: makeRenderCall("🔍", "grep", (args, theme) => {
+      const pattern = str(args.pattern);
+      const path = str(args.path);
+      const include = str(args.include);
+      const parts: string[] = [];
+      if (pattern) parts.push(theme.fg("accent", `/${pattern}/`));
+      if (path) parts.push(theme.fg("toolOutput", `in ${path}`));
+      if (include) parts.push(theme.fg("muted", `(${include})`));
+      return parts.join(" ");
+    }),
     renderResult: renderStatsResult,
   });
 }

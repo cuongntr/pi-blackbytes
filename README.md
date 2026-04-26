@@ -109,7 +109,7 @@ Blackbytes reads the top-level `blackbytes` object from the Pi settings file.
 | Tool | Purpose |
 |---|---|
 | `glob` | Fast file pattern matching with safety limits |
-| `grep` | Regex content search with include filters and multiple output modes |
+| `grep` | Regex content search with include filters, optional context lines, and multiple output modes (`content`, `files_with_matches`, `count`). Uses `ripgrep` when available and falls back to a Node.js implementation. |
 | `ast_search` | AST-aware structural search across 25 languages |
 | `ast_replace` | AST-aware structural rewrite with dry-run default |
 | `hashline_edit` | LINE#ID-anchored file editing with snapshot semantics |
@@ -271,10 +271,13 @@ The extension bootstraps from `src/index.ts` and wires the core session handlers
 
 - `session_start` loads config, computes the enabled set, registers tools, and registers delegate agents
 - `before_agent_start` renders the capability-aware Bytes v2 overlay, injects `<available_resources>`, and uses a minimal safe fallback if the enabled set is unavailable
+- `agent_start` captures Pi's final effective system prompt to the configured JSONL log when `system_prompt_log.enabled` is true
 - `model_select` caches the current model family for later requests
-- `before_provider_request` maps reasoning settings to provider-native fields
+- `before_provider_request` maps reasoning settings to provider-native fields and optionally captures provider-serialized system fields
 - `tool_result` rewrites `read`/`write` results for the hashline workflow
 - `session_shutdown` flushes the buffered logger
+
+Bytes prompt variants live under `src/system-prompt/bytes/` (`default.ts`, `gpt.ts`, `gemini.ts`) and are dispatched by model family resolved from the active model id. Nested delegate sessions are spawned by `src/sub-agents/runner.ts` with `--no-session`, `--no-context-files`, and (when reasoning is configured) `--thinking <effort>`.
 
 ## Troubleshooting
 
@@ -293,7 +296,7 @@ Set `blackbytes.context7.api_key`.
 
 Check `disabled_tools` and `disabled_sub_agents`, then start a new session so the enabled set is recomputed.
 
-### `ast_grep_*` fails immediately
+### `ast_search` / `ast_replace` fail immediately
 
 Install `ast-grep` (`sg`) and ensure it is on `PATH`.
 

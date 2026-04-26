@@ -2,6 +2,7 @@ import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { Type } from "@sinclair/typebox";
 import { loadBlackbytesConfig } from "../../config/loader.js";
 import { TOOL_NAMES } from "../../config/resource-metadata.js";
+import { makeRenderCall, str, truncate } from "../_shared/call-render.js";
 import { compactText } from "../_shared/compact-result.js";
 import { type HttpFetchOptions, httpFetch } from "../_shared/http.js";
 import { registerTool } from "../_shared/register-tool.js";
@@ -117,6 +118,14 @@ export function registerQueryDocsTool(pi: ExtensionAPI): void {
       }),
     }),
     execute: (params: QueryDocsParams) => executeQueryDocs(params),
+    renderCall: makeRenderCall("📖", "docs_query", (args, theme) => {
+      const id = str(args.libraryId);
+      const q = str(args.query);
+      const parts: string[] = [];
+      if (id) parts.push(theme.fg("toolOutput", id));
+      if (q) parts.push(theme.fg("accent", `"${truncate(q, 50)}"`));
+      return parts.join(" ");
+    }),
     renderResult: renderStatsResult,
   });
 }

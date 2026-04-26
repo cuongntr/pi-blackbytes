@@ -3,6 +3,7 @@ import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { type Static, Type } from "@sinclair/typebox";
 import { TOOL_NAMES } from "../../config/resource-metadata.js";
 import { computeCID } from "../../utils/cid.js";
+import { makeRenderCall, str } from "../_shared/call-render.js";
 import { registerTool } from "../_shared/register-tool.js";
 import { type ToolResultStats, renderStatsResult } from "../_shared/stats-render.js";
 
@@ -326,6 +327,17 @@ export function registerHashlineEditTool(pi: ExtensionAPI): void {
         content: [{ type: "text", text: result.error }],
       };
     },
+    renderCall: makeRenderCall("✎", "hashline_edit", (args, theme) => {
+      const filePath = str(args.filePath);
+      const edits = Array.isArray(args.edits) ? args.edits.length : 0;
+      const parts: string[] = [];
+      if (filePath) parts.push(theme.fg("accent", filePath));
+      if (edits > 0) parts.push(theme.fg("muted", `(${edits} edit${edits !== 1 ? "s" : ""})`));
+      if (args.delete) parts.push(theme.fg("error", "DELETE"));
+      const rename = str(args.rename);
+      if (rename) parts.push(theme.fg("warning", `→ ${rename}`));
+      return parts.join(" ");
+    }),
     renderResult: renderStatsResult,
   });
 }

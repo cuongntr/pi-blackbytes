@@ -1,6 +1,7 @@
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { Type } from "@sinclair/typebox";
 import { TOOL_NAMES } from "../../config/resource-metadata.js";
+import { makeRenderCall, str, truncate } from "../_shared/call-render.js";
 import {
   type McpContentBlock,
   McpHttpClient,
@@ -187,6 +188,14 @@ export function registerGrepAppSearchTool(pi: ExtensionAPI): void {
       ),
     }),
     execute: (params: GrepAppParams) => executeGrepAppSearch(params),
+    renderCall: makeRenderCall("🔎", "gh_search", (args, theme) => {
+      const q = str(args.query);
+      const repo = str(args.repo);
+      const parts: string[] = [];
+      if (q) parts.push(theme.fg("accent", `"${truncate(q, 50)}"`));
+      if (repo) parts.push(theme.fg("toolOutput", `in ${repo}`));
+      return parts.join(" ");
+    }),
     renderResult: renderStatsResult,
   });
 }

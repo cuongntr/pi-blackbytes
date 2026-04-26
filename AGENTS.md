@@ -7,7 +7,7 @@ Pi coding-agent extension that replaces the websearch, context7, and grep.app MC
 ### Development
 
 ```bash
-bun run build             # tsc -> dist/
+bun run build             # bun build src/index.ts -> dist/index.js (+ tsc --emitDeclarationOnly)
 bun run test              # node --import tsx --test 'src/**/*.test.ts'
 bun run lint              # biome check src/
 bun run lint:fix          # biome check --fix src/
@@ -27,11 +27,12 @@ Run in order: `lint -> build -> test`.
 ## Architecture
 
 ```text
-src/index.ts -> bootstrap(pi) -> wires 6 event handlers + 2 commands:
+src/index.ts -> bootstrap(pi) -> wires 7 event handlers + 2 commands:
   session_start           -> loads config, computes enabled set, registers tools/sub-agents
   before_agent_start      -> renders capability-aware Bytes v2 overlay + <available_resources>
+  agent_start             -> captures Pi-effective system prompt to JSONL when system_prompt_log.enabled
   model_select            -> tracks current model family
-  before_provider_request -> maps reasoning params by provider family
+  before_provider_request -> maps reasoning params by provider family + optional provider-system capture
   tool_result             -> rewrites read/write output for hashline workflow
   session_shutdown        -> flushes logger
 
@@ -94,7 +95,7 @@ The schema is `.passthrough()`, so wizard-managed extra keys in the `blackbytes`
 
 ### Sub-agents
 
-Sub-agents are defined as typed declarations (`SubAgentDeclaration`) and registered via `registerSubAgent()`. Builtin declarations live in `src/sub-agents/{explore,oracle,librarian,general}.ts`. User-defined agents are loaded from YAML files via `src/sub-agents/loader.ts`. All agents spawn nested `pi -p` sessions through `src/sub-agents/runner.ts`. Delegate allowlists are enforced at runtime, and nested sessions do not receive `delegate_*` tools again.
+Sub-agents are defined as typed declarations (`SubAgentDeclaration`) and registered via `registerSubAgent()`. Builtin declarations live in `src/sub-agents/{explore,oracle,librarian,general}.ts`. User-defined agents are loaded from YAML files via `src/sub-agents/loader.ts`. All agents spawn nested `pi -p` sessions through `src/sub-agents/runner.ts`, which forces `--no-session`, `--no-context-files`, and (when reasoning is configured) `--thinking <effort>` on the nested CLI. Delegate allowlists are enforced at runtime, and nested sessions do not receive `delegate_*` tools again.
 
 ## Code style
 

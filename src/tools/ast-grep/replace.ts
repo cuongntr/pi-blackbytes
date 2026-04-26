@@ -1,6 +1,7 @@
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { Type } from "@sinclair/typebox";
 import { TOOL_NAMES } from "../../config/resource-metadata.js";
+import { makeRenderCall, str, truncate } from "../_shared/call-render.js";
 import { registerTool } from "../_shared/register-tool.js";
 import { type ToolResultStats, renderStatsResult } from "../_shared/stats-render.js";
 import { AST_GREP_LANGUAGES, detectBinary, runAstGrep } from "./helpers.js";
@@ -192,6 +193,18 @@ export function registerAstGrepReplaceTool(pi: ExtensionAPI): void {
         } satisfies ToolResultStats,
       };
     },
+    renderCall: makeRenderCall("✏️", "ast_replace", (args, theme) => {
+      const pattern = str(args.pattern);
+      const rewrite = str(args.rewrite);
+      const lang = str(args.lang);
+      const dryRun = args.dryRun !== false;
+      const parts: string[] = [];
+      if (pattern) parts.push(theme.fg("accent", `'${truncate(pattern, 30)}'`));
+      if (rewrite) parts.push(theme.fg("toolOutput", `→ '${truncate(rewrite, 30)}'`));
+      if (lang) parts.push(theme.fg("muted", `[${lang}]`));
+      if (dryRun) parts.push(theme.fg("warning", "dry-run"));
+      return parts.join(" ");
+    }),
     renderResult: renderStatsResult,
   });
 }

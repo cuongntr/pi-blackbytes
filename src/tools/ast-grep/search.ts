@@ -1,6 +1,7 @@
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { Type } from "@sinclair/typebox";
 import { TOOL_NAMES } from "../../config/resource-metadata.js";
+import { makeRenderCall, str, truncate } from "../_shared/call-render.js";
 import { registerTool } from "../_shared/register-tool.js";
 import { type ToolResultStats, renderStatsResult } from "../_shared/stats-render.js";
 import { AST_GREP_LANGUAGES, detectBinary, runAstGrep } from "./helpers.js";
@@ -134,6 +135,14 @@ export function registerAstGrepSearchTool(pi: ExtensionAPI): void {
         details: { summary } satisfies ToolResultStats,
       };
     },
+    renderCall: makeRenderCall("🌳", "ast_search", (args, theme) => {
+      const pattern = str(args.pattern);
+      const lang = str(args.lang);
+      const parts: string[] = [];
+      if (pattern) parts.push(theme.fg("accent", `'${truncate(pattern, 50)}'`));
+      if (lang) parts.push(theme.fg("muted", `[${lang}]`));
+      return parts.join(" ");
+    }),
     renderResult: renderStatsResult,
   });
 }

@@ -2,6 +2,7 @@ import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { Type } from "@sinclair/typebox";
 import { loadBlackbytesConfig } from "../../config/loader.js";
 import { TOOL_NAMES } from "../../config/resource-metadata.js";
+import { makeRenderCall, str, truncate } from "../_shared/call-render.js";
 import { compactText } from "../_shared/compact-result.js";
 import { type HttpFetchOptions, httpFetch } from "../_shared/http.js";
 import { registerTool } from "../_shared/register-tool.js";
@@ -362,6 +363,10 @@ export function registerWebsearchFetchTool(pi: ExtensionAPI): void {
       ),
     }),
     execute: (params: FetchParams) => executeWebsearchFetch(params),
+    renderCall: makeRenderCall("🌐", "web_fetch", (args, theme) => {
+      const url = str(args.url);
+      return url ? theme.fg("accent", truncate(url, 80)) : "";
+    }),
     renderResult: renderStatsResult,
   });
 }

@@ -1,6 +1,7 @@
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { getEnabledSet } from "../config/enabled-set.js";
 import { getLogger } from "../shared/logger.js";
+import { makeSubAgentRenderCall } from "../tools/_shared/call-render.js";
 import type { SubAgentDeclaration } from "./declaration.js";
 import { finalizeNestedTools } from "./delegable-tools.js";
 import { type FallbackResult, executeWithFallback, formatAttempts } from "./fallback.js";
@@ -251,6 +252,28 @@ export interface RegisterSubAgentOptions {
   spawnFn?: SpawnFn;
 }
 
+const SUB_AGENT_ICONS: Record<string, string> = {
+  explore: "🔭",
+  oracle: "🧠",
+  librarian: "📚",
+  general: "⚡",
+};
+
+/** Derive the primary display key from a declaration's parameter schema. */
+function resolvePrimaryKey(decl: SubAgentDeclaration): string {
+  // Builtins use "question" (explore, oracle, librarian) or "task" (general).
+  // YAML agents always use "prompt". Fall back to the first schema key.
+  const schema = decl.parameters;
+  const keys: string[] =
+    schema && typeof schema === "object" && "properties" in schema
+      ? Object.keys((schema as { properties: Record<string, unknown> }).properties)
+      : [];
+  for (const candidate of ["question", "task", "prompt"]) {
+    if (keys.includes(candidate)) return candidate;
+  }
+  return keys[0] ?? "prompt";
+}
+
 /**
  * Register a sub-agent with the Pi host based on its declaration.
  * Skips registration silently when the agent is not in the enabled set.
@@ -274,6 +297,11 @@ export function registerSubAgent(
     description: declaration.description,
     parameters: declaration.parameters,
     renderShell: "default",
+    renderCall: makeSubAgentRenderCall(
+      SUB_AGENT_ICONS[declaration.name] ?? "▸",
+      declaration.name,
+      resolvePrimaryKey(declaration),
+    ),
     renderResult: buildSubAgentRenderResult(),
     execute: async (
       _toolCallId: string,

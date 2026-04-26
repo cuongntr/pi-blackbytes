@@ -2,6 +2,7 @@ import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { Type } from "@sinclair/typebox";
 import { loadBlackbytesConfig } from "../../config/loader.js";
 import { TOOL_NAMES } from "../../config/resource-metadata.js";
+import { makeRenderCall, str, truncate } from "../_shared/call-render.js";
 import { type HttpFetchOptions, httpFetch } from "../_shared/http.js";
 import { registerTool } from "../_shared/register-tool.js";
 import { type ToolResultStats, renderStatsResult } from "../_shared/stats-render.js";
@@ -146,6 +147,10 @@ export function registerWebsearchSearchTool(pi: ExtensionAPI): void {
     }),
     execute: (params: { query: string; numResults?: number; category?: "people" | "company" }) =>
       executeWebsearchSearch(params),
+    renderCall: makeRenderCall("🔍", "web_search", (args, theme) => {
+      const q = str(args.query);
+      return q ? theme.fg("accent", `"${truncate(q, 60)}"`) : "";
+    }),
     renderResult: renderStatsResult,
   });
 }

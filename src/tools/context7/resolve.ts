@@ -2,6 +2,7 @@ import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { Type } from "@sinclair/typebox";
 import { loadBlackbytesConfig } from "../../config/loader.js";
 import { TOOL_NAMES } from "../../config/resource-metadata.js";
+import { makeRenderCall, str } from "../_shared/call-render.js";
 import { type HttpFetchOptions, httpFetch } from "../_shared/http.js";
 import { registerTool } from "../_shared/register-tool.js";
 import { type ToolResultStats, renderStatsResult } from "../_shared/stats-render.js";
@@ -113,6 +114,10 @@ export function registerResolveLibraryIdTool(pi: ExtensionAPI): void {
       }),
     }),
     execute: (params: ResolveParams) => executeResolveLibraryId(params),
+    renderCall: makeRenderCall("📚", "docs_resolve", (args, theme) => {
+      const lib = str(args.libraryName);
+      return lib ? theme.fg("accent", `"${lib}"`) : "";
+    }),
     renderResult: renderStatsResult,
   });
 }

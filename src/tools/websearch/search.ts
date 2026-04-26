@@ -4,7 +4,9 @@ import { loadBlackbytesConfig } from "../../config/loader.js";
 import { TOOL_NAMES } from "../../config/resource-metadata.js";
 import { type HttpFetchOptions, httpFetch } from "../_shared/http.js";
 import { registerTool } from "../_shared/register-tool.js";
+import { type ToolResultStats, renderStatsResult } from "../_shared/stats-render.js";
 import { type TextToolResult, textResult } from "../_shared/text-result.js";
+import { providerApiKey, resolveWebProviderConfig } from "./provider-config.js";
 
 export interface SearchResult {
   title: string;
@@ -17,6 +19,7 @@ interface ExaResult {
   url?: string;
   text?: string;
   snippet?: string;
+  summary?: string;
   highlights?: string[];
 }
 
@@ -24,6 +27,7 @@ interface TavilyResult {
   title?: string;
   url?: string;
   content?: string;
+  raw_content?: string | null;
   snippet?: string;
 }
 
@@ -34,6 +38,11 @@ function formatResults(results: SearchResult[]): string {
     .join("\n\n");
 }
 
+function compactSnippet(value: string | undefined): string {
+  if (!value) return "";
+  return value.replace(/\s+/g, " ").trim();
+}
+
 type FetchFn = (opts: HttpFetchOptions) => ReturnType<typeof httpFetch>;
 
 export async function executeWebsearchSearch(
@@ -41,24 +50,21 @@ export async function executeWebsearchSearch(
   fetchFn: FetchFn = httpFetch,
 ): Promise<TextToolResult> {
   const { query, numResults = 10, category } = params;
+  const config = resolveWebProviderConfig(await loadBlackbytesConfig());
+  const apiKey = providerApiKey(config);
 
-  const config = await loadBlackbytesConfig();
-
-  if (!config.websearch) {
+  if (!apiKey && config.provider === "tavily") {
     return textResult(
-      "Error: websearch is not configured. Add a 'websearch' section to your blackbytes config.",
+      "Error: Tavily API key is missing. Set blackbytes.websearch.tavily_api_key or TAVILY_API_KEY.",
     );
   }
 
-  const { provider } = config.websearch;
-
-  if (provider === "exa") {
-    const apiKey = config.websearch.exa_api_key;
-    if (!apiKey) {
-      return textResult("Error: exa_api_key is missing from websearch config.");
-    }
-
-    const body: Record<string, unknown> = { query, numResults };
+  if (config.provider === "exa") {
+    const body: Record<string, unknown> = {
+      query,
+      numResults,
+      contents: { highlights: { maxCharacters: 1000 } },
+    };
     if (category) body.category = category;
 
     const result = await fetchFn({
@@ -66,7 +72,7 @@ export async function executeWebsearchSearch(
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "x-api-key": apiKey,
+        ...(apiKey ? { "x-api-key": apiKey } : {}),
       },
       body,
     });
@@ -79,23 +85,26 @@ export async function executeWebsearchSearch(
     const rawResults: SearchResult[] = (data.results ?? []).map((r) => ({
       title: r.title ?? "(no title)",
       url: r.url ?? "",
-      snippet: r.text ?? r.snippet ?? r.highlights?.[0] ?? "",
+      snippet: compactSnippet(r.text ?? r.summary ?? r.snippet ?? r.highlights?.join(" [...] ")),
     }));
 
-    return textResult(formatResults(rawResults));
-  }
-  // tavily
-  const apiKey = config.websearch.tavily_api_key;
-  if (!apiKey) {
-    return textResult("Error: tavily_api_key is missing from websearch config.");
+    const text = formatResults(rawResults);
+    const summary =
+      rawResults.length === 0
+        ? "no results"
+        : `${rawResults.length} result${rawResults.length !== 1 ? "s" : ""}`;
+    return textResult(text, { summary } satisfies ToolResultStats);
   }
 
-  const body: Record<string, unknown> = { query, max_results: numResults, api_key: apiKey };
+  const body: Record<string, unknown> = { query, max_results: numResults };
 
   const result = await fetchFn({
     url: "https://api.tavily.com/search",
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${apiKey}`,
+    },
     body,
   });
 
@@ -107,10 +116,15 @@ export async function executeWebsearchSearch(
   const rawResults: SearchResult[] = (data.results ?? []).map((r) => ({
     title: r.title ?? "(no title)",
     url: r.url ?? "",
-    snippet: r.content ?? r.snippet ?? "",
+    snippet: compactSnippet(r.content ?? r.raw_content ?? r.snippet),
   }));
 
-  return textResult(formatResults(rawResults));
+  const text = formatResults(rawResults);
+  const summary =
+    rawResults.length === 0
+      ? "no results"
+      : `${rawResults.length} result${rawResults.length !== 1 ? "s" : ""}`;
+  return textResult(text, { summary } satisfies ToolResultStats);
 }
 
 export function registerWebsearchSearchTool(pi: ExtensionAPI): void {
@@ -118,7 +132,7 @@ export function registerWebsearchSearchTool(pi: ExtensionAPI): void {
     name: TOOL_NAMES.WEB_SEARCH,
     promptSnippet: "Search the web for any topic and get clean, ready-to-use content",
     description:
-      "Search the web for any topic. Returns a list of relevant results with titles, URLs, and snippets. Supports Exa and Tavily providers.",
+      "Search the web for any topic. Defaults to Exa, or uses Tavily when configured. API keys are read from blackbytes.websearch first, then EXA_API_KEY/TAVILY_API_KEY.",
     parameters: Type.Object({
       query: Type.String({ description: "The search query" }),
       numResults: Type.Optional(
@@ -132,5 +146,6 @@ export function registerWebsearchSearchTool(pi: ExtensionAPI): void {
     }),
     execute: (params: { query: string; numResults?: number; category?: "people" | "company" }) =>
       executeWebsearchSearch(params),
+    renderResult: renderStatsResult,
   });
 }

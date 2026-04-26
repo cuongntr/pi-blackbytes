@@ -8,7 +8,7 @@ export const BlackbytesConfigSchema = z
     copilot_initiator_header: z.boolean().default(true),
     websearch: z
       .object({
-        provider: z.enum(["exa", "tavily"]),
+        provider: z.enum(["exa", "tavily"]).default("exa"),
         exa_api_key: z.string().optional(),
         tavily_api_key: z.string().optional(),
       })

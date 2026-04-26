@@ -90,7 +90,7 @@ describe("integration: before_provider_request", () => {
       const providerCall = mock.calls.registerProvider.find((c) => c.name === "github-copilot");
       assert.ok(providerCall, "github-copilot provider should be registered");
       const opts = providerCall!.opts as { headers?: Record<string, string> };
-      assert.equal(opts?.headers?.["x-initiator"], "agent", "x-initiator header should be 'agent'");
+      assert.equal(opts?.headers?.["X-Initiator"], "agent", "X-Initiator header should be 'agent'");
     } finally {
       await fs.rm(subDir, { recursive: true, force: true });
     }

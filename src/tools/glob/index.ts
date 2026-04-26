@@ -4,9 +4,11 @@ import { Type } from "@sinclair/typebox";
 import fg from "fast-glob";
 import { TOOL_NAMES } from "../../config/resource-metadata.js";
 import { registerTool } from "../_shared/register-tool.js";
+import { type ToolResultStats, renderStatsResult } from "../_shared/stats-render.js";
 import { type TextToolResult, textResult } from "../_shared/text-result.js";
 
 const DISPLAY_LIMIT = 25;
+const CANDIDATE_SCAN_LIMIT = 1000;
 const TIMEOUT_MS = 60_000;
 
 interface GlobParams {
@@ -14,10 +16,38 @@ interface GlobParams {
   path?: string;
 }
 
+async function collectGlobCandidates(
+  pattern: string,
+  cwd: string,
+): Promise<{
+  files: string[];
+  scanTruncated: boolean;
+}> {
+  const stream = fg.stream(pattern, {
+    cwd,
+    absolute: true,
+    onlyFiles: true,
+    followSymbolicLinks: false,
+    ignore: ["**/.git/**", "**/node_modules/**", "**/dist/**", "**/build/**"],
+  }) as AsyncIterable<string>;
+
+  const files: string[] = [];
+  let scanTruncated = false;
+  for await (const entry of stream) {
+    files.push(String(entry));
+    if (files.length >= CANDIDATE_SCAN_LIMIT) {
+      scanTruncated = true;
+      break;
+    }
+  }
+  return { files, scanTruncated };
+}
+
 export async function executeGlob(params: GlobParams): Promise<TextToolResult> {
   const { pattern, path: cwd } = params;
 
   try {
+    const basePath = cwd ?? process.cwd();
     const timeoutPromise = new Promise<never>((_, reject) => {
       const t = setTimeout(() => {
         reject(new Error("glob timed out after 60s"));
@@ -25,16 +55,13 @@ export async function executeGlob(params: GlobParams): Promise<TextToolResult> {
       t.unref?.();
     });
 
-    const globPromise = fg(pattern, {
-      cwd: cwd ?? process.cwd(),
-      absolute: true,
-      onlyFiles: true,
-      followSymbolicLinks: false,
-    });
-
-    const matches: string[] = await Promise.race([globPromise, timeoutPromise]);
+    const { files: matches, scanTruncated } = await Promise.race([
+      collectGlobCandidates(pattern, basePath),
+      timeoutPromise,
+    ]);
 
     // Sort by mtime descending (most recent first), then keep the rendered output compact.
+    // The scan is capped before statting to avoid thousands of concurrent fs.stat calls.
     const withMtime = await Promise.all(
       matches.map(async (file) => {
         try {
@@ -48,25 +75,33 @@ export async function executeGlob(params: GlobParams): Promise<TextToolResult> {
     withMtime.sort((a, b) => b.mtime - a.mtime);
 
     if (withMtime.length === 0) {
-      return textResult("(no matches)");
+      return textResult("(no matches)", { summary: "no matches" } satisfies ToolResultStats);
     }
 
     const displayed = withMtime.slice(0, DISPLAY_LIMIT).map((x) => x.file);
-    const basePath = cwd ?? process.cwd();
+    const foundLabel = scanTruncated
+      ? `Found at least ${withMtime.length} files (scan capped for safety).`
+      : `Found ${withMtime.length} file${withMtime.length === 1 ? "" : "s"}.`;
     const header = [
-      `Found ${withMtime.length} file${withMtime.length === 1 ? "" : "s"}.`,
+      foundLabel,
       `Pattern: ${pattern}`,
       `Base path: ${basePath}`,
-      `Showing newest ${displayed.length} of ${withMtime.length}.`,
+      scanTruncated
+        ? `Showing newest ${displayed.length} from the first ${withMtime.length} discovered match(es).`
+        : `Showing newest ${displayed.length} of ${withMtime.length}.`,
     ];
 
     if (withMtime.length > DISPLAY_LIMIT) {
       header.push(
-        `Omitted ${withMtime.length - DISPLAY_LIMIT} older match(es); narrow pattern/path for more.`,
+        scanTruncated
+          ? "Additional matches were not scanned; narrow pattern/path for a complete newest-first list."
+          : `Omitted ${withMtime.length - DISPLAY_LIMIT} older match(es); narrow pattern/path for more.`,
       );
     }
 
-    return textResult(`${header.join("\n")}\n\n${displayed.join("\n")}`);
+    return textResult(`${header.join("\n")}\n\n${displayed.join("\n")}`, {
+      summary: foundLabel,
+    } satisfies ToolResultStats);
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
     return textResult(`Error: ${message}`);
@@ -90,5 +125,6 @@ export function registerGlobTool(pi: ExtensionAPI): void {
       ),
     }),
     execute: executeGlob,
+    renderResult: renderStatsResult,
   });
 }

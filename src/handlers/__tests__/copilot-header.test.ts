@@ -35,6 +35,6 @@ describe("registerCopilotHeader", () => {
     registerCopilotHeader(pi, { copilot_initiator_header: true });
     const [name, opts] = calls[0];
     assert.equal(name, "github-copilot");
-    assert.deepEqual(opts, { headers: { "x-initiator": "agent" } });
+    assert.deepEqual(opts, { headers: { "X-Initiator": "agent" } });
   });
 });

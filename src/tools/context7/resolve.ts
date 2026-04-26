@@ -1,8 +1,10 @@
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { Type } from "@sinclair/typebox";
+import { loadBlackbytesConfig } from "../../config/loader.js";
 import { TOOL_NAMES } from "../../config/resource-metadata.js";
 import { type HttpFetchOptions, httpFetch } from "../_shared/http.js";
 import { registerTool } from "../_shared/register-tool.js";
+import { type ToolResultStats, renderStatsResult } from "../_shared/stats-render.js";
 import { type TextToolResult, textResult } from "../_shared/text-result.js";
 
 export interface ResolveParams {
@@ -24,8 +26,16 @@ export async function executeResolveLibraryId(
 
   const url = new URL("https://context7.com/api/v1/search");
   url.searchParams.set("query", libraryName);
+  if (query.trim()) {
+    url.searchParams.set("topic", query);
+  }
 
-  const result = await fetchFn({ url: url.toString() });
+  const config = await loadBlackbytesConfig();
+  const headers = config.context7?.api_key
+    ? { Authorization: `Bearer ${config.context7.api_key}` }
+    : undefined;
+
+  const result = await fetchFn({ url: url.toString(), headers });
 
   if (!result.ok) {
     return textResult(`Error resolving library ID: ${result.error}`);
@@ -59,7 +69,9 @@ export async function executeResolveLibraryId(
   }
 
   if (results.length === 0) {
-    return textResult(`No libraries found for "${libraryName}". Try a different search term.`);
+    return textResult(`No libraries found for "${libraryName}". Try a different search term.`, {
+      summary: "no match",
+    } satisfies ToolResultStats);
   }
 
   // Pick best match — first result is ranked by relevance
@@ -81,7 +93,9 @@ export async function executeResolveLibraryId(
     }
   }
 
-  return textResult(lines.join("\n"));
+  return textResult(lines.join("\n"), {
+    summary: `→ ${best.id}`,
+  } satisfies ToolResultStats);
 }
 
 export function registerResolveLibraryIdTool(pi: ExtensionAPI): void {
@@ -99,5 +113,6 @@ export function registerResolveLibraryIdTool(pi: ExtensionAPI): void {
       }),
     }),
     execute: (params: ResolveParams) => executeResolveLibraryId(params),
+    renderResult: renderStatsResult,
   });
 }

@@ -2,7 +2,68 @@ import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { Type } from "@sinclair/typebox";
 import { TOOL_NAMES } from "../../config/resource-metadata.js";
 import { registerTool } from "../_shared/register-tool.js";
+import { type ToolResultStats, renderStatsResult } from "../_shared/stats-render.js";
 import { AST_GREP_LANGUAGES, detectBinary, runAstGrep } from "./helpers.js";
+
+interface MatchWithRewrite {
+  file?: string;
+  range?: { start?: { line?: number; column?: number } };
+  text?: string;
+  replacement?: string;
+  [key: string]: unknown;
+}
+
+function buildJsonArgs(params: {
+  pattern: string;
+  rewrite: string;
+  lang: string;
+  paths?: string[];
+  globs?: string[];
+}): string[] {
+  const args: string[] = [
+    "run",
+    "--pattern",
+    params.pattern,
+    "--rewrite",
+    params.rewrite,
+    "--lang",
+    params.lang,
+    "--json=compact",
+  ];
+
+  if (params.globs && params.globs.length > 0) {
+    for (const g of params.globs) {
+      args.push("--globs", g);
+    }
+  }
+
+  if (params.paths && params.paths.length > 0) {
+    args.push(...params.paths);
+  }
+
+  return args;
+}
+
+function buildApplyArgs(params: {
+  pattern: string;
+  rewrite: string;
+  lang: string;
+  paths?: string[];
+  globs?: string[];
+}): string[] {
+  const args = buildJsonArgs(params).filter((arg) => !arg.startsWith("--json"));
+  args.push("--update-all");
+  return args;
+}
+
+function parseMatches(stdout: string): MatchWithRewrite[] | string {
+  try {
+    if (!stdout.trim()) return [];
+    return JSON.parse(stdout) as MatchWithRewrite[];
+  } catch {
+    return `Error parsing ast-grep output: ${stdout}`;
+  }
+}
 
 export function registerAstGrepReplaceTool(pi: ExtensionAPI): void {
   registerTool(pi, TOOL_NAMES.AST_REPLACE, {
@@ -58,68 +119,31 @@ export function registerAstGrepReplaceTool(pi: ExtensionAPI): void {
         };
       }
 
-      const args: string[] = [
-        "run",
-        "--pattern",
-        params.pattern,
-        "--rewrite",
-        params.rewrite,
-        "--lang",
-        params.lang,
-        "--json",
-      ];
+      // ast-grep ignores or conflicts with --update-all when --json is present.
+      // Always run a JSON pass first for a reliable preview/count, then run a
+      // separate non-JSON --update-all pass for the actual write.
+      const previewResult = runAstGrep(binaryResult.bin, buildJsonArgs(params));
 
-      if (!dryRun) {
-        args.push("--update-all");
-      }
-
-      if (params.globs && params.globs.length > 0) {
-        for (const g of params.globs) {
-          args.push("--globs", g);
-        }
-      }
-
-      if (params.paths && params.paths.length > 0) {
-        args.push(...params.paths);
-      }
-
-      const result = runAstGrep(binaryResult.bin, args);
-
-      if (!result.ok) {
+      if (!previewResult.ok) {
         return {
-          content: [{ type: "text", text: `Error running ast-grep: ${result.error}` }],
+          content: [{ type: "text", text: `Error running ast-grep: ${previewResult.error}` }],
           isError: true,
         };
       }
 
-      interface MatchWithRewrite {
-        file?: string;
-        range?: { start?: { line?: number; column?: number } };
-        text?: string;
-        replacement?: string;
-        [key: string]: unknown;
-      }
-
-      let matches: MatchWithRewrite[] = [];
-      try {
-        if (result.stdout.trim()) {
-          matches = JSON.parse(result.stdout) as MatchWithRewrite[];
-        }
-      } catch {
+      const parsed = parseMatches(previewResult.stdout);
+      if (typeof parsed === "string") {
         return {
-          content: [
-            {
-              type: "text",
-              text: `Error parsing ast-grep output: ${result.stdout}`,
-            },
-          ],
+          content: [{ type: "text", text: parsed }],
           isError: true,
         };
       }
+      const matches = parsed;
 
       if (matches.length === 0) {
         return {
           content: [{ type: "text", text: "No matches found." }],
+          details: { summary: "no matches" } satisfies ToolResultStats,
         };
       }
 
@@ -134,7 +158,26 @@ export function registerAstGrepReplaceTool(pi: ExtensionAPI): void {
           lines.push("");
         }
         lines.push("Re-run with dryRun: false to apply changes.");
-        return { content: [{ type: "text", text: lines.join("\n") }] };
+        return {
+          content: [{ type: "text", text: lines.join("\n") }],
+          details: {
+            summary: `${matches.length} replacement${matches.length !== 1 ? "s" : ""} (dry run)`,
+          } satisfies ToolResultStats,
+        };
+      }
+
+      const applyResult = runAstGrep(binaryResult.bin, buildApplyArgs(params));
+      if (!applyResult.ok) {
+        const detail = applyResult.stderr ? `\n${applyResult.stderr}` : "";
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Error applying ast-grep replacements: ${applyResult.error}${detail}`,
+            },
+          ],
+          isError: true,
+        };
       }
 
       return {
@@ -144,7 +187,11 @@ export function registerAstGrepReplaceTool(pi: ExtensionAPI): void {
             text: `Applied ${matches.length} replacement(s) successfully.`,
           },
         ],
+        details: {
+          summary: `${matches.length} replacement${matches.length !== 1 ? "s" : ""} applied`,
+        } satisfies ToolResultStats,
       };
     },
+    renderResult: renderStatsResult,
   });
 }

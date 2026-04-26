@@ -319,6 +319,17 @@ export function registerSubAgent(
         });
         const allowedTools = [...finalized.tools];
 
+        if (allowedTools.length === 0) {
+          return {
+            content: [
+              {
+                type: "text" as const,
+                text: `Error: Sub-agent "${declaration.name}" has no allowed tools after policy filtering. Check disabled_tools or the agent tool allowlist.`,
+              },
+            ],
+          };
+        }
+
         if (finalized.droppedGlobalDisabled.length > 0) {
           getLogger().warn("Sub-agent dropped globally disabled tools", {
             agent: declaration.name,

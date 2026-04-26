@@ -1,13 +1,22 @@
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { Type } from "@sinclair/typebox";
 import { TOOL_NAMES } from "../../config/resource-metadata.js";
-import { compactDetails, renderCompactResult } from "../_shared/compact-result.js";
-import { type HttpFetchOptions, httpFetch } from "../_shared/http.js";
+import {
+  type McpContentBlock,
+  McpHttpClient,
+  type McpToolCallResult,
+} from "../_shared/mcp-http-client.js";
 import { registerTool } from "../_shared/register-tool.js";
+import { type ToolResultStats, renderStatsResult } from "../_shared/stats-render.js";
 import { type TextToolResult, textResult } from "../_shared/text-result.js";
 
 const COMPACT_HIT_LIMIT = 5;
 const FULL_HIT_LIMIT = 20;
+
+const MCP_ENDPOINT = "https://mcp.grep.app";
+const NO_RESULTS_PREFIX = "No results found";
+
+// ── Types ───────────────────────────────────────────────────────
 
 export interface GrepAppParams {
   query: string;
@@ -19,15 +28,37 @@ export interface GrepAppParams {
   path?: string;
 }
 
-export interface GrepAppHit {
-  repo: { name: string };
-  file: { name: string };
-  lines: Record<string, string>;
+/**
+ * Narrow function signature for calling the MCP `searchGitHub` tool.
+ * Extracted as a seam so unit tests can inject a mock without wiring
+ * the full MCP handshake.
+ */
+export type SearchToolCallFn = (
+  name: string,
+  args: Record<string, unknown>,
+) => Promise<McpToolCallResult>;
+
+// ── Singleton client ────────────────────────────────────────────
+
+let defaultClient: McpHttpClient | undefined;
+
+function getDefaultClient(): McpHttpClient {
+  if (!defaultClient) {
+    defaultClient = new McpHttpClient({ endpoint: MCP_ENDPOINT });
+  }
+  return defaultClient;
 }
+
+/** @internal — only for tests that need to reset module-level state. */
+export function _resetDefaultClient(): void {
+  defaultClient = undefined;
+}
+
+// ── Core logic ──────────────────────────────────────────────────
 
 export async function executeGrepAppSearch(
   params: GrepAppParams,
-  fetchFn: (opts: HttpFetchOptions) => ReturnType<typeof httpFetch> = httpFetch,
+  callToolFn?: SearchToolCallFn,
 ): Promise<TextToolResult> {
   const {
     query,
@@ -39,56 +70,59 @@ export async function executeGrepAppSearch(
     path,
   } = params;
 
-  const url = new URL("https://grep.app/api/search");
-  url.searchParams.set("q", query);
+  const callTool: SearchToolCallFn = callToolFn ?? ((n, a) => getDefaultClient().callTool(n, a));
 
-  if (matchCase) url.searchParams.set("case", "true");
-  if (matchWholeWords) url.searchParams.set("words", "true");
-  if (useRegexp) url.searchParams.set("regexp", "true");
-  if (repo) url.searchParams.set("repo", repo);
-  if (path) url.searchParams.set("path", path);
-  if (language && language.length > 0) {
-    for (const lang of language) {
-      url.searchParams.append("lang[]", lang);
-    }
+  // Build MCP tool arguments — only include truthy optional fields
+  const args: Record<string, unknown> = { query };
+  if (matchCase) args.matchCase = true;
+  if (matchWholeWords) args.matchWholeWords = true;
+  if (useRegexp) args.useRegexp = true;
+  if (repo) args.repo = repo;
+  if (path) args.path = path;
+  if (language && language.length > 0) args.language = language;
+
+  let result: McpToolCallResult;
+  try {
+    result = await callTool("searchGitHub", args);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return textResult(`Error searching GitHub: ${message}`);
   }
 
-  const result = await fetchFn({ url: url.toString() });
-
-  if (!result.ok) {
-    return textResult(`Error searching GitHub: ${result.error}`);
+  // Tool-level error
+  if (result.isError) {
+    const errText = result.content
+      .filter(
+        (b): b is McpContentBlock & { text: string } =>
+          b.type === "text" && typeof b.text === "string",
+      )
+      .map((b) => b.text)
+      .join("\n");
+    return textResult(`Error searching GitHub: ${errText || "unknown error"}`);
   }
 
-  const data = result.data as Record<string, unknown>;
+  // Extract text content blocks — each block is one search result
+  const hits = result.content.filter(
+    (b): b is McpContentBlock & { text: string } => b.type === "text" && typeof b.text === "string",
+  );
 
-  // grep.app returns { hits: { hits: [...] }, ... }
-  const hitsWrapper = data.hits as Record<string, unknown> | undefined;
-  const hits: GrepAppHit[] = (hitsWrapper?.hits as GrepAppHit[]) ?? [];
-
-  if (!Array.isArray(hits) || hits.length === 0) {
-    return textResult(`No results found for query: "${query}"`);
+  // The MCP server returns a single block "No results found…" instead of
+  // an empty array when there are no matches.
+  if (hits.length === 0 || (hits.length === 1 && hits[0].text.startsWith(NO_RESULTS_PREFIX))) {
+    return textResult(`No results found for query: "${query}"`, {
+      summary: "no results",
+    } satisfies ToolResultStats);
   }
 
   const formatHits = (limit: number): string => {
+    const selected = hits.slice(0, limit);
     const parts: string[] = [
-      `Search results for "${query}" on grep.app (${hits.length} results, showing ${Math.min(
-        limit,
-        hits.length,
-      )}):`,
+      `Search results for "${query}" on grep.app (${hits.length} results, showing ${selected.length}):`,
       "",
     ];
 
-    for (const hit of hits.slice(0, limit)) {
-      const repoName = hit.repo?.name ?? "unknown";
-      const fileName = hit.file?.name ?? "unknown";
-      parts.push(`### ${repoName} — ${fileName}`);
-
-      const lines = hit.lines ?? {};
-      const lineEntries = Object.entries(lines).sort(([a], [b]) => Number(a) - Number(b));
-
-      for (const [lineNum, lineContent] of lineEntries) {
-        parts.push(`  ${lineNum}: ${lineContent}`);
-      }
+    for (const hit of selected) {
+      parts.push(hit.text);
       parts.push("");
     }
 
@@ -99,10 +133,16 @@ export async function executeGrepAppSearch(
     return parts.join("\n");
   };
 
-  const summary = formatHits(COMPACT_HIT_LIMIT);
+  const summaryText = formatHits(COMPACT_HIT_LIMIT);
   const fullText = formatHits(FULL_HIT_LIMIT);
-  return textResult(summary, compactDetails(fullText, summary));
+  const stats: ToolResultStats = {
+    summary: `${hits.length} result${hits.length !== 1 ? "s" : ""}`,
+    fullText,
+  };
+  return textResult(summaryText, stats);
 }
+
+// ── Registration ────────────────────────────────────────────────
 
 export function registerGrepAppSearchTool(pi: ExtensionAPI): void {
   registerTool(pi, TOOL_NAMES.GH_SEARCH, {
@@ -121,10 +161,14 @@ export function registerGrepAppSearchTool(pi: ExtensionAPI): void {
         }),
       ),
       matchCase: Type.Optional(
-        Type.Boolean({ description: "Case-sensitive search (default: false)" }),
+        Type.Boolean({
+          description: "Case-sensitive search (default: false)",
+        }),
       ),
       matchWholeWords: Type.Optional(
-        Type.Boolean({ description: "Match whole words only (default: false)" }),
+        Type.Boolean({
+          description: "Match whole words only (default: false)",
+        }),
       ),
       useRegexp: Type.Optional(
         Type.Boolean({
@@ -143,6 +187,6 @@ export function registerGrepAppSearchTool(pi: ExtensionAPI): void {
       ),
     }),
     execute: (params: GrepAppParams) => executeGrepAppSearch(params),
-    renderResult: renderCompactResult,
+    renderResult: renderStatsResult,
   });
 }

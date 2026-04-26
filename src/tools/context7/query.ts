@@ -1,17 +1,23 @@
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { Type } from "@sinclair/typebox";
+import { loadBlackbytesConfig } from "../../config/loader.js";
 import { TOOL_NAMES } from "../../config/resource-metadata.js";
-import { compactDetails, compactText, renderCompactResult } from "../_shared/compact-result.js";
+import { compactText } from "../_shared/compact-result.js";
 import { type HttpFetchOptions, httpFetch } from "../_shared/http.js";
 import { registerTool } from "../_shared/register-tool.js";
+import { type ToolResultStats, renderStatsResult } from "../_shared/stats-render.js";
 import { type TextToolResult, textResult } from "../_shared/text-result.js";
 
 const DOCS_QUERY_TOKEN_LIMIT = "4000";
 const DOCS_QUERY_COMPACT_CHARS = 3500;
 
-function compactDocsResult(fullText: string): TextToolResult {
+function compactDocsResult(fullText: string): TextToolResult<ToolResultStats> {
   const summary = compactText(fullText, DOCS_QUERY_COMPACT_CHARS);
-  return textResult(summary, compactDetails(fullText, summary));
+  const stats: ToolResultStats = {
+    summary: `${fullText.length.toLocaleString("en-US")} chars`,
+    fullText,
+  };
+  return textResult(summary, stats);
 }
 
 export interface QueryDocsParams {
@@ -37,7 +43,12 @@ export async function executeQueryDocs(
   url.searchParams.set("query", query);
   url.searchParams.set("tokens", DOCS_QUERY_TOKEN_LIMIT);
 
-  const result = await fetchFn({ url: url.toString() });
+  const config = await loadBlackbytesConfig();
+  const headers = config.context7?.api_key
+    ? { Authorization: `Bearer ${config.context7.api_key}` }
+    : undefined;
+
+  const result = await fetchFn({ url: url.toString(), headers });
 
   if (!result.ok) {
     return textResult(`Error querying docs for "${libraryId}": ${result.error}`);
@@ -106,6 +117,6 @@ export function registerQueryDocsTool(pi: ExtensionAPI): void {
       }),
     }),
     execute: (params: QueryDocsParams) => executeQueryDocs(params),
-    renderResult: renderCompactResult,
+    renderResult: renderStatsResult,
   });
 }

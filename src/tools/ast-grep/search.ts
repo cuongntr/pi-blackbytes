@@ -2,6 +2,7 @@ import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { Type } from "@sinclair/typebox";
 import { TOOL_NAMES } from "../../config/resource-metadata.js";
 import { registerTool } from "../_shared/register-tool.js";
+import { type ToolResultStats, renderStatsResult } from "../_shared/stats-render.js";
 import { AST_GREP_LANGUAGES, detectBinary, runAstGrep } from "./helpers.js";
 
 interface AstGrepMatch {
@@ -123,9 +124,16 @@ export function registerAstGrepSearchTool(pi: ExtensionAPI): void {
         };
       }
 
+      const text = formatMatches(matches);
+      const summary =
+        matches.length === 0
+          ? "no matches"
+          : `${matches.length} match${matches.length !== 1 ? "es" : ""}`;
       return {
-        content: [{ type: "text", text: formatMatches(matches) }],
+        content: [{ type: "text", text }],
+        details: { summary } satisfies ToolResultStats,
       };
     },
+    renderResult: renderStatsResult,
   });
 }

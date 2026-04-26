@@ -5,9 +5,23 @@ import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { Type } from "@sinclair/typebox";
 import { TOOL_NAMES } from "../../config/resource-metadata.js";
 import { registerTool } from "../_shared/register-tool.js";
+import { type ToolResultStats, renderStatsResult } from "../_shared/stats-render.js";
 import { type TextToolResult, textResult } from "../_shared/text-result.js";
 
 type OutputMode = "content" | "files_with_matches" | "count";
+
+const RG_TIMEOUT_MS = 60_000;
+const RG_MAX_OUTPUT_BYTES = 256 * 1024;
+const RG_SAFETY_ARGS = [
+  "--no-follow",
+  "--color=never",
+  "--max-depth",
+  "20",
+  "--max-filesize",
+  "10M",
+  "--max-columns",
+  "1000",
+] as const;
 
 interface GrepParams {
   pattern: string;
@@ -23,9 +37,9 @@ interface GrepParams {
 // ---------------------------------------------------------------------------
 
 function buildRgArgs(params: GrepParams): string[] {
-  const { pattern, include, output_mode, head_limit, path: searchPath, context } = params;
+  const { pattern, include, output_mode, path: searchPath, context } = params;
   const mode = output_mode ?? "files_with_matches";
-  const args: string[] = [];
+  const args: string[] = [...RG_SAFETY_ARGS];
 
   // Output mode flags
   if (mode === "files_with_matches") {
@@ -44,9 +58,9 @@ function buildRgArgs(params: GrepParams): string[] {
     args.push("--glob", include);
   }
 
-  if (head_limit != null) {
-    args.push("--max-count", String(head_limit));
-  }
+  // head_limit is applied after parsing output so it behaves as a global
+  // rendered-result cap. ripgrep's --max-count is per-file and would make
+  // count mode incorrect.
 
   args.push("--", pattern);
 
@@ -57,24 +71,69 @@ function buildRgArgs(params: GrepParams): string[] {
   return args;
 }
 
+function truncateLines(output: string, headLimit?: number): string {
+  if (headLimit == null || headLimit <= 0) return output;
+  const lines = output.split("\n");
+  if (lines.length <= headLimit) return output;
+  return `${lines.slice(0, headLimit).join("\n")}\n[Output truncated to ${headLimit} line(s). Narrow the search for more.]`;
+}
+
+function appendBounded(current: string, chunk: Buffer): { text: string; truncated: boolean } {
+  const incoming = chunk.toString("utf8");
+  if (current.length + incoming.length <= RG_MAX_OUTPUT_BYTES) {
+    return { text: current + incoming, truncated: false };
+  }
+  const remaining = Math.max(0, RG_MAX_OUTPUT_BYTES - current.length);
+  return { text: current + incoming.slice(0, remaining), truncated: true };
+}
+
 function spawnRg(args: string[]): Promise<string> {
   return new Promise((resolve, reject) => {
     const proc = spawn("rg", args, { stdio: ["ignore", "pipe", "pipe"] });
-    const stdout: Buffer[] = [];
-    const stderr: Buffer[] = [];
-    proc.stdout.on("data", (chunk: Buffer) => stdout.push(chunk));
-    proc.stderr.on("data", (chunk: Buffer) => stderr.push(chunk));
-    proc.on("error", reject);
+    let stdout = "";
+    let stderr = "";
+    let stdoutTruncated = false;
+    let stderrTruncated = false;
+    let settled = false;
+
+    const timeout = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      proc.kill("SIGTERM");
+      reject(new Error(`rg timed out after ${RG_TIMEOUT_MS}ms`));
+    }, RG_TIMEOUT_MS);
+    timeout.unref?.();
+
+    proc.stdout.on("data", (chunk: Buffer) => {
+      if (stdoutTruncated) return;
+      const next = appendBounded(stdout, chunk);
+      stdout = next.text;
+      stdoutTruncated = next.truncated;
+      if (stdoutTruncated) proc.kill("SIGTERM");
+    });
+    proc.stderr.on("data", (chunk: Buffer) => {
+      if (stderrTruncated) return;
+      const next = appendBounded(stderr, chunk);
+      stderr = next.text;
+      stderrTruncated = next.truncated;
+    });
+    proc.on("error", (err) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
+      reject(err);
+    });
     proc.on("close", (code) => {
-      if (code === 0 || code === 1) {
-        // code 1 means no matches, which is fine
-        resolve(Buffer.concat(stdout).toString("utf8").trimEnd());
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
+      if (code === 0 || code === 1 || stdoutTruncated) {
+        // code 1 means no matches, which is fine. stdoutTruncated means we
+        // intentionally stopped after the safety cap and return the bounded data.
+        const marker = stdoutTruncated ? "\n[Output truncated due to 256KB safety limit.]" : "";
+        resolve(`${stdout.trimEnd()}${marker}`);
       } else {
-        reject(
-          new Error(
-            Buffer.concat(stderr).toString("utf8").trimEnd() || `rg exited with code ${code}`,
-          ),
-        );
+        reject(new Error(stderr.trimEnd() || `rg exited with code ${code}`));
       }
     });
   });
@@ -105,6 +164,9 @@ async function* walkFiles(dir: string, include?: string): AsyncGenerator<string>
   for (const entry of entries) {
     const fullPath = join(dir, entry.name);
     if (entry.isDirectory()) {
+      if (entry.name === ".git" || entry.name === "node_modules" || entry.name === "dist") {
+        continue;
+      }
       yield* walkFiles(fullPath, include);
     } else if (entry.isFile()) {
       if (!includeRe || includeRe.test(entry.name)) {
@@ -213,6 +275,18 @@ async function nodeFallbackGrep(params: GrepParams): Promise<string> {
 // Execute
 // ---------------------------------------------------------------------------
 
+function renderGrepResult(output: string): TextToolResult<ToolResultStats> {
+  const resultText = output || "(no matches)";
+  const summary =
+    resultText === "(no matches)"
+      ? "no matches"
+      : (() => {
+          const lines = resultText.split("\n").filter((l) => l.trim() && !l.startsWith("["));
+          return `${lines.length} line${lines.length !== 1 ? "s" : ""}`;
+        })();
+  return textResult(resultText, { summary } satisfies ToolResultStats);
+}
+
 async function executeGrep(params: GrepParams): Promise<TextToolResult> {
   // Validate regex up front
   try {
@@ -225,15 +299,15 @@ async function executeGrep(params: GrepParams): Promise<TextToolResult> {
   // Try ripgrep first
   try {
     const args = buildRgArgs(params);
-    const output = await spawnRg(args);
-    return textResult(output || "(no matches)");
+    const output = truncateLines(await spawnRg(args), params.head_limit);
+    return renderGrepResult(output);
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
     // If rg binary not found or spawn error, fall back to Node
     if (msg.includes("ENOENT") || msg.includes("not found")) {
       try {
         const output = await nodeFallbackGrep(params);
-        return textResult(output || "(no matches)");
+        return renderGrepResult(output);
       } catch (fallbackErr: unknown) {
         const fallbackMsg =
           fallbackErr instanceof Error ? fallbackErr.message : String(fallbackErr);
@@ -291,5 +365,6 @@ export function registerGrepTool(pi: ExtensionAPI): void {
       ),
     }),
     execute: executeGrep,
+    renderResult: renderStatsResult,
   });
 }

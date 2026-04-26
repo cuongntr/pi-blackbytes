@@ -74,10 +74,10 @@ Blackbytes reads the top-level `blackbytes` object from the Pi settings file.
 | `disabled_tools` | `string[]` | Disables specific public tool names for the entire session |
 | `disabled_sub_agents` | `("explore" \| "oracle" \| "librarian" \| "general")[]` | Disables delegate tools by agent name |
 | `hashline_edit` | `boolean` | Enables hashline rewriting for Pi `read`/`write` tool results |
-| `copilot_initiator_header` | `boolean` | Registers the GitHub Copilot provider header `x-initiator: agent` |
-| `websearch.provider` | `"exa" \| "tavily"` | Selects the websearch backend |
-| `websearch.exa_api_key` | `string` | Exa credential |
-| `websearch.tavily_api_key` | `string` | Tavily credential |
+| `copilot_initiator_header` | `boolean` | Registers the GitHub Copilot provider header `X-Initiator: agent` |
+| `websearch.provider` | `"exa" \| "tavily"` | Selects the web backend. Defaults to `exa` when omitted. |
+| `websearch.exa_api_key` | `string` | Exa credential. Overrides `EXA_API_KEY` when set. |
+| `websearch.tavily_api_key` | `string` | Tavily credential. Overrides `TAVILY_API_KEY` when set. |
 | `context7.api_key` | `string` | Context7 credential |
 | `system_prompt_log.enabled` | `boolean` | Opt-in full system-prompt capture to a JSONL file. Defaults to `false` because prompts may contain project context or secrets. |
 | `system_prompt_log.path` | `string` | Optional log file path. Defaults to `~/.pi/logs/pi-blackbytes-system-prompts.jsonl`; relative paths resolve against the current working directory. |
@@ -118,8 +118,8 @@ Blackbytes reads the top-level `blackbytes` object from the Pi settings file.
 
 | Tool | Purpose |
 |---|---|
-| `web_search` | Web search through Exa or Tavily |
-| `web_fetch` | Fetch and convert a specific URL |
+| `web_search` | Web search through Exa by default, or Tavily when configured |
+| `web_fetch` | Extract a URL through Exa/Tavily with direct HTTP fallback |
 | `docs_resolve` | Resolve a library/package to a Context7 ID |
 | `docs_query` | Query current library documentation and examples from Context7 |
 | `gh_search` | Search code patterns across public GitHub repositories |

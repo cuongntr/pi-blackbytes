@@ -59,7 +59,7 @@ Use it for:
 
 - understanding external library APIs or internals
 - querying official documentation via Context7
-- finding real-world examples with `grep_app_search_github`
+- finding real-world examples with `gh_search`
 - comparing patterns across public repositories
 
 Avoid it for:

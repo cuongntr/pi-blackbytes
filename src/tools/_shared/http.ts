@@ -10,6 +10,7 @@ export interface HttpFetchOptions {
   timeoutMs?: number;
   signal?: AbortSignal;
   redactKeys?: string[];
+  maxBodyBytes?: number;
 }
 
 export interface HttpSuccess {
@@ -17,6 +18,8 @@ export interface HttpSuccess {
   status: number;
   data: unknown;
   headers: Headers;
+  finalUrl?: string;
+  bodyTruncated?: boolean;
 }
 
 export interface HttpError {
@@ -28,6 +31,7 @@ export interface HttpError {
 export type HttpResult = HttpSuccess | HttpError;
 
 const DEFAULT_TIMEOUT_MS = 30000;
+const DEFAULT_MAX_BODY_BYTES = 2 * 1024 * 1024;
 
 const ALWAYS_REDACTED = new Set(["authorization", "x-api-key", "api-key"]);
 
@@ -69,6 +73,46 @@ export function redactUrl(url: string, redactKeys: string[] = []): string {
  * Thin wrapper around native fetch with timeout, signal composition, and
  * discriminated result type.
  */
+async function readResponseText(
+  response: Response,
+  maxBodyBytes: number,
+): Promise<{ text: string; truncated: boolean }> {
+  if (!response.body) {
+    return { text: "", truncated: false };
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let text = "";
+  let bytesRead = 0;
+  let truncated = false;
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (!value) continue;
+
+      if (bytesRead + value.byteLength > maxBodyBytes) {
+        const remaining = Math.max(0, maxBodyBytes - bytesRead);
+        if (remaining > 0) {
+          text += decoder.decode(value.slice(0, remaining), { stream: true });
+        }
+        truncated = true;
+        await reader.cancel();
+        break;
+      }
+
+      bytesRead += value.byteLength;
+      text += decoder.decode(value, { stream: true });
+    }
+    text += decoder.decode();
+    return { text, truncated };
+  } finally {
+    reader.releaseLock();
+  }
+}
+
 export async function httpFetch(opts: HttpFetchOptions): Promise<HttpResult> {
   const {
     url,
@@ -77,6 +121,7 @@ export async function httpFetch(opts: HttpFetchOptions): Promise<HttpResult> {
     timeoutMs = DEFAULT_TIMEOUT_MS,
     signal: callerSignal,
     redactKeys: _redactKeys,
+    maxBodyBytes = DEFAULT_MAX_BODY_BYTES,
   } = opts;
 
   let method = opts.method;
@@ -110,22 +155,27 @@ export async function httpFetch(opts: HttpFetchOptions): Promise<HttpResult> {
 
   try {
     const response = await fetch(url, fetchInit);
+    const { text, truncated } = await readResponseText(response, maxBodyBytes);
     clearTimeout(timeoutId);
 
     if (!response.ok) {
+      const detail = text.trim() ? ` — ${text.trim().slice(0, 1000)}` : "";
       return {
         ok: false,
-        error: `HTTP ${response.status}: ${response.statusText}`,
+        error: `HTTP ${response.status}: ${response.statusText}${detail}`,
         status: response.status,
       };
     }
 
     let data: unknown;
-    const text = await response.text();
-    try {
-      data = JSON.parse(text);
-    } catch {
+    if (truncated) {
       data = text;
+    } else {
+      try {
+        data = JSON.parse(text);
+      } catch {
+        data = text;
+      }
     }
 
     return {
@@ -133,6 +183,8 @@ export async function httpFetch(opts: HttpFetchOptions): Promise<HttpResult> {
       status: response.status,
       data,
       headers: response.headers,
+      finalUrl: response.url || url,
+      bodyTruncated: truncated,
     };
   } catch (err: unknown) {
     clearTimeout(timeoutId);

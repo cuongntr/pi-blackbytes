@@ -4,6 +4,7 @@ import { type Static, Type } from "@sinclair/typebox";
 import { TOOL_NAMES } from "../../config/resource-metadata.js";
 import { computeCID } from "../../utils/cid.js";
 import { registerTool } from "../_shared/register-tool.js";
+import { type ToolResultStats, renderStatsResult } from "../_shared/stats-render.js";
 
 /** Format a file's lines into LINE#ID annotated text for error messages. */
 function annotateLines(lines: string[]): string {
@@ -14,6 +15,39 @@ function annotateLines(lines: string[]): string {
       return `${lineNum}#${cid}|${line}`;
     })
     .join("\n");
+}
+
+function annotateLineContext(lines: string[], centerLine: number, radius = 3): string {
+  const start = Math.max(1, centerLine - radius);
+  const end = Math.min(lines.length, centerLine + radius);
+  return annotateLines(lines.slice(start - 1, end));
+}
+
+function rangeForEdit(edit: Edit): { start: number; end: number } | null {
+  if (edit.op !== "replace" || !edit.pos) return null;
+  const start = parseAnchor(edit.pos)?.lineNum;
+  const end = edit.end ? parseAnchor(edit.end)?.lineNum : start;
+  if (start === undefined || end === undefined) return null;
+  return { start, end };
+}
+
+function detectOverlappingReplaceRanges(edits: Edit[]): string | null {
+  const ranges = edits
+    .map((edit, index) => {
+      const range = rangeForEdit(edit);
+      return range ? { ...range, index } : null;
+    })
+    .filter((range): range is { start: number; end: number; index: number } => range !== null)
+    .sort((a, b) => a.start - b.start || a.end - b.end);
+
+  for (let i = 1; i < ranges.length; i++) {
+    const prev = ranges[i - 1];
+    const curr = ranges[i];
+    if (curr.start <= prev.end) {
+      return `Overlapping replace edits detected: edit ${prev.index + 1} (lines ${prev.start}-${prev.end}) overlaps edit ${curr.index + 1} (lines ${curr.start}-${curr.end})`;
+    }
+  }
+  return null;
 }
 
 // ---------------------------------------------------------------------------
@@ -148,10 +182,28 @@ export function applyHashlineEdits(input: HashlineEditInput): ToolResult {
         if (cid !== expectedCID) {
           return {
             success: false,
-            error: `>>> mismatch: anchor "${anchorStr}" — expected CID ${expectedCID} for line ${lineNum} but got ${cid}\n\nCurrent file:\n${annotateLines(fileLines)}`,
+            error: `>>> mismatch: anchor "${anchorStr}" — expected CID ${expectedCID} for line ${lineNum} but got ${cid}\n\nNearby current lines:\n${annotateLineContext(fileLines, lineNum)}`,
           };
         }
       }
+    }
+
+    for (const edit of edits) {
+      if (edit.op === "replace" && edit.pos && edit.end) {
+        const start = parseAnchor(edit.pos)!.lineNum;
+        const end = parseAnchor(edit.end)!.lineNum;
+        if (start > end) {
+          return {
+            success: false,
+            error: `Invalid range: start line ${start} cannot be greater than end line ${end}`,
+          };
+        }
+      }
+    }
+
+    const overlapError = detectOverlappingReplaceRanges(edits);
+    if (overlapError) {
+      return { success: false, error: overlapError };
     }
 
     // -- separate anchored edits from BOF/EOF edits --
@@ -264,12 +316,16 @@ export function registerHashlineEditTool(pi: ExtensionAPI): void {
     execute: async (_toolCallId: string, input: HashlineEditInput) => {
       const result = applyHashlineEdits(input);
       if (result.success) {
-        return { content: [{ type: "text", text: result.message }] };
+        return {
+          content: [{ type: "text", text: result.message }],
+          details: { summary: result.message } satisfies ToolResultStats,
+        };
       }
       return {
         isError: true,
         content: [{ type: "text", text: result.error }],
       };
     },
+    renderResult: renderStatsResult,
   });
 }

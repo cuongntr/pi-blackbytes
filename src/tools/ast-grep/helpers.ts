@@ -60,6 +60,7 @@ export interface SpawnResult {
   ok: true;
   stdout: string;
   stderr: string;
+  status: number;
 }
 
 export interface SpawnError {
@@ -76,10 +77,25 @@ export function runAstGrep(bin: string, args: string[]): SpawnResult | SpawnErro
     return { ok: false, error: result.error.message };
   }
 
-  // ast-grep exits with 1 when no matches found — that's still a valid run
+  const stdout = result.stdout ?? "";
+  const stderr = result.stderr ?? "";
+  const status = result.status ?? 0;
+
+  // ast-grep exits with 1 when no matches are found. Treat that as a
+  // successful empty result only when the CLI produced parseable/empty output
+  // and no diagnostic stderr. Other non-zero statuses are real failures.
+  if (status > 1 || (status === 1 && stderr.trim() && !stdout.trim())) {
+    return {
+      ok: false,
+      error: stderr.trim() || stdout.trim() || `ast-grep exited with code ${status}`,
+      stderr,
+    };
+  }
+
   return {
     ok: true,
-    stdout: result.stdout ?? "",
-    stderr: result.stderr ?? "",
+    stdout,
+    stderr,
+    status,
   };
 }

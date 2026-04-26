@@ -23,8 +23,8 @@ These tools operate on the local repository.
 |---|---|
 | `glob` | File pattern matching by glob |
 | `grep` | Regex content search with file filters and multiple output modes |
-| `ast_grep_search` | AST-aware structural search using meta-variables |
-| `ast_grep_replace` | AST-aware rewrite tool with dry-run default |
+| `ast_search` | AST-aware structural search using meta-variables |
+| `ast_replace` | AST-aware rewrite tool with dry-run default |
 | `hashline_edit` | Precise LINE#ID-anchored file editing with snapshot semantics |
 
 ### HTTP-backed tools
@@ -33,11 +33,11 @@ These tools retrieve information from external services.
 
 | Tool | Purpose |
 |---|---|
-| `websearch_search` | Search the web through Exa or Tavily |
-| `websearch_fetch` | Fetch and convert a specific URL |
-| `context7_resolve_library_id` | Resolve a library or package to a Context7 ID |
-| `context7_query_docs` | Query up-to-date library documentation and code examples |
-| `grep_app_search_github` | Search public GitHub code for concrete usage patterns |
+| `web_search` | Search the web through Exa or Tavily |
+| `web_fetch` | Fetch bounded content from a specific URL |
+| `docs_resolve` | Resolve a library or package to a Context7 ID |
+| `docs_query` | Query up-to-date library documentation and code examples |
+| `gh_search` | Search public GitHub code for concrete usage patterns |
 
 ### Delegate tools
 

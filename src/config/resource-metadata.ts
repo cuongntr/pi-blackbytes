@@ -86,6 +86,11 @@ export const SUB_AGENTS: readonly SubAgentMeta[] = [
     description: "Implementation executor for heavy multi-file work",
     promptFeatures: ["subagentDelegation"],
   },
+  {
+    name: "reviewer",
+    description: "Read-only code reviewer for diffs, branches, and PRs",
+    promptFeatures: ["subagentDelegation"],
+  },
 ];
 
 // ---------------------------------------------------------------------------

@@ -1,6 +1,6 @@
 {
-  "name": "@blackbytes/pi-blackbytes",
-  "version": "0.1.0",
+  "name": "pi-blackbytes",
+  "version": "0.2.0",
   "type": "module",
   "engines": {
     "node": ">=20"
@@ -34,6 +34,14 @@
   },
   "peerDependencies": {
     "@mariozechner/pi-coding-agent": "^0.67"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/cuongntr/pi-blackbytes.git"
+  },
+  "homepage": "https://github.com/cuongntr/pi-blackbytes#readme",
+  "bugs": {
+    "url": "https://github.com/cuongntr/pi-blackbytes/issues"
   },
   "publishConfig": {
     "access": "public",

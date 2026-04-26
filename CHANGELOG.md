@@ -1,6 +1,25 @@
 # Changelog
 
-## Unreleased
+## 0.2.0 (2026-04-26)
+
+### Added
+
+- **Reviewer sub-agent**: new read-only code reviewer (`delegate_reviewer`) that produces severity-classified findings (High/Medium/Low) and a verdict for diffs, branches, and PRs.
+- **Runtime overlay for read-only sub-agents**: lightweight (~4 KB) `prependSystemPrompt` overlay via `buildSubAgentRuntimeOverlay()` carrying current date, working directory, and finalized tool allowlist.
+- **Enhanced sub-agent tool strategies**: explore, oracle, and librarian agents now include detailed tool-strategy sections mapping question types to the best primitive tools.
+- **CI/CD**: GitHub Actions workflow to publish to npm on release creation.
+
+### Changed
+
+- **Package renamed** from `@blackbytes/pi-blackbytes` to `pi-blackbytes` (unscoped).
+- **Package metadata**: added `repository`, `homepage`, and `bugs` fields to `package.json`.
+- Sub-agent system prompts expanded with tool-strategy guidance and runtime overlay hooks.
+- CI workflow installs `ripgrep` for grep integration tests.
+
+### Removed
+
+- Bundled skills (`blackbytes-overview`, `hashline-workflow`, `delegation`) — replaced by enhanced sub-agent prompts and runtime overlays.
+
 
 ### Added
 

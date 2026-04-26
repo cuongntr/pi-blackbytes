@@ -1,6 +1,6 @@
 # @blackbytes/pi-blackbytes
 
-Pi coding-agent extension that provides local search tools, direct HTTP replacements for the websearch/context7/grep.app MCP surfaces, hashline-based editing, and delegated sub-agents for exploration, research, consultation, and implementation.
+Pi coding-agent extension that provides local search tools, direct HTTP replacements for the websearch/context7/grep.app MCP surfaces, hashline-based editing, and delegated sub-agents for exploration, research, consultation, implementation, and code review.
 
 ## Installation
 
@@ -72,7 +72,7 @@ Blackbytes reads the top-level `blackbytes` object from the Pi settings file.
 | Key | Type | Meaning |
 |---|---|---|
 | `disabled_tools` | `string[]` | Disables specific public tool names for the entire session |
-| `disabled_sub_agents` | `("explore" \| "oracle" \| "librarian" \| "general")[]` | Disables delegate tools by agent name |
+| `disabled_sub_agents` | `("explore" \| "oracle" \| "librarian" \| "general" \| "reviewer")[]` | Disables delegate tools by agent name |
 | `hashline_edit` | `boolean` | Enables hashline rewriting for Pi `read`/`write` tool results |
 | `copilot_initiator_header` | `boolean` | Registers the GitHub Copilot provider header `X-Initiator: agent` |
 | `websearch.provider` | `"exa" \| "tavily"` | Selects the web backend. Defaults to `exa` when omitted. |
@@ -87,18 +87,18 @@ Blackbytes reads the top-level `blackbytes` object from the Pi settings file.
 | `system_prompt_log.dedupe` | `boolean` | Avoid repeated identical prompt entries per session/source/provider shape. Defaults to `true`. |
 | `sub_agents.<name>.model` | `string` | Per-agent model override, preferably the canonical Pi model reference `provider/model-id` selected by `/setup-models`. Omit/clear to inherit the host Pi model. |
 | `sub_agents.<name>.reasoningEffort` | `string` | Per-agent reasoning override passed to nested sessions |
-| `sub_agents.<name>.timeoutMs` | `integer` (1..3600000) | Per-agent execution timeout in milliseconds. Builtin defaults: explore=120000, librarian=240000, oracle=300000, general=600000. YAML equivalent: `timeout_ms`. |
+| `sub_agents.<name>.timeoutMs` | `integer` (1..3600000) | Per-agent execution timeout in milliseconds. Builtin defaults: explore=120000, librarian=240000, oracle=300000, general=600000, reviewer=240000. YAML equivalent: `timeout_ms`. |
 | `sub_agents.<name>.fallbackModels` | `string[]` (max 5) | Ordered list of fallback models tried on `provider_or_model_unavailable` failures. Read-only agents only (`general` and mutating YAML agents are ineligible). YAML equivalent: `fallback_models`. |
-| `sub_agents.<name>.promptMode` | `"static" \| "append"` | **RESERVED / PARTIALLY IMPLEMENTED** — `"static"` (default) is the only safe value. `"append"` is accepted by the schema but throws at runtime ("not yet supported"). YAML equivalent: `prompt_mode`. |
-| `sub_agents.<name>.temperature` | `number` | **RESERVED / UNSUPPORTED** — accepted by schema for forward-compatibility but NOT passed to the nested Pi CLI (Pi does not accept `--temperature`). Visible under "Reserved / Unsupported Settings" in `/blackbytes-status`. |
+| `sub_agents.<name>.promptMode` | `"static" \| "append"` | **RESERVED / PARTIALLY IMPLEMENTED** - `"static"` (default) is the only safe value. `"append"` is accepted by the schema but throws at runtime ("not yet supported"). YAML equivalent: `prompt_mode`. |
+| `sub_agents.<name>.temperature` | `number` | **RESERVED / UNSUPPORTED** - accepted by schema for forward-compatibility but NOT passed to the nested Pi CLI (Pi does not accept `--temperature`). Visible under "Reserved / Unsupported Settings" in `/blackbytes-status`. |
 
 ### Configuration notes
 
 - The settings file is strict JSON. Comments and trailing commas are not supported.
 - Per-agent config (model, reasoningEffort, reserved fields) is resolved once at `session_start` into an immutable snapshot. Changes to `settings.json` after startup take effect on the next session only.
 - Unknown keys inside `blackbytes` are preserved by the parser, so wizard-managed passthrough values can coexist with the validated Blackbytes settings.
-- `disabled_tools` uses public tool names such as `hashline_edit` or `docs_query`. Disabled tools are enforced through every nested delegate path — builtin agents, and both the default and allowlist/denylist forms of YAML agents.
-- `disabled_sub_agents` uses agent names, not tool names: `explore`, `oracle`, `librarian`, `general`.
+- `disabled_tools` uses public tool names such as `hashline_edit` or `docs_query`. Disabled tools are enforced through every nested delegate path - builtin agents, and both the default and allowlist/denylist forms of YAML agents.
+- `disabled_sub_agents` uses agent names, not tool names: `explore`, `oracle`, `librarian`, `general`, `reviewer`.
 - `system_prompt_log` is intentionally opt-in. The `agent_start` capture is the canonical Pi-effective prompt; provider capture is only for verifying serialization and extracts system-like fields instead of dumping the full provider payload.
 - `temperature` is accepted by the schema for forward-compatibility but is NOT applied. See `/blackbytes-status` → "Reserved / Unsupported Settings" for details.
 
@@ -128,10 +128,11 @@ Blackbytes reads the top-level `blackbytes` object from the Pi settings file.
 
 | Tool | Purpose |
 |---|---|
-| `delegate_explore` | Read-only codebase discovery for “where is X?” work |
+| `delegate_explore` | Read-only codebase discovery for "where is X?" work |
 | `delegate_oracle` | Read-only high-reasoning consultation for difficult debugging or design questions |
 | `delegate_librarian` | Read-only docs, web, and cross-repository research |
 | `delegate_general` | Full-access execution for well-scoped multi-file implementation work |
+| `delegate_reviewer` | Read-only code reviewer for diffs, patches, and PRs; produces severity-classified findings (High/Medium/Low) and a Verdict |
 
 ### YAML sub-agents
 
@@ -140,10 +141,10 @@ User-defined sub-agents can be placed in `$PI_AGENT_DIR/sub-agents/*.{yaml,yml}`
 Additional optional YAML fields:
 
 ```yaml
-# ~/.pi/agent/sub-agents/reviewer.yaml
-name: reviewer
-description: Code review specialist
-tool_description: Launch a code reviewer agent...
+# ~/.pi/agent/sub-agents/deep-reviewer.yaml
+name: deep-reviewer
+description: Deep code review specialist
+tool_description: Launch a deep code review agent...
 allowed_tools:
   - read
   - grep
@@ -165,9 +166,19 @@ Key behaviors:
 - Diagnostics (skipped files and reasons) appear in `/blackbytes-status` under **### YAML Sub-Agents**.
 - `disabled_tools` is enforced on YAML agents the same as on builtins.
 
-### General agent safety overlay
+### Sub-agent system prompts
 
-When `delegate_general` is invoked, Blackbytes prepends a bounded safety overlay (~8 KB) to the nested session's system prompt. The overlay includes:
+Each builtin sub-agent receives a two-layer system prompt: a runtime overlay prepended by the host, followed by the agent's static persona prompt.
+
+**Read-only sub-agent runtime overlay (~4 KB)** — applied to Explore, Oracle, Librarian, and Reviewer via `prependSystemPrompt`. Contains:
+
+- Current date (ISO YYYY-MM-DD and current year), so date-sensitive queries always use the correct year
+- Working directory for the nested session
+- Final tool allowlist for that invocation (alphabetically sorted, secrets redacted)
+
+The overlay is capped at ~4 KB, built by `src/sub-agents/runtime-overlay.ts`, and never injects delegation hints — nested sessions cannot spawn further sub-agents.
+
+**General agent safety overlay (~8 KB)** — applied to General instead of the read-only overlay. Contains:
 
 - Current working directory
 - Finalized allowed tool list for that invocation
@@ -182,15 +193,15 @@ Live streaming of nested sub-agent output into the parent session is **not suppo
 
 ### What was investigated (pib-vyj.2.5)
 
-Pi's `ToolDefinition.execute` callback receives an `onUpdate: AgentToolUpdateCallback<TDetails>` parameter. The bash tool uses this to stream partial command output into the TUI in real time. Calling `onUpdate` does **not** append content to the final tool result that the LLM sees — it is a pure UI streaming surface. `runNestedPi` already accepts an internal `onUpdate?: (chunk: string) => void` option and forwards each stdout chunk to it.
+Pi's `ToolDefinition.execute` callback receives an `onUpdate: AgentToolUpdateCallback<TDetails>` parameter. The bash tool uses this to stream partial command output into the TUI in real time. Calling `onUpdate` does **not** append content to the final tool result that the LLM sees - it is a pure UI streaming surface. `runNestedPi` already accepts an internal `onUpdate?: (chunk: string) => void` option and forwards each stdout chunk to it.
 
 ### Why streaming is not wired
 
 Despite the Pi surface being technically safe (no LLM context leakage from intermediate calls), we chose **not** to wire nested-Pi stdout through `onUpdate` for three reasons:
 
-1. **Overwhelming raw output** — nested-Pi stdout is the full agent conversation: reasoning tokens, tool calls, tool results, and final output. Streaming this to the parent TUI would be unreadable.
-2. **No secret redaction on the streaming path** — `redactFailureText` is applied only to failure detail strings. Raw stdout chunks may contain API keys or other sensitive values emitted by nested tool calls.
-3. **Scope constraint** — the design contract explicitly prohibits dumping nested stdout into the parent context, even via the UI.
+1. **Overwhelming raw output** - nested-Pi stdout is the full agent conversation: reasoning tokens, tool calls, tool results, and final output. Streaming this to the parent TUI would be unreadable.
+2. **No secret redaction on the streaming path** - `redactFailureText` is applied only to failure detail strings. Raw stdout chunks may contain API keys or other sensitive values emitted by nested tool calls.
+3. **Scope constraint** - the design contract explicitly prohibits dumping nested stdout into the parent context, even via the UI.
 
 ### When streaming would become supportable
 
@@ -218,32 +229,23 @@ Until then, the delegate tool result remains a single concise text block returne
 - `lines: null` deletes the targeted line or range.
 - When a mismatch occurs, the tool returns updated anchors for recovery.
 
-Load the bundled `hashline-workflow` skill for the detailed operating guide.
-
 ## Delegation model
 
 - **Explore** locates files, symbols, and call sites in the local repository.
 - **Oracle** handles hard architectural reasoning and elevated debugging.
 - **Librarian** researches external APIs, official docs, and public code examples.
 - **General** executes large, well-defined implementation tasks with the session's enabled tool set.
+- **Reviewer** reviews changed code—diffs, patches, and PR descriptions—and produces severity-classified findings (High/Medium/Low) with a Verdict. The caller must supply the diff or file list; the Reviewer cannot run git itself.
 
 Nested delegation is limited to one level. Delegate sessions do not receive the `delegate_*` tools again, so recursion is blocked at runtime rather than by prompt text alone.
 
 ### Model fallback
 
-Read-only agents (`explore`, `oracle`, `librarian`, and YAML agents that do not include mutating tools) support an optional `fallbackModels` chain. When the primary model returns a `provider_or_model_unavailable` failure, Blackbytes retries each model in the chain in order, all within a single shared timeout budget (minimum 1 s per attempt). No other failure kinds trigger a retry (`timed_out`, `cancelled`, `failed`, `spawn_error`, etc. are surfaced immediately). The attempted-models chain is appended to the user-visible failure message.
+Read-only agents (`explore`, `oracle`, `librarian`, `reviewer`, and YAML agents that do not include mutating tools) support an optional `fallbackModels` chain. When the primary model returns a `provider_or_model_unavailable` failure, Blackbytes retries each model in the chain in order, all within a single shared timeout budget (minimum 1 s per attempt). No other failure kinds trigger a retry (`timed_out`, `cancelled`, `failed`, `spawn_error`, etc. are surfaced immediately). The attempted-models chain is appended to the user-visible failure message.
 
 `general` is never fallback-eligible because its full-access mutability means partial retries could leave the workspace in an inconsistent state. YAML agents that include any mutating tool in `allowed_tools` are also ineligible.
 
 Configure via JSON `fallbackModels` (array of strings, max 5, unique, non-empty) or YAML `fallback_models`. `/blackbytes-status` displays the fallback chain with `→` separators; agents configured with `fallbackModels` but ineligible show an `(ineligible)` suffix.
-
-## Bundled skills
-
-| Skill | Purpose |
-|---|---|
-| `blackbytes-overview` | Orientation to Blackbytes tools, agents, and operating model |
-| `hashline-workflow` | Detailed LINE#ID editing workflow |
-| `delegation` | Guide for choosing the right delegate agent |
 
 ## Development
 

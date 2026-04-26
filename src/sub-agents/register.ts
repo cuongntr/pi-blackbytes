@@ -257,6 +257,7 @@ const SUB_AGENT_ICONS: Record<string, string> = {
   oracle: "🧠",
   librarian: "📚",
   general: "⚡",
+  reviewer: "🔍",
 };
 
 /** Derive the primary display key from a declaration's parameter schema. */

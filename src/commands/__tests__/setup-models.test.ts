@@ -173,7 +173,7 @@ test("setup-models: missing settings file — creates sub-agent model mappings",
   const bb = written.blackbytes as Record<string, unknown>;
   const subAgents = bb.sub_agents as Record<string, Record<string, unknown>>;
 
-  for (const name of ["explore", "oracle", "librarian", "general"]) {
+  for (const name of ["explore", "oracle", "librarian", "general", "reviewer"]) {
     assert.equal(subAgents[name]?.model, "anthropic/claude-sonnet-4-5");
   }
 
@@ -322,6 +322,7 @@ test("setup-models: per-agent mode maps different Pi models and can clear one ov
       GPT_LABEL,
       INHERIT_LABEL,
       CLAUDE_LABEL,
+      INHERIT_LABEL,
     ],
     confirmResponses: [false], // configure reasoning? no
   });
@@ -349,6 +350,7 @@ test("setup-models: optional reasoning setup writes per-agent reasoningEffort", 
       "minimal",
       "high",
       "medium",
+      "off",
       "off",
     ],
     confirmResponses: [true], // configure reasoning

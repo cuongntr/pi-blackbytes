@@ -1,6 +1,6 @@
 # pi-blackbytes
 
-Pi coding-agent extension that replaces the websearch, context7, and grep.app MCP surfaces with direct HTTP tools, adds bundled local tools (`hashline_edit`, `ast_search`, `ast_replace`, `grep`, `glob`), and exposes delegated sub-agents (`explore`, `oracle`, `librarian`, `general`).
+Pi coding-agent extension that replaces the websearch, context7, and grep.app MCP surfaces with direct HTTP tools, adds bundled local tools (`hashline_edit`, `ast_search`, `ast_replace`, `grep`, `glob`), and exposes delegated sub-agents (`explore`, `oracle`, `librarian`, `general`, `reviewer`).
 
 ## Commands
 
@@ -56,6 +56,8 @@ All tools and sub-agents are registered in `handleSessionStart()` (`src/handlers
 1. Define a declaration with `defineSubAgent()` in `src/sub-agents/<name>.ts`
 2. Export the declaration and add it to `BUILTIN_DECLARATIONS` in `src/handlers/index.ts`
 3. Add metadata to `SUB_AGENTS` in `src/config/resource-metadata.ts`
+4. Add the icon to `SUB_AGENT_ICONS` in `src/sub-agents/register.ts`
+5. Update the hardcoded agent-name lists in the six affected test files (see `src/config/__tests__/enabled-set.test.ts` for the pattern)
 
 **User-defined sub-agents** are loaded from YAML files in `$PI_AGENT_DIR/sub-agents/*.{yaml,yml}` via `loadYamlDeclarations()`. Conflicts with builtins or earlier YAML files in the same directory are skipped with a diagnostic (not fatal); `/blackbytes-status` surfaces all skipped files and reasons.
 
@@ -65,7 +67,7 @@ Tool names use `snake_case` everywhere (for example `web_search`, `docs_resolve`
 
 - the registration function
 - `src/config/resource-metadata.ts`
-- prompt and skill documentation
+- prompt documentation
 - tests and config examples
 
 ### Config
@@ -95,7 +97,9 @@ The schema is `.passthrough()`, so wizard-managed extra keys in the `blackbytes`
 
 ### Sub-agents
 
-Sub-agents are defined as typed declarations (`SubAgentDeclaration`) and registered via `registerSubAgent()`. Builtin declarations live in `src/sub-agents/{explore,oracle,librarian,general}.ts`. User-defined agents are loaded from YAML files via `src/sub-agents/loader.ts`. All agents spawn nested `pi -p` sessions through `src/sub-agents/runner.ts`, which forces `--no-session`, `--no-context-files`, and (when reasoning is configured) `--thinking <effort>` on the nested CLI. Delegate allowlists are enforced at runtime, and nested sessions do not receive `delegate_*` tools again.
+Sub-agents are defined as typed declarations (`SubAgentDeclaration`) and registered via `registerSubAgent()`. Builtin declarations live in `src/sub-agents/{explore,oracle,librarian,general,reviewer}.ts`. User-defined agents are loaded from YAML files via `src/sub-agents/loader.ts`. All agents spawn nested `pi -p` sessions through `src/sub-agents/runner.ts`, which forces `--no-session`, `--no-context-files`, and (when reasoning is configured) `--thinking <effort>` on the nested CLI. Delegate allowlists are enforced at runtime, and nested sessions do not receive `delegate_*` tools again.
+
+Read-only sub-agents (explore, oracle, librarian, reviewer) each declare a `prependSystemPrompt` hook that builds a lightweight (~4 KB) runtime overlay via `src/sub-agents/runtime-overlay.ts`. The overlay carries current date, working directory, and final tool allowlist, and is bounded with `redactSecrets` to strip sensitive values. The General sub-agent uses the larger (~8 KB) safety overlay from `src/sub-agents/general-safety-overlay.ts` instead, which additionally includes AGENTS.md-derived constraints.
 
 ## Code style
 

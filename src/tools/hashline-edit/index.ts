@@ -308,11 +308,15 @@ export function registerHashlineEditTool(pi: ExtensionAPI): void {
     promptGuidelines: [
       "Prefer hashline_edit over edit for all file modifications when available.",
       "Always read the target file first to obtain LINE#ID anchors before editing.",
+      "For repeated edits in the same file, re-read to refresh anchors before issuing another hashline_edit call.",
     ],
     description:
       "Edit files using LINE#ID format for precise, safe modifications. " +
       "Applies multiple edits bottom-up using anchors like '10#VK'. " +
-      "Supports replace, append, prepend operations on single lines or ranges.",
+      "Supports replace, append, prepend operations on single lines or ranges. " +
+      "Use lines:null to delete. Omit pos for BOF/EOF insertion. " +
+      "All edits in one call reference the original file snapshot — do not adjust for prior edits in the same batch. " +
+      "On >>> mismatch errors, copy the updated anchors from the error output and retry.",
     parameters: HashlineEditSchema,
     execute: async (_toolCallId: string, input: HashlineEditInput) => {
       const result = applyHashlineEdits(input);

@@ -27,6 +27,7 @@ import { librarianDeclaration } from "../sub-agents/librarian.js";
 import { loadYamlDeclarations } from "../sub-agents/loader.js";
 import { oracleDeclaration } from "../sub-agents/oracle.js";
 import { registerSubAgent } from "../sub-agents/register.js";
+import { reviewerDeclaration } from "../sub-agents/reviewer.js";
 import { initAgentSnapshot } from "../sub-agents/snapshot.js";
 import { assertUniqueNames } from "../sub-agents/validate-unique.js";
 import { registerAstGrepReplaceTool } from "../tools/ast-grep/replace.js";
@@ -60,6 +61,7 @@ const BUILTIN_DECLARATIONS = [
   oracleDeclaration,
   librarianDeclaration,
   generalDeclaration,
+  reviewerDeclaration,
 ];
 export async function handleSessionStart(
   pi: ExtensionAPI,

@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.2.4 (2026-04-27)
+
+### Improved
+
+- **Librarian sub-agent activation**: strengthened tool description and prompt overlay so the primary agent delegates external-library/docs/API research to `delegate_librarian` more readily when users request research, investigation, or lookup (including Vietnamese phrases like "tìm hiểu", "tra cứu").
+- **External Content Safety**: added a safety section to the librarian system prompt treating web pages, docs, GitHub files, and fetched URLs as untrusted data — the sub-agent will not follow instructions found in external content.
+- **Prompt overlay**: session capabilities and conditional workflows now include librarian-specific guidance ("Prefer `librarian` for explicit, non-trivial research requests…") that only renders when the librarian sub-agent is enabled.
+- **Scoped wording**: tool description uses "non-trivial external research" with explicit escape hatches (purely local, trivial, or user opts out) to avoid over-delegation.
+
+### Changed
+
+- Librarian resource-metadata description updated from "Multi-repo analysis, documentation lookup" to "External docs/library/API research and open-source examples".
+
+### Tests
+
+- Regression test for librarian-specific overlay guidance presence/absence.
+- Regression test for tool description wording guards and external-content safety section.
+
 ## 0.2.3 (2026-04-27)
 
 ### Changed

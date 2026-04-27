@@ -42,6 +42,22 @@ describe("bytes overlay rendering", () => {
     }
   });
 
+  it("renders librarian-specific trigger guidance only when librarian is enabled", () => {
+    const withLibrarian = renderPrompt("claude", [], ["librarian"]);
+    assert.ok(withLibrarian.includes("Prefer `librarian` for explicit, non-trivial"));
+    assert.ok(withLibrarian.includes("strong signal to call `delegate_librarian` first"));
+    assert.ok(withLibrarian.includes('"tìm hiểu"'));
+
+    const withoutLibrarian = renderPrompt(
+      "claude",
+      ["web_search", "web_fetch", "docs_resolve", "docs_query", "gh_search"],
+      ["explore"],
+    );
+    assert.ok(!withoutLibrarian.includes("Prefer `librarian` for explicit, non-trivial"));
+    assert.ok(!withoutLibrarian.includes("strong signal to call `delegate_librarian` first"));
+    assert.ok(!withoutLibrarian.includes('"tìm hiểu"'));
+  });
+
   it("omits delegation guidance when sub-agents are unavailable", () => {
     const prompt = renderPrompt(
       "claude",

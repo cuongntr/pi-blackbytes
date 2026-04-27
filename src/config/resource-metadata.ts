@@ -78,7 +78,7 @@ export const SUB_AGENTS: readonly SubAgentMeta[] = [
   },
   {
     name: "librarian",
-    description: "Multi-repo analysis, documentation lookup",
+    description: "External docs/library/API research and open-source examples",
     promptFeatures: ["subagentDelegation"],
   },
   {

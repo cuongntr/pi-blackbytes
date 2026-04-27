@@ -22,6 +22,14 @@ function buildSessionCapabilitiesBody(context: BytesPromptRenderContext): string
     );
   }
 
+  if (context.enabledSubAgents.has("librarian")) {
+    lines.push(
+      "- Prefer `librarian` for explicit, non-trivial research requests about external " +
+        "libraries, frameworks, packages, APIs, docs, open-source internals, examples, " +
+        "changelogs, or URLs.",
+    );
+  }
+
   if (context.features.documentationLookup) {
     lines.push(
       "- Documentation lookup may be available for library and framework behavior; use it when official docs matter.",
@@ -54,6 +62,15 @@ function buildConditionalWorkflowsBody(context: BytesPromptRenderContext): strin
   if (context.features.subagentDelegation) {
     lines.push(
       "- Delegate when specialization materially reduces search cost, implementation risk, or execution time; do not delegate by reflex.",
+    );
+  }
+
+  if (context.enabledSubAgents.has("librarian")) {
+    lines.push(
+      '- Treat user phrases like "research", "look up", "investigate", "tìm hiểu", ' +
+        'or "tra cứu" about external docs/library/API topics as a strong signal to call ' +
+        "`delegate_librarian` first when external lookup is needed, unless the task is " +
+        "purely local, trivial, or the user explicitly opts out.",
     );
   }
 

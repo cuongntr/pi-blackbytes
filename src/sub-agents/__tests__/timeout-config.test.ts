@@ -25,6 +25,7 @@ import { generalDeclaration } from "../general.js";
 import { librarianDeclaration } from "../librarian.js";
 import { oracleDeclaration } from "../oracle.js";
 import { registerSubAgent } from "../register.js";
+import { reviewerDeclaration } from "../reviewer.js";
 import type { SpawnFn } from "../runner.js";
 import { runNestedPi } from "../runner.js";
 import { _resetAgentSnapshot, initAgentSnapshot, resolveAgentSnapshot } from "../snapshot.js";
@@ -123,24 +124,29 @@ describe("timeoutMs builtin defaults", () => {
     _resetEnabledSet();
   });
 
-  it("explore has default timeoutMs=120000", () => {
+  it("explore has default timeoutMs=600000", () => {
     const snap = resolveAgentSnapshot(exploreDeclaration, defaultConfig);
-    assert.equal(snap.timeoutMs, 120_000);
-  });
-
-  it("librarian has default timeoutMs=240000", () => {
-    const snap = resolveAgentSnapshot(librarianDeclaration, defaultConfig);
-    assert.equal(snap.timeoutMs, 240_000);
-  });
-
-  it("oracle has default timeoutMs=300000", () => {
-    const snap = resolveAgentSnapshot(oracleDeclaration, defaultConfig);
-    assert.equal(snap.timeoutMs, 300_000);
-  });
-
-  it("general has default timeoutMs=600000", () => {
-    const snap = resolveAgentSnapshot(generalDeclaration, defaultConfig);
     assert.equal(snap.timeoutMs, 600_000);
+  });
+
+  it("librarian has default timeoutMs=900000", () => {
+    const snap = resolveAgentSnapshot(librarianDeclaration, defaultConfig);
+    assert.equal(snap.timeoutMs, 900_000);
+  });
+
+  it("oracle has default timeoutMs=1200000", () => {
+    const snap = resolveAgentSnapshot(oracleDeclaration, defaultConfig);
+    assert.equal(snap.timeoutMs, 1_200_000);
+  });
+
+  it("general has default timeoutMs=1800000", () => {
+    const snap = resolveAgentSnapshot(generalDeclaration, defaultConfig);
+    assert.equal(snap.timeoutMs, 1_800_000);
+  });
+
+  it("reviewer has default timeoutMs=900000", () => {
+    const snap = resolveAgentSnapshot(reviewerDeclaration, defaultConfig);
+    assert.equal(snap.timeoutMs, 900_000);
   });
 });
 

@@ -101,7 +101,7 @@ export const exploreDeclaration = defineSubAgent<{ question: string }>({
   mutability: "read-only",
   finalizeMode: "strict",
   source: "builtin",
-  staticOverrides: { timeoutMs: 120_000 },
+  staticOverrides: { timeoutMs: 600_000 },
   buildUserPrompt: (p) => p.question,
   prependSystemPrompt: ({ cwd, finalizedTools }) =>
     buildSubAgentRuntimeOverlay({

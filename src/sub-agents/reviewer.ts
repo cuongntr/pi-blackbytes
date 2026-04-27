@@ -133,7 +133,7 @@ export const reviewerDeclaration = defineSubAgent<{
   mutability: "read-only",
   finalizeMode: "strict",
   source: "builtin",
-  staticOverrides: { timeoutMs: 240_000 },
+  staticOverrides: { timeoutMs: 900_000 },
   buildUserPrompt: (p) =>
     p.context ? `${p.request}\n\n---\n\nReview context:\n${p.context}` : p.request,
   prependSystemPrompt: ({ cwd, finalizedTools }) =>

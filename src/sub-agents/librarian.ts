@@ -126,7 +126,7 @@ export const librarianDeclaration = defineSubAgent<{ question: string }>({
   mutability: "read-only",
   finalizeMode: "strict",
   source: "builtin",
-  staticOverrides: { timeoutMs: 240_000 },
+  staticOverrides: { timeoutMs: 900_000 },
   buildUserPrompt: (p) => p.question,
   prependSystemPrompt: ({ cwd, finalizedTools }) =>
     buildSubAgentRuntimeOverlay({

@@ -55,7 +55,7 @@ Blackbytes reads the top-level `blackbytes` object from the Pi settings file.
       "oracle": {
         "model": "openai/gpt-5.4",
         "reasoningEffort": "high",
-        "timeoutMs": 300000,
+        "timeoutMs": 1200000,
         "fallbackModels": ["anthropic/claude-opus-4"],
         "temperature": 0.2
       },
@@ -87,7 +87,7 @@ Blackbytes reads the top-level `blackbytes` object from the Pi settings file.
 | `system_prompt_log.dedupe` | `boolean` | Avoid repeated identical prompt entries per session/source/provider shape. Defaults to `true`. |
 | `sub_agents.<name>.model` | `string` | Per-agent model override, preferably the canonical Pi model reference `provider/model-id` selected by `/setup-models`. Omit/clear to inherit the host Pi model. |
 | `sub_agents.<name>.reasoningEffort` | `string` | Per-agent reasoning override passed to nested sessions |
-| `sub_agents.<name>.timeoutMs` | `integer` (1..3600000) | Per-agent execution timeout in milliseconds. Builtin defaults: explore=120000, librarian=240000, oracle=300000, general=600000, reviewer=240000. YAML equivalent: `timeout_ms`. |
+| `sub_agents.<name>.timeoutMs` | `integer` (1..3600000) | Per-agent execution timeout in milliseconds. Builtin defaults: explore=600000, librarian=900000, oracle=1200000, general=1800000, reviewer=900000. YAML equivalent: `timeout_ms`. |
 | `sub_agents.<name>.fallbackModels` | `string[]` (max 5) | Ordered list of fallback models tried on `provider_or_model_unavailable` failures. Read-only agents only (`general` and mutating YAML agents are ineligible). YAML equivalent: `fallback_models`. |
 | `sub_agents.<name>.promptMode` | `"static" \| "append"` | **RESERVED / PARTIALLY IMPLEMENTED** - `"static"` (default) is the only safe value. `"append"` is accepted by the schema but throws at runtime ("not yet supported"). YAML equivalent: `prompt_mode`. |
 | `sub_agents.<name>.temperature` | `number` | **RESERVED / UNSUPPORTED** - accepted by schema for forward-compatibility but NOT passed to the nested Pi CLI (Pi does not accept `--temperature`). Visible under "Reserved / Unsupported Settings" in `/blackbytes-status`. |

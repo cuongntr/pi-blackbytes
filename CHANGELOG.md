@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.3 (2026-04-27)
+
+### Changed
+
+- Increased builtin sub-agent timeout defaults: explore=600000, librarian=900000, oracle=1200000, reviewer=900000, general=1800000.
+
 ## 0.2.2 (2026-04-26)
 
 ### Fixed

@@ -111,7 +111,7 @@ export const oracleDeclaration = defineSubAgent<{
   finalizeMode: "strict",
   buildUserPrompt: (p) =>
     p.context ? `${p.question}\n\n---\n\nAdditional context:\n${p.context}` : p.question,
-  staticOverrides: { reasoningEffort: "high", timeoutMs: 300_000 },
+  staticOverrides: { reasoningEffort: "high", timeoutMs: 1_200_000 },
   source: "builtin",
   prependSystemPrompt: ({ cwd, finalizedTools }) =>
     buildSubAgentRuntimeOverlay({

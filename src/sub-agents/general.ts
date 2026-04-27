@@ -100,7 +100,7 @@ export const generalDeclaration = defineSubAgent<{ task: string; context?: strin
   mutability: "full-access",
   finalizeMode: "strict",
   source: "builtin",
-  staticOverrides: { timeoutMs: 600_000 },
+  staticOverrides: { timeoutMs: 1_800_000 },
   prependSystemPrompt: ({ cwd, finalizedTools }) =>
     buildGeneralSafetyOverlay({
       cwd,

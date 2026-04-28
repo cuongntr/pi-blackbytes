@@ -74,6 +74,24 @@ describe("resolveAgentSnapshot", () => {
     assert.equal(snap.model, "decl-model", "fell back to declaration default");
   });
 
+  it("coerces invalid legacy reasoningEffort values to undefined", () => {
+    const config: BlackbytesConfig = {
+      ...baseConfig,
+      sub_agents: { explore: { reasoningEffort: "invalid_old_value" } },
+    };
+    const snap = resolveAgentSnapshot(baseDecl, config);
+    assert.equal(snap.reasoningEffort, undefined, "invalid value coerced to undefined");
+  });
+
+  it("preserves valid reasoningEffort values including off", () => {
+    const config: BlackbytesConfig = {
+      ...baseConfig,
+      sub_agents: { explore: { reasoningEffort: "off" } },
+    };
+    const snap = resolveAgentSnapshot(baseDecl, config);
+    assert.equal(snap.reasoningEffort, "off");
+  });
+
   it("preserves temperature as reserved (not threaded into runtime)", () => {
     const config: BlackbytesConfig = {
       ...baseConfig,

@@ -275,7 +275,7 @@ The extension bootstraps from `src/index.ts` and wires the core session handlers
 - `before_agent_start` renders the capability-aware Bytes v2 overlay, injects `<available_resources>`, and uses a minimal safe fallback if the enabled set is unavailable
 - `agent_start` captures Pi's final effective system prompt to the configured JSONL log when `system_prompt_log.enabled` is true
 - `model_select` caches the current model family for later requests
-- `before_provider_request` maps reasoning settings to provider-native fields and optionally captures provider-serialized system fields
+- `before_provider_request` optionally captures provider-serialized system prompts when `system_prompt_log.capture_provider_system` is enabled
 - `tool_result` rewrites `read`/`write` results for the hashline workflow
 - `session_shutdown` flushes the buffered logger
 

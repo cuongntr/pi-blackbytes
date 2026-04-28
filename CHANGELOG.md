@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.2.5 (2026-04-28)
+
+### Changed
+
+- **Reasoning effort handling**: reasoning parameters are no longer mapped onto provider payloads in `before_provider_request`. The host session relies on Pi's native reasoning controls; sub-agent reasoning continues to be passed via the `--thinking <effort>` CLI flag.
+- **`/setup-models` wizard**: skips thinking-level configuration for sub-agents whose assigned model does not advertise reasoning support.
+- **Reasoning effort normalization**: invalid legacy `reasoningEffort` values in config are coerced to `undefined` rather than being forwarded to the nested Pi CLI. Only Pi-valid levels (`off`, `minimal`, `low`, `medium`, `high`, `xhigh`) are accepted.
+
+### Removed
+
+- `src/handlers/before-provider-request.ts` and its unit tests.
+
 ## 0.2.4 (2026-04-27)
 
 ### Improved

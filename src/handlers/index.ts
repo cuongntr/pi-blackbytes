@@ -14,7 +14,6 @@ import { loadBlackbytesConfig } from "../config/loader.js";
 import { registerSubAgentMeta } from "../config/resource-metadata.js";
 import { getLogger } from "../shared/logger.js";
 import { setModelFamily } from "../shared/model-capability.js";
-import { getModelFamily } from "../shared/model-capability.js";
 import { resetSessionRuntimeState } from "../shared/session-state.js";
 import {
   captureAgentStartSystemPrompt,
@@ -42,7 +41,6 @@ import { registerHashlineEditTool } from "../tools/hashline-edit/index.js";
 import { registerWebsearchFetchTool } from "../tools/websearch/fetch.js";
 import { registerWebsearchSearchTool } from "../tools/websearch/search.js";
 import { injectPromptAugmentation } from "./before-agent-start.js";
-import { mapReasoningEffort } from "./before-provider-request.js";
 import { registerCopilotHeader } from "./copilot-header.js";
 import { type ToolResultEvent as LocalToolResultEvent, processToolResult } from "./tool-result.js";
 /** Minimal shape of Pi's model_select event (not re-exported from the top-level package export). */
@@ -156,11 +154,6 @@ export async function handleBeforeProviderRequest(
 ): Promise<void> {
   const payload = event.payload as Record<string, unknown> | null | undefined;
   if (!payload) return;
-  const family = getModelFamily();
-  // Shell env override for the host session's reasoning effort.
-  // Sub-agents receive reasoning effort via --thinking CLI flag instead (see runner.ts).
-  const reasoningEffort = process.env.BLACKBYTES_REASONING_EFFORT;
-  mapReasoningEffort(payload, reasoningEffort, family);
 
   const config = await loadBlackbytesConfig();
   await captureProviderSystemPrompts(config, payload, ctx);

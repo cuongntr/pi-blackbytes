@@ -33,7 +33,7 @@ src/index.ts -> bootstrap(pi) -> wires 7 event handlers + 2 commands:
   before_agent_start      -> renders capability-aware Bytes v2 overlay + <available_resources>
   agent_start             -> captures Pi-effective system prompt to JSONL when system_prompt_log.enabled
   model_select            -> tracks current model family
-  before_provider_request -> maps reasoning params by provider family + optional provider-system capture
+  before_provider_request -> optional provider-serialized system prompt capture
   tool_result             -> rewrites read/write output for hashline workflow
   session_shutdown        -> flushes logger
 

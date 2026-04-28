@@ -96,47 +96,6 @@ describe("integration: before_provider_request", () => {
     }
   });
 
-  it("reasoning effort mapping: model_select + before_provider_request adds thinking param for claude", async () => {
-    // Arrange
-    const subDir = await makeTempDir();
-    let prevEffort: string | undefined;
-    try {
-      await writeSettings(subDir, JSON.stringify({ blackbytes: {} }));
-      process.env.PI_AGENT_DIR = subDir;
-
-      const mock = createMockPi();
-      bootstrap(mock);
-
-      mock.emit("session_start", {});
-      await waitForEnabledSet();
-
-      // Select a claude model → sets model family
-      await mock.emit("model_select", { model: { id: "claude-3-5-sonnet-20241022" } });
-      await settle();
-
-      // Fire before_provider_request with reasoningEffort via env var
-      prevEffort = process.env.BLACKBYTES_REASONING_EFFORT;
-      process.env.BLACKBYTES_REASONING_EFFORT = "high";
-      const payload: Record<string, unknown> = { temperature: 0.7 };
-      const event = { payload };
-      await mock.emit("before_provider_request", event);
-      await settle();
-
-      // Assert: thinking param added for claude
-      assert.ok(payload.thinking !== undefined, "thinking param should be added for claude model");
-      const thinking = payload.thinking as Record<string, unknown>;
-      assert.equal(thinking.type, "enabled", "thinking type should be 'enabled'");
-      assert.equal(thinking.budget_tokens, 50000, "high effort = 50000 tokens");
-    } finally {
-      if (prevEffort === undefined) {
-        delete process.env.BLACKBYTES_REASONING_EFFORT;
-      } else {
-        process.env.BLACKBYTES_REASONING_EFFORT = prevEffort;
-      }
-      await fs.rm(subDir, { recursive: true, force: true });
-    }
-  });
-
   it("non-copilot config: copilot_initiator_header=false does not register provider", async () => {
     // Arrange
     const subDir = await makeTempDir();
@@ -171,7 +130,7 @@ describe("integration: before_provider_request", () => {
 
   it("error resilience: payload forwarded unchanged when handler encounters error (no model selected)", async () => {
     // Arrange: bootstrap but fire before_provider_request WITHOUT model_select
-    // → getModelFamily() returns "other" (default), mapReasoningEffort is a no-op
+    // → handler only does system-prompt capture; payload is not mutated
     const subDir = await makeTempDir();
     try {
       await writeSettings(subDir, JSON.stringify({ blackbytes: {} }));
@@ -183,58 +142,21 @@ describe("integration: before_provider_request", () => {
       mock.emit("session_start", {});
       await waitForEnabledSet();
 
-      // No model_select → family defaults to "other"
       const payload: Record<string, unknown> = { temperature: 0.5 };
       const payloadSnapshot = { ...payload };
-      const event = { payload, reasoningEffort: "high" };
+      const event = { payload };
 
       // Should not throw
       await mock.emit("before_provider_request", event);
       await settle();
 
-      // For "other" family, mapReasoningEffort is a no-op → payload unchanged
+      // Handler does not mutate payload → unchanged
       assert.deepEqual(
         payload,
         payloadSnapshot,
-        "payload should be unchanged for 'other' model family",
+        "payload should be unchanged (handler does not mutate payload)",
       );
     } finally {
-      await fs.rm(subDir, { recursive: true, force: true });
-    }
-  });
-
-  it("uses model family cached during before_agent_start before model_select runs", async () => {
-    const subDir = await makeTempDir();
-    let prevEffort: string | undefined;
-    try {
-      await writeSettings(subDir, JSON.stringify({ blackbytes: {} }));
-      process.env.PI_AGENT_DIR = subDir;
-
-      const mock = createMockPi();
-      bootstrap(mock);
-
-      mock.emit("session_start", {});
-      await waitForEnabledSet();
-
-      await mock.emit(
-        "before_agent_start",
-        { systemPrompt: "Base prompt." },
-        { model: { id: "gpt-5.4" }, ui: { notify: () => {} } },
-      );
-      await settle();
-
-      const payload: Record<string, unknown> = {};
-      prevEffort = process.env.BLACKBYTES_REASONING_EFFORT;
-      process.env.BLACKBYTES_REASONING_EFFORT = "medium";
-      await mock.emit("before_provider_request", { payload });
-      await settle();
-      assert.equal(payload.reasoning_effort, "medium");
-    } finally {
-      if (prevEffort === undefined) {
-        delete process.env.BLACKBYTES_REASONING_EFFORT;
-      } else {
-        process.env.BLACKBYTES_REASONING_EFFORT = prevEffort;
-      }
       await fs.rm(subDir, { recursive: true, force: true });
     }
   });

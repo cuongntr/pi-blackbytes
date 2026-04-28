@@ -40,6 +40,15 @@ const KNOWN_AGENT_FIELDS = new Set([
   "promptMode",
 ]);
 
+/** Pi CLI accepted thinking levels (packages/coding-agent/src/cli/args.ts). */
+const PI_VALID_THINKING_LEVELS = new Set(["off", "minimal", "low", "medium", "high", "xhigh"]);
+
+/** Coerce invalid legacy reasoning-effort values to undefined. */
+function normalizeReasoningEffort(value: string | undefined): string | undefined {
+  if (!value) return undefined;
+  return PI_VALID_THINKING_LEVELS.has(value) ? value : undefined;
+}
+
 /** Summarized allowed-tools for display in /blackbytes-status. */
 export type AllowedToolsSummary =
   | { mode: "exact"; tools: readonly string[] }
@@ -145,7 +154,7 @@ export function resolveAgentSnapshot(
   const reserved: Record<string, unknown> = {};
   const extra: Record<string, unknown> = {};
   let jsonModel: string | undefined;
-  let jsonReasoning: string | undefined;
+  let rawJsonReasoning: string | undefined;
   let jsonTimeoutMs: number | undefined;
   let jsonFallbackModels: readonly string[] | undefined;
   let jsonPromptMode: "static" | "append" | undefined;
@@ -153,7 +162,7 @@ export function resolveAgentSnapshot(
   if (jsonForAgent && typeof jsonForAgent === "object") {
     const obj = jsonForAgent as Record<string, unknown>;
     if (typeof obj.model === "string") jsonModel = obj.model;
-    if (typeof obj.reasoningEffort === "string") jsonReasoning = obj.reasoningEffort;
+    if (typeof obj.reasoningEffort === "string") rawJsonReasoning = obj.reasoningEffort;
     if (isValidTimeoutMs(obj.timeoutMs)) jsonTimeoutMs = obj.timeoutMs;
     if (obj.temperature !== undefined) reserved.temperature = obj.temperature;
     if (obj.promptMode === "static" || obj.promptMode === "append") {
@@ -170,6 +179,9 @@ export function resolveAgentSnapshot(
     }
   }
 
+  const jsonReasoning = normalizeReasoningEffort(rawJsonReasoning);
+  const defaultReasoning = normalizeReasoningEffort(declDefaults.reasoningEffort);
+
   // Compute fallback eligibility: read-only mutability AND no mutating tools in resolved allowlist.
   const resolvedTools =
     typeof declaration.allowedTools === "function"
@@ -184,7 +196,7 @@ export function resolveAgentSnapshot(
     source: declaration.source ?? "builtin",
     sourcePath: declaration.sourcePath,
     model: jsonModel ?? declDefaults.model,
-    reasoningEffort: jsonReasoning ?? declDefaults.reasoningEffort,
+    reasoningEffort: jsonReasoning ?? defaultReasoning,
     timeoutMs: jsonTimeoutMs ?? declDefaults.timeoutMs,
     promptMode: jsonPromptMode ?? declaration.promptMode,
     fallbackModels: jsonFallbackModels ?? declDefaults.fallbackModels,

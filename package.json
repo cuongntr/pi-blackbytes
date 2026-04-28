@@ -1,6 +1,6 @@
 {
   "name": "pi-blackbytes",
-  "version": "0.2.4",
+  "version": "0.2.5",
   "type": "module",
   "engines": {
     "node": ">=20"
@@ -13,6 +13,7 @@
     ]
   },
   "files": [
+    "prompts/*.md",
     "dist",
     "README.md",
     "CHANGELOG.md",

@@ -357,6 +357,24 @@ function formatAgentForPrompt(agent: AgentDescriptor): string {
   return parts.join(" — ");
 }
 
+function resolveAssignedModelRef(
+  action: FieldAction,
+  existingModel: string | undefined,
+): string | undefined {
+  if (action.kind === "set") return action.value;
+  if (action.kind === "keep") return existingModel;
+  return undefined; // inherit host model
+}
+
+function modelSupportsReasoning(
+  modelRef: string | undefined,
+  models: readonly PiModelLike[],
+): boolean {
+  if (!modelRef) return true; // inherit host — assume potentially supported
+  const model = models.find((m) => canonicalModelRef(m) === modelRef);
+  return model ? (model.reasoning ?? false) : true;
+}
+
 function buildModelChoices(
   models: readonly PiModelLike[],
   currentRef: string | undefined,
@@ -599,6 +617,21 @@ export function registerSetupModelsCommand(pi: ExtensionAPI): void {
 
       if (configureReasoning) {
         for (const agent of agents) {
+          const existingModel = getStringField(subAgents[agent.name], "model");
+          const modelAction = modelActions.get(agent.name);
+          const assignedModelRef = modelAction
+            ? resolveAssignedModelRef(modelAction, existingModel)
+            : existingModel;
+
+          if (!modelSupportsReasoning(assignedModelRef, models)) {
+            notify(
+              `Skipping thinking level for ${agent.name}: assigned model does not support reasoning.`,
+              "warning",
+            );
+            reasoningActions.set(agent.name, { kind: "clear" });
+            continue;
+          }
+
           const existingReasoning = getStringField(subAgents[agent.name], "reasoningEffort");
           const action = await selectAction(
             ctx,

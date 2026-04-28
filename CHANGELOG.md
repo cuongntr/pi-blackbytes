@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.7 (2026-04-28)
+
+### Fixed
+
+- **Package prompt discovery**: declares bundled prompt templates in the Pi package manifest via `pi.prompts` so Pi loads the published `prompts/*.md` files as slash commands.
+
 ## 0.2.6 (2026-04-28)
 
 ### Added

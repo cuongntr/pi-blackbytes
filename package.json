@@ -1,6 +1,6 @@
 {
   "name": "pi-blackbytes",
-  "version": "0.2.6",
+  "version": "0.2.7",
   "type": "module",
   "engines": {
     "node": ">=20"
@@ -10,6 +10,9 @@
   "pi": {
     "extensions": [
       "./dist/index.js"
+    ],
+    "prompts": [
+      "./prompts"
     ]
   },
   "files": [

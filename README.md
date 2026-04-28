@@ -199,27 +199,22 @@ The overlay is capped at ~4 KB, built by `src/sub-agents/runtime-overlay.ts`, an
 
 ## Progress / streaming
 
-Live streaming of nested sub-agent output into the parent session is **not supported**.
+Blackbytes supports **structured progress updates** for delegated sub-agents, but it still does **not** stream raw nested-Pi stdout into the parent session.
 
-### What was investigated (pib-vyj.2.5)
+### What is surfaced
 
-Pi's `ToolDefinition.execute` callback receives an `onUpdate: AgentToolUpdateCallback<TDetails>` parameter. The bash tool uses this to stream partial command output into the TUI in real time. Calling `onUpdate` does **not** append content to the final tool result that the LLM sees - it is a pure UI streaming surface. `runNestedPi` already accepts an internal `onUpdate?: (chunk: string) => void` option and forwards each stdout chunk to it.
+Delegate tools emit bounded, redacted `onUpdate` status events while the nested session runs. The parent UI can show:
+- agent name, status, model, working directory, and finalized tool allowlist
+- elapsed time, captured output size, current tool, and token/cost usage when available
+- a compact output preview with secrets redacted and length capped
 
-### Why streaming is not wired
+These updates are UI-only. They do **not** append intermediate nested output to the final tool result or to the parent model context.
 
-Despite the Pi surface being technically safe (no LLM context leakage from intermediate calls), we chose **not** to wire nested-Pi stdout through `onUpdate` for three reasons:
+### What is intentionally not streamed
 
-1. **Overwhelming raw output** - nested-Pi stdout is the full agent conversation: reasoning tokens, tool calls, tool results, and final output. Streaming this to the parent TUI would be unreadable.
-2. **No secret redaction on the streaming path** - `redactFailureText` is applied only to failure detail strings. Raw stdout chunks may contain API keys or other sensitive values emitted by nested tool calls.
-3. **Scope constraint** - the design contract explicitly prohibits dumping nested stdout into the parent context, even via the UI.
+Raw nested-Pi stdout is not forwarded. It contains the full nested conversation: reasoning tokens, tool calls, tool results, and final output. Dumping it into the parent UI would be noisy and may expose sensitive values from nested tool output.
 
-### When streaming would become supportable
-
-- Pi surfaces a **structured progress API** (typed status events, not raw stdout) from within a `ToolDefinition.execute` callback; **or**
-- The nested Pi CLI emits structured progress events (e.g. `--json-progress`) that can be filtered to a concise, safe summary; **and**
-- A chunk-level redaction utility is available to sanitize sensitive values before they reach the TUI.
-
-Until then, the delegate tool result remains a single concise text block returned after the nested session completes.
+The final delegate result remains a concise text block returned after the nested session completes. Use `system_prompt_log` only when you explicitly need opt-in system-prompt auditing.
 
 ## `hashline_edit`
 
@@ -260,23 +255,23 @@ Configure via JSON `fallbackModels` (array of strings, max 5, unique, non-empty)
 ## Development
 
 ```bash
+bun run check          # lint + typecheck + build + full test suite + package size
 bun run lint
+bun run typecheck
 bun run build
 bun run test
+bun run check:size
 
-bun run typecheck
 bun run lint:fix
 bun run format
 bun run bench:startup
 bun run bench:tool-result
-bun run check:size
 ```
 
 Recommended verification order:
 
-1. `bun run lint`
-2. `bun run build`
-3. `bun run test`
+1. `bun run check`
+2. For targeted iteration: `bun run lint` → `bun run typecheck` → `bun run build` → `bun run test`
 
 ## Architecture summary
 

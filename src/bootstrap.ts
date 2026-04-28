@@ -10,6 +10,7 @@ import {
   handleSessionStart,
   handleToolResult,
 } from "./handlers/index.js";
+import { registerCompactToolsCommand } from "./tools/compact-tools/index.js";
 
 // Utility function to wrap event handlers with error handling
 function wrap<E, R>(
@@ -50,4 +51,5 @@ export function bootstrap(pi: ExtensionAPI): void {
     },
   });
   registerSetupModelsCommand(pi);
+  registerCompactToolsCommand(pi);
 }

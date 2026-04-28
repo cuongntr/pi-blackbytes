@@ -11,7 +11,7 @@ export interface MockPiCalls {
 
 export interface MockPi {
   registerTool(definition: unknown): void;
-  registerCommand(definition: unknown): void;
+  registerCommand(name: string, options: unknown): void;
   registerProvider(name: string, opts: unknown): void;
   on(event: string, handler: (...args: any[]) => unknown | Promise<unknown>): void;
   setActiveTools(...args: unknown[]): void;
@@ -43,6 +43,8 @@ export function createMockPi(): MockPi & ExtensionAPI {
       input: async () => undefined as string | undefined,
       select: async () => undefined as string | undefined,
       confirm: async () => false,
+      getToolsExpanded: () => false,
+      setToolsExpanded: () => {},
     },
   };
 
@@ -53,8 +55,8 @@ export function createMockPi(): MockPi & ExtensionAPI {
       calls.registerTool.push(definition);
     },
 
-    registerCommand(definition: unknown): void {
-      calls.registerCommand.push(definition);
+    registerCommand(name: string, options: unknown): void {
+      calls.registerCommand.push({ name, options });
     },
 
     registerProvider(name: string, opts: unknown): void {

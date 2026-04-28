@@ -7,6 +7,7 @@ import {
 import { type YamlDiagnostics, getYamlDiagnostics } from "../sub-agents/diagnostics.js";
 import { getAgentSnapshot } from "../sub-agents/snapshot.js";
 import type { AgentSnapshot } from "../sub-agents/snapshot.js";
+import { getCompactToolsConfig } from "../tools/compact-tools/index.js";
 
 const SECRET_KEYS = ["api_key", "exa_api_key", "tavily_api_key", "authorization"];
 
@@ -214,6 +215,13 @@ export async function handleBlackbytesStatus(): Promise<string> {
     `- include_nested: ${systemPromptLog.include_nested}`,
     `- dedupe: ${systemPromptLog.dedupe}`,
   ];
+  const compactTools = getCompactToolsConfig(config);
+  const compactToolsLines = [
+    "### Compact Tool Output",
+    `- enabled: ${compactTools.enabled}`,
+    `- default_expanded: ${compactTools.defaultExpanded}`,
+    "- command: `/toggle-verbose`",
+  ];
 
   const lines: string[] = [
     "## Blackbytes Status",
@@ -228,6 +236,8 @@ export async function handleBlackbytesStatus(): Promise<string> {
     ...[...enabledSet.skills].map((s) => `- ${s}`),
     "",
     ...systemPromptLogLines,
+    "",
+    ...compactToolsLines,
     "",
     ...reservedLines,
     "",

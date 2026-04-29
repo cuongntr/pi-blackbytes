@@ -164,25 +164,40 @@ function buildYamlDiagnosticsSection(diag: YamlDiagnostics | undefined): string[
   return lines;
 }
 
-export async function handleBlackbytesStatus(): Promise<string> {
+// ---------------------------------------------------------------------------
+// Section builder — collects all status sections into a keyed map so the
+// interactive picker (and full-output path) can reuse the same data.
+// ---------------------------------------------------------------------------
+
+interface StatusSections {
+  overview: string[];
+  enabledTools: string[];
+  enabledSubAgents: string[];
+  enabledSkills: string[];
+  systemPromptLog: string[];
+  compactTools: string[];
+  reserved: string[];
+  snapshot: string[];
+  yaml: string[];
+  config: string[];
+}
+
+async function buildStatusSections(): Promise<StatusSections> {
+  const config = await loadBlackbytesConfig();
+  const redacted = redactConfig(config as unknown as Record<string, unknown>);
+
   let enabledSet: EnabledSet | undefined;
   try {
     enabledSet = getEnabledSet();
   } catch {
-    return "Blackbytes not initialized. Run a session first.";
+    // Not initialized
   }
 
-  const config = await loadBlackbytesConfig();
-  const redacted = redactConfig(config as unknown as Record<string, unknown>);
-
-  // Prefer the session-frozen snapshot. It folds in YAML defaults plus JSON
-  // overrides under deterministic precedence and won't drift if disk files
-  // change mid-session. Falls back to the live config when the snapshot is
-  // not available (e.g. status invoked before session_start completes).
   const snapshot = getAgentSnapshot();
   const reserved = snapshot
     ? collectReservedFromSnapshot(snapshot)
     : collectReservedAgentSettings((config as unknown as Record<string, unknown>).sub_agents);
+
   const reservedLines =
     reserved.length === 0
       ? ["### Reserved / Unsupported Settings", "_None._"]
@@ -223,33 +238,123 @@ export async function handleBlackbytesStatus(): Promise<string> {
     "- command: `/toggle-verbose`",
   ];
 
-  const lines: string[] = [
+  const toolCount = enabledSet ? enabledSet.tools.size : 0;
+  const agentCount = enabledSet ? enabledSet.subAgents.size : 0;
+  const skillCount = enabledSet ? enabledSet.skills.size : 0;
+
+  const overviewLines = [
     "## Blackbytes Status",
     "",
-    "### Enabled Tools",
-    ...[...enabledSet.tools].map((t) => `- ${t}`),
-    "",
-    "### Enabled Sub-Agents",
-    ...[...enabledSet.subAgents].map((a) => `- ${a}`),
-    "",
-    "### Enabled Skills",
-    ...[...enabledSet.skills].map((s) => `- ${s}`),
-    "",
-    ...systemPromptLogLines,
-    "",
-    ...compactToolsLines,
-    "",
-    ...reservedLines,
-    "",
-    ...snapshotLines,
-    "",
-    ...yamlLines,
-    "",
-    "### Config",
-    "```json",
-    JSON.stringify(redacted, null, 2),
-    "```",
+    `Tools: **${toolCount}** enabled | Agents: **${agentCount}** enabled | Skills: **${skillCount}** enabled`,
   ];
 
-  return lines.join("\n");
+  return {
+    overview: overviewLines,
+    enabledTools: [
+      "### Enabled Tools",
+      ...(enabledSet ? [...enabledSet.tools].map((t) => `- ${t}`) : ["_Not initialized._"]),
+    ],
+    enabledSubAgents: [
+      "### Enabled Sub-Agents",
+      ...(enabledSet ? [...enabledSet.subAgents].map((a) => `- ${a}`) : ["_Not initialized._"]),
+    ],
+    enabledSkills: [
+      "### Enabled Skills",
+      ...(enabledSet ? [...enabledSet.skills].map((s) => `- ${s}`) : ["_Not initialized._"]),
+    ],
+    systemPromptLog: systemPromptLogLines,
+    compactTools: compactToolsLines,
+    reserved: reservedLines,
+    snapshot: snapshotLines,
+    yaml: yamlLines,
+    config: ["### Config", "```json", JSON.stringify(redacted, null, 2), "```"],
+  };
+}
+
+function buildFullOutput(sections: StatusSections): string {
+  return [
+    ...sections.overview,
+    "",
+    ...sections.enabledTools,
+    "",
+    ...sections.enabledSubAgents,
+    "",
+    ...sections.enabledSkills,
+    "",
+    ...sections.systemPromptLog,
+    "",
+    ...sections.compactTools,
+    "",
+    ...sections.reserved,
+    "",
+    ...sections.snapshot,
+    "",
+    ...sections.yaml,
+    "",
+    ...sections.config,
+  ].join("\n");
+}
+
+// ---------------------------------------------------------------------------
+// Section menu labels → section keys
+// ---------------------------------------------------------------------------
+
+const SECTION_MENU: Array<{ label: string; key: keyof StatusSections }> = [
+  { label: "Enabled Tools", key: "enabledTools" },
+  { label: "Enabled Sub-Agents", key: "enabledSubAgents" },
+  { label: "Enabled Skills", key: "enabledSkills" },
+  { label: "Sub-Agent Snapshot", key: "snapshot" },
+  { label: "YAML Diagnostics", key: "yaml" },
+  { label: "System Prompt Log", key: "systemPromptLog" },
+  { label: "Compact Tool Output", key: "compactTools" },
+  { label: "Reserved / Unsupported Settings", key: "reserved" },
+  { label: "Full Config (JSON)", key: "config" },
+];
+
+const SHOW_ALL_LABEL = "Show All";
+
+// ---------------------------------------------------------------------------
+// Public API
+// ---------------------------------------------------------------------------
+
+export interface StatusInteractiveCtx {
+  ui: {
+    select(title: string, options: string[]): Promise<string | undefined>;
+  };
+}
+
+export async function handleBlackbytesStatus(ctx?: StatusInteractiveCtx): Promise<string> {
+  let enabledSet: EnabledSet | undefined;
+  try {
+    enabledSet = getEnabledSet();
+  } catch {
+    return "Blackbytes not initialized. Run a session first.";
+  }
+
+  // Suppress unused-variable lint — enabledSet is validated above to confirm
+  // initialization; the actual data is read inside buildStatusSections().
+  void enabledSet;
+
+  const sections = await buildStatusSections();
+
+  if (!ctx) {
+    return buildFullOutput(sections);
+  }
+
+  // Interactive mode: show overview + section picker
+  const menuOptions = [...SECTION_MENU.map((item) => item.label), SHOW_ALL_LABEL];
+
+  const selected = await ctx.ui.select(`Blackbytes Status — ${sections.overview[2]}`, menuOptions);
+
+  if (!selected || selected === SHOW_ALL_LABEL) {
+    return buildFullOutput(sections);
+  }
+
+  const menuItem = SECTION_MENU.find((item) => item.label === selected);
+  if (!menuItem) {
+    return buildFullOutput(sections);
+  }
+
+  const sectionLines = sections[menuItem.key];
+  return [...sections.overview, "", ...sectionLines].join("\n");
 }

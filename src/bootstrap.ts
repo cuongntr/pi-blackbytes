@@ -45,8 +45,8 @@ export function bootstrap(pi: ExtensionAPI): void {
   pi.on("tool_result", wrap("tool_result", handleToolResult));
   pi.on("session_shutdown", wrap("session_shutdown", handleSessionShutdown));
   pi.registerCommand("blackbytes-status", {
-    handler: async (_args: string, _ctx) => {
-      const output = await handleBlackbytesStatus();
+    handler: async (_args: string, ctx) => {
+      const output = await handleBlackbytesStatus(ctx);
       console.log(output);
     },
   });

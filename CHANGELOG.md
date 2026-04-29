@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.2.9 (2026-04-29)
+
+### Added
+
+- **Per-agent setup flow**: `/setup-models` wizard configures model and thinking level together for each agent before advancing to the next, replacing the previous two-loop flow (all models, then all thinking levels).
+- **Grouped provider picker**: when more than 10 models are available, model selection uses a two-step flow — select a provider (e.g., `anthropic (8 models)`), then pick a model within that provider. Cancel at the model step returns to the provider list.
+- **Batch shortcuts**: after the first agent, the wizard offers "⬆ Apply `<model>` to all remaining agents", "⬆ Apply `<level>` to all remaining agents", and "⏭ Skip thinking for all remaining agents" to reduce repetitive selections.
+- **Summary confirmation**: a formatted summary table (agent → model → thinking) is displayed and confirmed before writing to `settings.json`.
+- **Smart model ordering**: models selected earlier in the wizard session sort first in subsequent agent selections.
+- **One-for-all reasoning modes**: when using one model for all agents, the wizard offers three reasoning sub-modes: same level for all, configure per agent, or skip.
+- **Interactive `/blackbytes-status`**: the command opens an interactive section picker with a compact overview header (`Tools: N | Agents: N | Skills: N`). Users select one of 9 sections to view, or "Show All" for the full output.
+
+### Removed
+
+- Dead code: unused `selectAction` and `buildReasoningChoices` helper functions removed from setup-models.
+
+### Fixed
+
+- Summary display correctly shows existing reasoning levels for agents whose thinking configuration is skipped (previously showed "(default)" regardless).
+- Provider labels in grouped picker use a reverse-lookup map, preventing theoretical label collision with static choices.
+
 ## 0.2.8 (2026-04-29)
 
 ### Added

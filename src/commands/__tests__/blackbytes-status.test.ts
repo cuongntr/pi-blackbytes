@@ -5,7 +5,7 @@ import * as path from "node:path";
 import { afterEach, beforeEach, describe, it } from "node:test";
 import { _resetEnabledSet, initEnabledSet } from "../../config/enabled-set.js";
 import { parseBlackbytesConfig } from "../../config/schema.js";
-import { handleBlackbytesStatus } from "../blackbytes-status.js";
+import { type StatusInteractiveCtx, handleBlackbytesStatus } from "../blackbytes-status.js";
 
 async function makeTempAgentDir(): Promise<string> {
   return fs.mkdtemp(path.join(os.tmpdir(), "blackbytes-status-test-"));
@@ -272,5 +272,116 @@ describe("handleBlackbytesStatus YAML diagnostics section", () => {
       !outAfter.includes("different-agent"),
       "disk change must not affect active session output",
     );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Interactive section picker tests
+// ---------------------------------------------------------------------------
+
+describe("handleBlackbytesStatus interactive section picker", () => {
+  let tmpDir: string;
+  const originalAgentDir = process.env.PI_AGENT_DIR;
+
+  beforeEach(async () => {
+    tmpDir = await makeTempAgentDir();
+    process.env.PI_AGENT_DIR = tmpDir;
+    _resetEnabledSet();
+  });
+
+  afterEach(async () => {
+    if (originalAgentDir === undefined) {
+      delete process.env.PI_AGENT_DIR;
+    } else {
+      process.env.PI_AGENT_DIR = originalAgentDir;
+    }
+    await fs.rm(tmpDir, { recursive: true, force: true });
+    _resetEnabledSet();
+  });
+
+  function mockCtx(selectResponse: string | undefined): StatusInteractiveCtx {
+    return {
+      ui: {
+        select: async () => selectResponse,
+      },
+    };
+  }
+
+  it("returns full output when user selects 'Show All'", async () => {
+    await writeSettings(tmpDir, {});
+    const cfg = parseBlackbytesConfig({});
+    assert.ok(cfg.ok);
+    if (cfg.ok) initEnabledSet(cfg.value);
+
+    const fullOutput = await handleBlackbytesStatus();
+    const interactiveOutput = await handleBlackbytesStatus(mockCtx("Show All"));
+
+    assert.equal(interactiveOutput, fullOutput);
+  });
+
+  it("returns full output when user cancels selection (undefined)", async () => {
+    await writeSettings(tmpDir, {});
+    const cfg = parseBlackbytesConfig({});
+    assert.ok(cfg.ok);
+    if (cfg.ok) initEnabledSet(cfg.value);
+
+    const fullOutput = await handleBlackbytesStatus();
+    const interactiveOutput = await handleBlackbytesStatus(mockCtx(undefined));
+
+    assert.equal(interactiveOutput, fullOutput);
+  });
+
+  it("returns only selected section with overview when specific section chosen", async () => {
+    await writeSettings(tmpDir, {});
+    const cfg = parseBlackbytesConfig({});
+    assert.ok(cfg.ok);
+    if (cfg.ok) initEnabledSet(cfg.value);
+
+    const out = await handleBlackbytesStatus(mockCtx("System Prompt Log"));
+
+    // Should contain overview
+    assert.match(out, /## Blackbytes Status/);
+    // Should contain the selected section
+    assert.match(out, /### System Prompt Log/);
+    // Should NOT contain other sections
+    assert.ok(!out.includes("### Enabled Tools"), "should not include Enabled Tools section");
+    assert.ok(!out.includes("### Config"), "should not include Config section");
+    assert.ok(
+      !out.includes("### Sub-Agent Snapshot"),
+      "should not include Sub-Agent Snapshot section",
+    );
+  });
+
+  it("returns Reserved section when selected", async () => {
+    const blackbytes = {
+      sub_agents: {
+        oracle: { temperature: 0.42 },
+      },
+    };
+    await writeSettings(tmpDir, blackbytes);
+    const cfg = parseBlackbytesConfig(blackbytes);
+    assert.ok(cfg.ok);
+    if (cfg.ok) initEnabledSet(cfg.value);
+
+    const out = await handleBlackbytesStatus(mockCtx("Reserved / Unsupported Settings"));
+
+    assert.match(out, /## Blackbytes Status/);
+    assert.match(out, /### Reserved \/ Unsupported Settings/);
+    assert.match(out, /temperature/);
+    // Should NOT contain other sections
+    assert.ok(!out.includes("### Enabled Tools"), "should not include other sections");
+  });
+
+  it("overview line includes tool/agent/skill counts", async () => {
+    await writeSettings(tmpDir, {});
+    const cfg = parseBlackbytesConfig({});
+    assert.ok(cfg.ok);
+    if (cfg.ok) initEnabledSet(cfg.value);
+
+    const out = await handleBlackbytesStatus(mockCtx("Compact Tool Output"));
+
+    assert.match(out, /Tools: \*\*\d+\*\* enabled/);
+    assert.match(out, /Agents: \*\*\d+\*\* enabled/);
+    assert.match(out, /Skills: \*\*\d+\*\* enabled/);
   });
 });

@@ -243,8 +243,12 @@ describe("integration: setup-models wizard", () => {
 
     // No existing blackbytes.sub_agents block → no overwrite confirm.
     await runWizard({
-      selects: ["Use one model for all sub-agents", CLAUDE_LABEL],
-      confirms: [false], // configure per-agent reasoning = no
+      selects: [
+        "Use one model for all sub-agents",
+        CLAUDE_LABEL,
+        "Skip (keep existing / use defaults)",
+      ],
+      confirms: [true], // summary confirm
     });
 
     const written = readSettingsJson(tmpDir);
@@ -255,8 +259,12 @@ describe("integration: setup-models wizard", () => {
 
   it("7. atomic write — final file is valid JSON, no .tmp file left behind", async () => {
     await runWizard({
-      selects: ["Use one model for all sub-agents", CLAUDE_LABEL],
-      confirms: [false],
+      selects: [
+        "Use one model for all sub-agents",
+        CLAUDE_LABEL,
+        "Skip (keep existing / use defaults)",
+      ],
+      confirms: [true], // summary confirm
     });
 
     const settingsPath = path.join(tmpDir, "settings.json");
@@ -283,8 +291,12 @@ describe("integration: setup-models wizard", () => {
     );
 
     await runWizard({
-      selects: ["Use one model for all sub-agents", CLAUDE_LABEL],
-      confirms: [false], // configure reasoning = no
+      selects: [
+        "Use one model for all sub-agents",
+        CLAUDE_LABEL,
+        "Skip (keep existing / use defaults)",
+      ],
+      confirms: [true], // summary confirm
     });
 
     const written = readSettingsJson(tmpDir);

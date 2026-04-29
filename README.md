@@ -22,9 +22,97 @@ The wizard maps Blackbytes sub-agents to models that Pi already has available in
 
 | Command | Purpose |
 |---|---|
-| `/setup-models` | Interactive mapping from Pi-available models to Blackbytes sub-agents (`blackbytes.sub_agents.<name>.model`) |
-| `/blackbytes-status` | Print enabled tools, enabled sub-agents, enabled skills, Sub-Agent Snapshot (model/reasoning/allowed tools per agent), YAML diagnostics, and the current redacted `blackbytes` config |
+| `/setup-models` | Interactive per-agent model and thinking level configuration wizard with grouped provider picker, batch shortcuts, and summary confirmation |
+| `/blackbytes-status` | Interactive section-based status viewer with compact overview and drill-down into individual sections |
 | `/toggle-verbose` | Toggle compact vs expanded tool-result rendering during the current session |
+
+## Setup wizard
+
+The `/setup-models` wizard maps Pi-available models to Blackbytes sub-agents and writes the result to `blackbytes.sub_agents.<name>.model` (and optionally `.reasoningEffort`) in `~/.pi/agent/settings.json`.
+
+### Mapping modes
+
+The wizard opens with three top-level modes:
+
+| Mode | Behaviour |
+|---|---|
+| **Per-agent** | Configure model and thinking level for each sub-agent in sequence |
+| **One-for-all** | Select a single model for all agents, then set reasoning mode |
+| **Clear all** | Remove all per-agent model and reasoning overrides |
+
+### Per-agent mode
+
+For each agent the wizard presents two consecutive picks — model, then thinking level — before advancing to the next agent. After the first agent is configured, two batch shortcuts appear at the top of subsequent selections:
+
+- **⬆ Apply `<model>` to all remaining agents** — propagates the current model forward without prompting again
+- **⬆ Apply `<level>` to all remaining agents** — propagates the current thinking level forward
+- **⏭ Skip thinking for all remaining agents** — stops thinking configuration for all agents still to come
+
+### One-for-all mode
+
+A single model is selected first, then the wizard asks how reasoning should be applied:
+
+- **Same for all** — one reasoning level applied to every agent
+- **Per agent** — step through each agent individually to set a reasoning level
+- **Skip** — no reasoning overrides are written
+
+### Grouped provider picker
+
+When Pi's model registry contains more than 10 models, the model selection becomes a two-step flow:
+
+1. **Provider list** — each entry shows the provider name and model count (e.g., `anthropic (8 models)`). Selecting a provider drills into that group.
+2. **Model list within provider** — shows only models from the selected provider. Pressing **Cancel** at this step returns to the provider list rather than exiting the wizard.
+
+When 10 or fewer models are available the two-step flow is skipped and all models appear in a single flat list.
+
+### Smart model ordering
+
+Models chosen earlier in the same wizard session move to the top of the model list in subsequent agent selections, reducing scrolling when the same model is applied to multiple agents.
+
+### Summary confirmation
+
+After all agents are configured a formatted summary table is displayed:
+
+```
+Agent       Model                       Thinking
+─────────── ─────────────────────────── ────────
+oracle      anthropic/claude-opus-4     high
+general     openai/gpt-5.4              —
+explore     (inherit host model)        —
+```
+
+The wizard prompts for confirmation before writing anything to `settings.json`. Cancelling at this step discards all selections.
+
+## `/blackbytes-status` viewer
+
+Running `/blackbytes-status` opens an interactive section picker rather than printing the full output immediately.
+
+### Overview header
+
+A compact summary line is always shown first regardless of which section is selected:
+
+```
+Tools: **14** enabled | Agents: **5** enabled | Skills: **2** enabled
+```
+
+### Section picker
+
+The picker presents 9 named sections plus a **Show All** option:
+
+| # | Section |
+|---|---|
+| 1 | Enabled Tools |
+| 2 | Enabled Sub-Agents |
+| 3 | Enabled Skills |
+| 4 | Sub-Agent Snapshot |
+| 5 | YAML Diagnostics |
+| 6 | System Prompt Log |
+| 7 | Compact Tool Output |
+| 8 | Reserved / Unsupported Settings |
+| 9 | Full Config (JSON) |
+| — | Show All |
+
+Selecting a numbered section prints the overview header followed by that section only. Selecting **Show All** or pressing **Cancel** prints the full output, preserving backward-compatible behaviour.
 
 ## Prompt templates
 

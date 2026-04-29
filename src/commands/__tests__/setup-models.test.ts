@@ -138,9 +138,13 @@ async function invokeSetupModels(
 
 function minimalUI(overrides: Partial<MockUI> = {}): MockUI {
   return {
-    selectResponses: ["Use one model for all sub-agents", CLAUDE_LABEL],
+    selectResponses: [
+      "Use one model for all sub-agents",
+      CLAUDE_LABEL,
+      "Skip (keep existing / use defaults)",
+    ],
     inputResponses: [],
-    confirmResponses: [false], // configure per-agent reasoning? no
+    confirmResponses: [true], // summary confirm
     notifications: [],
     selectCalls: [],
     ...overrides,
@@ -318,13 +322,14 @@ test("setup-models: per-agent mode maps different Pi models and can clear one ov
   const ui = minimalUI({
     selectResponses: [
       "Choose model for each sub-agent",
-      CLAUDE_LABEL,
-      GPT_LABEL,
-      INHERIT_LABEL,
-      CLAUDE_LABEL,
-      INHERIT_LABEL,
+      CLAUDE_LABEL, // explore model
+      "\u23ED Skip thinking for all remaining agents", // explore thinking — skip all
+      GPT_LABEL, // oracle model
+      INHERIT_LABEL, // librarian model
+      CLAUDE_LABEL, // general model
+      INHERIT_LABEL, // reviewer model
     ],
-    confirmResponses: [false], // configure reasoning? no
+    confirmResponses: [true], // summary confirm
   });
   await invokeSetupModels(ui, settingsPath);
 
@@ -347,13 +352,14 @@ test("setup-models: optional reasoning setup writes per-agent reasoningEffort", 
     selectResponses: [
       "Use one model for all sub-agents",
       CLAUDE_LABEL,
-      "minimal",
-      "high",
-      "medium",
-      "off",
-      "off",
+      "Configure thinking per agent", // reasoning mode
+      "minimal", // explore
+      "high", // oracle
+      "medium", // librarian
+      "off", // general
+      "off", // reviewer
     ],
-    confirmResponses: [true], // configure reasoning
+    confirmResponses: [true], // summary confirm
   });
   await invokeSetupModels(ui, settingsPath);
 
@@ -373,8 +379,12 @@ test("setup-models: includes the current Pi model even when getAvailable() is em
   const settingsPath = path.join(dir, "settings.json");
 
   const ui = minimalUI({
-    selectResponses: ["Use one model for all sub-agents", COPILOT_CURRENT_LABEL],
-    confirmResponses: [false],
+    selectResponses: [
+      "Use one model for all sub-agents",
+      COPILOT_CURRENT_LABEL,
+      "Skip (keep existing / use defaults)",
+    ],
+    confirmResponses: [true], // summary confirm
   });
   await invokeSetupModels(ui, settingsPath, [], COPILOT_MODEL);
 
@@ -405,7 +415,7 @@ test("setup-models: can remove legacy provider/default keys from the old wizard"
   );
 
   const ui = minimalUI({
-    confirmResponses: [false, true], // reasoning=no, remove legacy keys=yes
+    confirmResponses: [true, true], // summary confirm + remove legacy keys
   });
   await invokeSetupModels(ui, settingsPath);
 
@@ -439,7 +449,7 @@ test("setup-models: no available models still allows clearing all model override
 
   const ui = minimalUI({
     selectResponses: ["Clear all model overrides (inherit host model)"],
-    confirmResponses: [true, false], // update existing mappings=yes, configure reasoning=no
+    confirmResponses: [true, true], // update existing + summary
   });
   await invokeSetupModels(ui, settingsPath, []);
 

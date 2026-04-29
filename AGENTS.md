@@ -22,8 +22,8 @@ Run in order: `lint -> build -> test`.
 
 ### Pi commands
 
-- `/setup-models` — interactive Pi-model-to-sub-agent mapping wizard
-- `/blackbytes-status` — print enabled resources and redacted config
+- `/setup-models` — interactive per-agent model and thinking level configuration wizard with grouped provider picker, batch shortcuts, and summary confirmation
+- `/blackbytes-status` — interactive section-based status viewer with compact overview and drill-down into individual sections
 - `/toggle-verbose` — toggle compact vs expanded tool-result rendering
 
 ## Architecture
@@ -38,8 +38,8 @@ src/index.ts -> bootstrap(pi) -> wires 7 event handlers + 3 commands:
   tool_result             -> rewrites read/write output for hashline workflow
   session_shutdown        -> flushes logger
 
-  /setup-models           -> interactive config wizard
-  /blackbytes-status      -> current enabled resources + redacted config
+  /setup-models           -> interactive per-agent model+thinking wizard with summary
+  /blackbytes-status      -> interactive section picker for enabled resources + redacted config
   /toggle-verbose         -> toggles compact/expanded tool output
 ```
 

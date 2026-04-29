@@ -30,9 +30,29 @@ const LEGACY_SETUP_KEYS = [
 ];
 const LEGACY_PROVIDER_PACKAGES = new Set(["anthropic", "openai", "copilot"]);
 
+const GROUPED_THRESHOLD = 10;
+const APPLY_REMAINING_PREFIX = "\u2B06 Apply ";
+const SKIP_THINKING_REMAINING = "\u23ED Skip thinking for all remaining agents";
+const REASONING_MODES = {
+  SAME_FOR_ALL: "Same thinking level for all agents",
+  PER_AGENT: "Configure thinking per agent",
+  SKIP: "Skip (keep existing / use defaults)",
+} as const;
+
 type MappingMode = (typeof MAPPING_MODES)[keyof typeof MAPPING_MODES];
 
 type FieldAction = { kind: "keep" } | { kind: "clear" } | { kind: "set"; value: string };
+
+interface ModelSelectionResult {
+  action: FieldAction;
+  applyToRemaining?: boolean;
+}
+
+interface ThinkingSelectionResult {
+  action: FieldAction;
+  applyToRemaining?: boolean;
+  skipRemaining?: boolean;
+}
 
 interface PiModelLike {
   readonly id: string;
@@ -375,54 +395,287 @@ function modelSupportsReasoning(
   return model ? (model.reasoning ?? false) : true;
 }
 
+function sortModelsWithRecent(
+  models: readonly PiModelLike[],
+  currentRef: string | undefined,
+  recentRefs?: ReadonlySet<string>,
+): PiModelLike[] {
+  return [...models].sort((a, b) => {
+    const aRef = canonicalModelRef(a);
+    const bRef = canonicalModelRef(b);
+
+    if (aRef === currentRef) return -1;
+    if (bRef === currentRef) return 1;
+
+    const aRecent = recentRefs?.has(aRef) ?? false;
+    const bRecent = recentRefs?.has(bRef) ?? false;
+    if (aRecent && !bRecent) return -1;
+    if (!aRecent && bRecent) return 1;
+
+    const providerCmp = a.provider.localeCompare(b.provider);
+    if (providerCmp !== 0) return providerCmp;
+    return a.id.localeCompare(b.id);
+  });
+}
+
+function groupModelsByProvider(models: readonly PiModelLike[]): Map<string, PiModelLike[]> {
+  const grouped = new Map<string, PiModelLike[]>();
+  for (const model of models) {
+    const list = grouped.get(model.provider) ?? [];
+    list.push(model);
+    grouped.set(model.provider, list);
+  }
+  return grouped;
+}
+
 function buildModelChoices(
   models: readonly PiModelLike[],
   currentRef: string | undefined,
   existingModel?: string,
+  options?: {
+    applyToRemainingRef?: string;
+    recentRefs?: ReadonlySet<string>;
+  },
 ): ModelChoice[] {
   const choices: ModelChoice[] = [];
+
+  if (options?.applyToRemainingRef) {
+    choices.push({
+      label: `${APPLY_REMAINING_PREFIX}${options.applyToRemainingRef} to all remaining agents`,
+      action: { kind: "set", value: options.applyToRemainingRef },
+    });
+  }
+
   if (existingModel) {
     choices.push({
       label: `Keep existing (${existingModel})`,
       action: { kind: "keep" },
     });
   }
+
   choices.push({ label: INHERIT_MODEL_LABEL, action: { kind: "clear" } });
-  for (const model of models) {
+
+  const sortedModels = options?.recentRefs
+    ? sortModelsWithRecent(models, currentRef, options.recentRefs)
+    : [...models];
+
+  for (const model of sortedModels) {
     choices.push({
       label: formatModelLabel(model, currentRef),
       action: { kind: "set", value: canonicalModelRef(model) },
     });
   }
+
   return choices;
 }
 
-function buildReasoningChoices(existingReasoning?: string): ModelChoice[] {
-  const choices: ModelChoice[] = [];
-  if (existingReasoning) {
-    choices.push({
-      label: `Keep existing (${existingReasoning})`,
+async function selectModelFlat(
+  ctx: ExtensionCommandContext,
+  title: string,
+  models: readonly PiModelLike[],
+  currentRef: string | undefined,
+  options?: {
+    existingModel?: string;
+    applyToRemainingRef?: string;
+    recentRefs?: ReadonlySet<string>;
+  },
+): Promise<ModelSelectionResult | undefined> {
+  const choices = buildModelChoices(models, currentRef, options?.existingModel, {
+    applyToRemainingRef: options?.applyToRemainingRef,
+    recentRefs: options?.recentRefs,
+  });
+  const selectedLabel = await ctx.ui.select(
+    title,
+    choices.map((c) => c.label),
+  );
+  if (!selectedLabel) return undefined;
+  const action = choices.find((c) => c.label === selectedLabel)?.action;
+  if (!action) return undefined;
+  return { action, applyToRemaining: selectedLabel.startsWith(APPLY_REMAINING_PREFIX) };
+}
+
+async function selectModelGrouped(
+  ctx: ExtensionCommandContext,
+  title: string,
+  models: readonly PiModelLike[],
+  currentRef: string | undefined,
+  options?: {
+    existingModel?: string;
+    applyToRemainingRef?: string;
+    recentRefs?: ReadonlySet<string>;
+  },
+): Promise<ModelSelectionResult | undefined> {
+  const grouped = groupModelsByProvider(models);
+
+  // Static choices shown at provider-selection level
+  const staticChoices: ModelChoice[] = [];
+  if (options?.applyToRemainingRef) {
+    staticChoices.push({
+      label: `${APPLY_REMAINING_PREFIX}${options.applyToRemainingRef} to all remaining agents`,
+      action: { kind: "set", value: options.applyToRemainingRef },
+    });
+  }
+  if (options?.existingModel) {
+    staticChoices.push({
+      label: `Keep existing (${options.existingModel})`,
       action: { kind: "keep" },
     });
   }
+  staticChoices.push({ label: INHERIT_MODEL_LABEL, action: { kind: "clear" } });
+
+  // Build provider labels with model counts and a reverse map for lookup
+  const providerLabelToName = new Map<string, string>();
+  for (const [provider, providerModels] of grouped) {
+    const count = providerModels.length;
+    const label = `${provider} (${count} model${count !== 1 ? "s" : ""})`;
+    providerLabelToName.set(label, provider);
+  }
+
+  const step1Options = [...staticChoices.map((c) => c.label), ...providerLabelToName.keys()];
+
+  while (true) {
+    const step1 = await ctx.ui.select(`${title} (select provider)`, step1Options);
+    if (!step1) return undefined; // hard cancel
+
+    const staticMatch = staticChoices.find((c) => c.label === step1);
+    if (staticMatch) {
+      return {
+        action: staticMatch.action,
+        applyToRemaining: step1.startsWith(APPLY_REMAINING_PREFIX),
+      };
+    }
+
+    // Provider selected — resolve label back to provider name
+    const providerName = providerLabelToName.get(step1);
+    if (!providerName) continue;
+    const providerModels = grouped.get(providerName) ?? [];
+    const sortedModels = sortModelsWithRecent(providerModels, currentRef, options?.recentRefs);
+    const modelChoices: ModelChoice[] = sortedModels.map((m) => ({
+      label: formatModelLabel(m, currentRef),
+      action: { kind: "set", value: canonicalModelRef(m) },
+    }));
+
+    const step2 = await ctx.ui.select(
+      title,
+      modelChoices.map((c) => c.label),
+    );
+    if (!step2) continue; // cancel step 2 → loop back to provider selection
+
+    const action = modelChoices.find((c) => c.label === step2)?.action;
+    if (!action) continue;
+
+    return { action, applyToRemaining: false };
+  }
+}
+
+async function selectModel(
+  ctx: ExtensionCommandContext,
+  title: string,
+  models: readonly PiModelLike[],
+  currentRef: string | undefined,
+  options?: {
+    existingModel?: string;
+    applyToRemainingRef?: string;
+    recentRefs?: ReadonlySet<string>;
+  },
+): Promise<ModelSelectionResult | undefined> {
+  if (models.length > GROUPED_THRESHOLD) {
+    return selectModelGrouped(ctx, title, models, currentRef, options);
+  }
+  return selectModelFlat(ctx, title, models, currentRef, options);
+}
+
+async function selectThinking(
+  ctx: ExtensionCommandContext,
+  title: string,
+  options?: {
+    existingReasoning?: string;
+    applyToRemainingLevel?: string;
+    showSkipRemaining?: boolean;
+  },
+): Promise<ThinkingSelectionResult | undefined> {
+  const choices: ModelChoice[] = [];
+
+  if (options?.applyToRemainingLevel) {
+    choices.push({
+      label: `${APPLY_REMAINING_PREFIX}${options.applyToRemainingLevel} to all remaining agents`,
+      action: { kind: "set", value: options.applyToRemainingLevel },
+    });
+  }
+
+  if (options?.existingReasoning) {
+    choices.push({
+      label: `Keep existing (${options.existingReasoning})`,
+      action: { kind: "keep" },
+    });
+  }
+
   choices.push({ label: CLEAR_REASONING_LABEL, action: { kind: "clear" } });
+
   for (const level of REASONING_LEVELS) {
     choices.push({ label: level, action: { kind: "set", value: level } });
   }
-  return choices;
-}
 
-async function selectAction(
-  ctx: ExtensionCommandContext,
-  title: string,
-  choices: readonly ModelChoice[],
-): Promise<FieldAction | undefined> {
+  if (options?.showSkipRemaining) {
+    choices.push({ label: SKIP_THINKING_REMAINING, action: { kind: "keep" } });
+  }
+
   const selectedLabel = await ctx.ui.select(
     title,
-    choices.map((choice) => choice.label),
+    choices.map((c) => c.label),
   );
   if (!selectedLabel) return undefined;
-  return choices.find((choice) => choice.label === selectedLabel)?.action;
+
+  if (selectedLabel === SKIP_THINKING_REMAINING) {
+    return { action: { kind: "keep" }, skipRemaining: true };
+  }
+
+  const action = choices.find((c) => c.label === selectedLabel)?.action;
+  if (!action) return undefined;
+
+  return { action, applyToRemaining: selectedLabel.startsWith(APPLY_REMAINING_PREFIX) };
+}
+
+function buildSummaryText(
+  agents: readonly AgentDescriptor[],
+  modelActions: ReadonlyMap<string, FieldAction>,
+  reasoningActions: ReadonlyMap<string, FieldAction>,
+  existingSubAgents: Record<string, Record<string, unknown>>,
+): string {
+  const maxNameLen = Math.max(...agents.map((a) => a.name.length), 8);
+  const lines: string[] = [];
+
+  for (const agent of agents) {
+    const modelAction = modelActions.get(agent.name);
+    const reasoningAction = reasoningActions.get(agent.name);
+    const existingModel = getStringField(existingSubAgents[agent.name], "model");
+    const existingReasoning = getStringField(existingSubAgents[agent.name], "reasoningEffort");
+
+    let modelDisplay: string;
+    if (!modelAction || modelAction.kind === "clear") {
+      modelDisplay = "(inherit host)";
+    } else if (modelAction.kind === "keep") {
+      modelDisplay = existingModel ?? "(inherit host)";
+    } else {
+      modelDisplay = modelAction.value;
+    }
+
+    let reasoningDisplay: string;
+    if (!reasoningAction) {
+      reasoningDisplay = existingReasoning ?? "(default)";
+    } else if (reasoningAction.kind === "clear") {
+      reasoningDisplay = "(default)";
+    } else if (reasoningAction.kind === "keep") {
+      reasoningDisplay = existingReasoning ?? "(keep)";
+    } else {
+      reasoningDisplay = reasoningAction.value;
+    }
+
+    const namePad = agent.name.padEnd(maxNameLen);
+    lines.push(`  ${namePad} → ${modelDisplay.padEnd(35)} │ thinking: ${reasoningDisplay}`);
+  }
+
+  return lines.join("\n");
 }
 
 function ensureAgentSettings(
@@ -575,53 +828,191 @@ export function registerSetupModelsCommand(pi: ExtensionAPI): void {
       }
 
       const modelActions = new Map<string, FieldAction>();
+      const reasoningActions = new Map<string, FieldAction>();
 
+      // ── CLEAR ALL ────────────────────────────────────────────────────────────
       if (selectedMode === MAPPING_MODES.CLEAR_ALL) {
         for (const agent of agents) {
           modelActions.set(agent.name, { kind: "clear" });
         }
+
+        // ── ONE FOR ALL ───────────────────────────────────────────────────────
       } else if (selectedMode === MAPPING_MODES.ONE_FOR_ALL) {
-        const action = await selectAction(
+        // a. Select model
+        const modelResult = await selectModel(
           ctx,
           "Model to use for every Blackbytes sub-agent:",
-          buildModelChoices(models, currentRef),
+          models,
+          currentRef,
         );
-        if (!action) {
+        if (!modelResult) {
           notify("Setup cancelled — no changes made.", "info");
           return;
         }
         for (const agent of agents) {
-          modelActions.set(agent.name, action);
+          modelActions.set(agent.name, modelResult.action);
         }
-      } else {
-        for (const agent of agents) {
-          const existingModel = getStringField(subAgents[agent.name], "model");
-          const action = await selectAction(
-            ctx,
-            `Model for ${formatAgentForPrompt(agent)}:`,
-            buildModelChoices(models, currentRef, existingModel),
-          );
-          if (!action) {
+
+        // b. Select reasoning mode
+        const reasoningMode = await ctx.ui.select("Reasoning / thinking configuration:", [
+          REASONING_MODES.SAME_FOR_ALL,
+          REASONING_MODES.PER_AGENT,
+          REASONING_MODES.SKIP,
+        ]);
+        if (!reasoningMode) {
+          notify("Setup cancelled — no changes made.", "info");
+          return;
+        }
+
+        if (reasoningMode === REASONING_MODES.SAME_FOR_ALL) {
+          // c. One thinking level → apply to all agents with reasoning-capable models
+          const thinkingResult = await selectThinking(ctx, "Thinking level for all agents:");
+          if (!thinkingResult) {
             notify("Setup cancelled — no changes made.", "info");
             return;
           }
-          modelActions.set(agent.name, action);
+          for (const agent of agents) {
+            const existingModel = getStringField(subAgents[agent.name], "model");
+            const assignedModelRef = resolveAssignedModelRef(modelResult.action, existingModel);
+            if (!modelSupportsReasoning(assignedModelRef, models)) {
+              notify(
+                `Skipping thinking level for ${agent.name}: assigned model does not support reasoning.`,
+                "warning",
+              );
+              reasoningActions.set(agent.name, { kind: "clear" });
+            } else {
+              reasoningActions.set(agent.name, thinkingResult.action);
+            }
+          }
+        } else if (reasoningMode === REASONING_MODES.PER_AGENT) {
+          // d. Per-agent thinking with shortcuts
+          let applyThinkingToRemaining: FieldAction | undefined;
+          let skipThinkingForRemaining = false;
+          let lastThinkingAction: FieldAction | undefined;
+
+          for (let i = 0; i < agents.length; i++) {
+            const agent = agents[i];
+            const remaining = agents.length - i - 1;
+
+            if (skipThinkingForRemaining) continue;
+
+            if (applyThinkingToRemaining) {
+              reasoningActions.set(agent.name, applyThinkingToRemaining);
+              continue;
+            }
+
+            const existingModel = getStringField(subAgents[agent.name], "model");
+            const modelAction = modelActions.get(agent.name);
+            const assignedModelRef = modelAction
+              ? resolveAssignedModelRef(modelAction, existingModel)
+              : existingModel;
+
+            if (!modelSupportsReasoning(assignedModelRef, models)) {
+              notify(
+                `Skipping thinking level for ${agent.name}: assigned model does not support reasoning.`,
+                "warning",
+              );
+              reasoningActions.set(agent.name, { kind: "clear" });
+              continue;
+            }
+
+            const existingReasoning = getStringField(subAgents[agent.name], "reasoningEffort");
+            const thinkingResult = await selectThinking(
+              ctx,
+              `Thinking level for ${formatAgentForPrompt(agent)}:`,
+              {
+                existingReasoning,
+                applyToRemainingLevel:
+                  lastThinkingAction?.kind === "set" ? lastThinkingAction.value : undefined,
+                showSkipRemaining: remaining > 0,
+              },
+            );
+
+            if (!thinkingResult) {
+              notify("Setup cancelled — no changes made.", "info");
+              return;
+            }
+
+            if (thinkingResult.skipRemaining) {
+              skipThinkingForRemaining = true;
+              continue;
+            }
+
+            if (thinkingResult.applyToRemaining) {
+              applyThinkingToRemaining = thinkingResult.action;
+            }
+
+            reasoningActions.set(agent.name, thinkingResult.action);
+            lastThinkingAction = thinkingResult.action;
+          }
         }
-      }
+        // REASONING_MODES.SKIP → no reasoning actions
 
-      const reasoningActions = new Map<string, FieldAction>();
-      const configureReasoning = await ctx.ui.confirm(
-        "Reasoning / thinking",
-        "Also configure per-sub-agent thinking levels? Choose No to preserve existing settings and declaration defaults (for example Oracle's high reasoning).",
-      );
+        // ── PER AGENT ─────────────────────────────────────────────────────────
+      } else {
+        let applyModelToRemaining: FieldAction | undefined;
+        let applyThinkingToRemaining: FieldAction | undefined;
+        let skipThinkingForRemaining = false;
+        let lastModelRef: string | undefined;
+        let lastThinkingAction: FieldAction | undefined;
+        const recentModelRefs = new Set<string>();
 
-      if (configureReasoning) {
-        for (const agent of agents) {
+        for (let i = 0; i < agents.length; i++) {
+          const agent = agents[i];
+          const remaining = agents.length - i - 1;
+
+          // a. MODEL
+          let modelAction: FieldAction;
+          if (applyModelToRemaining) {
+            modelAction = applyModelToRemaining;
+          } else {
+            const existingModel = getStringField(subAgents[agent.name], "model");
+            const modelResult = await selectModel(
+              ctx,
+              `Model for ${formatAgentForPrompt(agent)}:`,
+              models,
+              currentRef,
+              {
+                existingModel,
+                applyToRemainingRef:
+                  lastModelRef !== undefined && remaining > 0 ? lastModelRef : undefined,
+                recentRefs: recentModelRefs.size > 0 ? recentModelRefs : undefined,
+              },
+            );
+            if (!modelResult) {
+              notify("Setup cancelled — no changes made.", "info");
+              return;
+            }
+            modelAction = modelResult.action;
+            if (modelResult.applyToRemaining) {
+              applyModelToRemaining = modelAction;
+            }
+          }
+
+          modelActions.set(agent.name, modelAction);
+
+          // Track recent model refs for smart ordering
+          if (modelAction.kind === "set") {
+            recentModelRefs.add(modelAction.value);
+            lastModelRef = modelAction.value;
+          } else if (modelAction.kind === "keep") {
+            const existingModel = getStringField(subAgents[agent.name], "model");
+            if (existingModel) {
+              recentModelRefs.add(existingModel);
+              lastModelRef = existingModel;
+            }
+          }
+
+          // b. THINKING
+          if (skipThinkingForRemaining) continue;
+
+          if (applyThinkingToRemaining) {
+            reasoningActions.set(agent.name, applyThinkingToRemaining);
+            continue;
+          }
+
           const existingModel = getStringField(subAgents[agent.name], "model");
-          const modelAction = modelActions.get(agent.name);
-          const assignedModelRef = modelAction
-            ? resolveAssignedModelRef(modelAction, existingModel)
-            : existingModel;
+          const assignedModelRef = resolveAssignedModelRef(modelAction, existingModel);
 
           if (!modelSupportsReasoning(assignedModelRef, models)) {
             notify(
@@ -633,21 +1024,47 @@ export function registerSetupModelsCommand(pi: ExtensionAPI): void {
           }
 
           const existingReasoning = getStringField(subAgents[agent.name], "reasoningEffort");
-          const action = await selectAction(
+          const thinkingResult = await selectThinking(
             ctx,
             `Thinking level for ${formatAgentForPrompt(agent)}:`,
-            buildReasoningChoices(existingReasoning),
+            {
+              existingReasoning,
+              applyToRemainingLevel:
+                lastThinkingAction?.kind === "set" ? lastThinkingAction.value : undefined,
+              showSkipRemaining: remaining > 0,
+            },
           );
-          if (!action) {
+
+          if (!thinkingResult) {
             notify("Setup cancelled — no changes made.", "info");
             return;
           }
-          reasoningActions.set(agent.name, action);
+
+          if (thinkingResult.skipRemaining) {
+            skipThinkingForRemaining = true;
+            continue;
+          }
+
+          if (thinkingResult.applyToRemaining) {
+            applyThinkingToRemaining = thinkingResult.action;
+          }
+
+          reasoningActions.set(agent.name, thinkingResult.action);
+          lastThinkingAction = thinkingResult.action;
         }
       }
 
+      // ── SUMMARY ──────────────────────────────────────────────────────────────
+      const summaryText = buildSummaryText(agents, modelActions, reasoningActions, subAgents);
+      const confirmed = await ctx.ui.confirm("Save model mappings?", summaryText);
+      if (!confirmed) {
+        notify("Setup cancelled — no changes made.", "info");
+        return;
+      }
+
+      // ── LEGACY CLEANUP ────────────────────────────────────────────────────────
       const legacySetupKeys = findLegacySetupKeys(existingBlackbytes);
-      const removeLegacySetupKeys =
+      const shouldRemoveLegacyKeys =
         legacySetupKeys.length > 0
           ? await ctx.ui.confirm(
               "Remove legacy /setup-models keys?",
@@ -672,7 +1089,7 @@ export function registerSetupModelsCommand(pi: ExtensionAPI): void {
         reasoningActions,
         {
           clearAllModelOverrides: selectedMode === MAPPING_MODES.CLEAR_ALL,
-          removeLegacySetupKeys,
+          removeLegacySetupKeys: shouldRemoveLegacyKeys,
         },
       );
       const newBlackbytes = newSettings.blackbytes as Record<string, unknown>;

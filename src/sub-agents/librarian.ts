@@ -1,4 +1,4 @@
-import { Type } from "@sinclair/typebox";
+import { Type } from "typebox";
 import { TOOL_NAMES } from "../config/resource-metadata.js";
 import { defineSubAgent } from "./declaration.js";
 import { buildSubAgentRuntimeOverlay } from "./runtime-overlay.js";

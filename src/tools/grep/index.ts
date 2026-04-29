@@ -2,7 +2,7 @@ import { spawn } from "node:child_process";
 import { readFile, readdir, stat } from "node:fs/promises";
 import { join, relative } from "node:path";
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
-import { Type } from "@sinclair/typebox";
+import { Type } from "typebox";
 import { TOOL_NAMES } from "../../config/resource-metadata.js";
 import { makeRenderCall, str } from "../_shared/call-render.js";
 import { registerTool } from "../_shared/register-tool.js";

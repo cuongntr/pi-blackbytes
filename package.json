@@ -1,6 +1,6 @@
 {
   "name": "pi-blackbytes",
-  "version": "0.2.9",
+  "version": "0.2.10",
   "type": "module",
   "engines": {
     "node": ">=20"
@@ -37,13 +37,13 @@
     "check": "bun run lint && bun run typecheck && bun run build && bun run test && bun run check:size"
   },
   "dependencies": {
-    "@sinclair/typebox": "^0.33",
     "fast-glob": "^3.3.3",
     "yaml": "^2.8.3",
     "zod": "^4"
   },
   "peerDependencies": {
-    "@mariozechner/pi-coding-agent": "^0.67"
+    "@mariozechner/pi-coding-agent": "^0.69.0",
+    "typebox": "*"
   },
   "repository": {
     "type": "git",
@@ -60,6 +60,7 @@
   "devDependencies": {
     "@biomejs/biome": "^1.9",
     "tsx": "^4.21.0",
+    "typebox": "^1.1.34",
     "typescript": "^5.5"
   }
 }

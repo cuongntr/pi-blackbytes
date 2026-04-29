@@ -132,7 +132,7 @@ describe("handleBlackbytesStatus snapshot section", () => {
 
     const { defineSubAgent } = await import("../../sub-agents/declaration.js");
     const { initAgentSnapshot } = await import("../../sub-agents/snapshot.js");
-    const { Type } = await import("@sinclair/typebox");
+    const { Type } = await import("typebox");
     const oracleDecl = defineSubAgent({
       name: "oracle",
       toolName: "delegate_oracle",

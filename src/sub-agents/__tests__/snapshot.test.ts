@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { beforeEach, describe, it } from "node:test";
-import { Type } from "@sinclair/typebox";
+import { Type } from "typebox";
 
 import type { BlackbytesConfig } from "../../config/schema.js";
 import { defineSubAgent } from "../declaration.js";

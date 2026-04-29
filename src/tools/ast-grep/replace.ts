@@ -1,5 +1,5 @@
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
-import { Type } from "@sinclair/typebox";
+import { Type } from "typebox";
 import { TOOL_NAMES } from "../../config/resource-metadata.js";
 import { makeRenderCall, str, truncate } from "../_shared/call-render.js";
 import { registerTool } from "../_shared/register-tool.js";

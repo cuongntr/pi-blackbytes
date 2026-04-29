@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { beforeEach, describe, it } from "node:test";
-import { Type } from "@sinclair/typebox";
+import { Type } from "typebox";
 
 import { _resetEnabledSet, initEnabledSet } from "../../config/enabled-set.js";
 import { type BlackbytesConfig, parseBlackbytesConfig } from "../../config/schema.js";

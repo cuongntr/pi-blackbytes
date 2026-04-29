@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.2.10 (2026-04-29)
+
+### Changed
+
+- **Migrate `@sinclair/typebox` → `typebox`**: replaced all imports from `@sinclair/typebox` (v0.33) with the `typebox` package (v1.x) as recommended by pi docs. `typebox` is now a `peerDependency` (shared with the host pi runtime) instead of a bundled `dependency`, reducing install footprint.
+- **Bump peer dependency**: `@mariozechner/pi-coding-agent` peer range updated from `^0.67` to `^0.69.0` (v0.69.0 introduced the `@sinclair/typebox` → `typebox` migration in its published types).
+
 ## 0.2.9 (2026-04-29)
 
 ### Added

@@ -15,7 +15,7 @@ import assert from "node:assert/strict";
 import { EventEmitter } from "node:events";
 import { afterEach, beforeEach, describe, it } from "node:test";
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
-import { Type } from "@sinclair/typebox";
+import { Type } from "typebox";
 import { _resetEnabledSet, initEnabledSet } from "../../config/enabled-set.js";
 import { parseBlackbytesConfig } from "../../config/schema.js";
 import type { BlackbytesConfig } from "../../config/schema.js";

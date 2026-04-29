@@ -1,4 +1,4 @@
-import type { TObject } from "@sinclair/typebox";
+import type { TObject } from "typebox";
 import type { SubAgentMeta } from "../config/resource-metadata.js";
 import type { AgentMutability, FinalizeMode } from "./delegable-tools.js";
 

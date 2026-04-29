@@ -1,4 +1,4 @@
-import { Type } from "@sinclair/typebox";
+import { Type } from "typebox";
 
 /** File or directory path parameter */
 export const PathParam = Type.String({

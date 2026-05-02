@@ -1,6 +1,6 @@
 # Changelog
 
-## 2.1.0 (Unreleased) — Bytes v2 Phase 4
+## 2.1.0 (2026-05-02) — Bytes v2 Phase 4
 
 This is a **minor, additive** release on top of v2.0.0. It ships three of
 the four "Phase 4 — New capabilities" items that were deferred from
@@ -190,7 +190,7 @@ This is `2.1.0` (semver minor, additive). No breaking changes from v2.0.0:
 - Tool names follow snake_case (`handoff`, `look_at`) and are registered
   in `TOOL_NAMES` in `src/config/resource-metadata.ts`.
 
-## 2.0.0 (Unreleased) — Bytes v2
+## 2.0.0 (2026-05-02) — Bytes v2
 
 This is a **major** release that overhauls Bytes system prompts and sub-agent
 behaviour to bring them closer to AmpCode-grade quality, and **fixes the main

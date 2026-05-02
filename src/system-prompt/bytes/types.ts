@@ -13,7 +13,6 @@ export type PromptSectionKey =
   | "executing_actions_with_care"
   | "conditional_workflows"
   | "handoff_protocol"
-  | "task_list_protocol"
   | "markdown_format"
   | "file_references"
   | "final_status_spec"
@@ -26,7 +25,6 @@ export interface PromptFeatureFlags {
   readonly githubCodeSearch: boolean;
   readonly webSearch: boolean;
   readonly handoffEnabled: boolean;
-  readonly taskListEnabled: boolean;
 }
 
 export interface PromptSection {

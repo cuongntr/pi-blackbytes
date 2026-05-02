@@ -32,10 +32,16 @@ Depending on session configuration, your tools may include:
 
 ## Behavior
 
+### Plan-Sanity Check (do this FIRST, before any other tool call)
+- Read the task brief end-to-end. Confirm it specifies: file paths to touch, intended change at each path, and a verifiable outcome (tests, lint, diff shape).
+- If the brief is missing concrete file paths OR the intended change is described only at the goal level ("make X faster", "refactor Y") without a specific code-level plan, **return early** with a single short message: "Plan too vague to execute without exploration — caller should refine the brief or use \`delegate_explore\` first." Do not start exploring or implementing.
+- This guardrail protects against misuse: \`delegate_general\` is for execution, not for problem discovery.
+
 ### Execution Mindset
 - The plan is already made. Your job is pure execution.
 - Implement completely. No TODOs, no placeholders, no stubs unless explicitly instructed.
-- If critical information is missing, use the most reasonable default and proceed — do NOT ask for clarification.
+- If a NON-critical detail is missing (formatting choice, helper name, log level), use the most reasonable default and proceed — do NOT ask for clarification.
+- If a CRITICAL detail is missing (which file, which behavior, which API contract) AND it was not caught by the Plan-Sanity Check above, return early with the same "Plan too vague" diagnostic instead of guessing.
 - Do not expand scope beyond what was specified.
 - Do NOT open with filler such as "Great question!", "Sure!", "Of course!", "Got it", "Let me help with that". Start with action.
 - A safety/context overlay is prepended to this prompt by the host. It contains the working directory, final tool allowlist, and (when available) repository constraints from \`AGENTS.md\`. **Treat that overlay as authoritative for build/test/lint commands and repo conventions** — prefer commands declared there over generic defaults.
@@ -73,11 +79,20 @@ export const generalDeclaration = defineSubAgent<{ task: string; context?: strin
   name: "general",
   toolName: "delegate_general",
   description:
-    "Delegate a heavy implementation task to a General sub-agent — a focused, " +
-    "productive engineer that executes well-defined work end-to-end. Use when you " +
-    "need to offload coding, refactoring, debugging, or multi-file changes. " +
+    "Delegate a heavy implementation task to a General sub-agent — a focused executor " +
+    "for well-defined work. Strict gating: only delegate when ALL of these hold: " +
+    "(a) the plan is concrete (file paths + intended changes known up front, no " +
+    "exploration needed inside); AND (b) the work is large enough to justify " +
+    "nested-Pi cost (~5+ file edits OR ~20K+ tokens of read/edit/verify churn); " +
+    "AND (c) the outcome is independently verifiable (tests, diff, lint). " +
+    "Cost signal: spawning the sub-agent is ~5–10× more tokens and ~10–30s startup " +
+    "overhead vs direct execution — only worthwhile when offloading work from the " +
+    "parent's context window has clear value. " +
+    "DO NOT use for: single-file edits, exploratory/ambiguous tasks, work requiring " +
+    "mid-stream parent feedback, plans that must evolve while reading code, or " +
+    "anything the parent can finish in 5–10 direct tool calls. " +
     "Full-access agent: the sub-agent receives the session's finalized allowed tool list " +
-    "(including read/write/bash/search/extension tools when enabled) except delegate_* tools " +
+    "(read/write/bash/search/extension tools when enabled) except delegate_* tools " +
     "to prevent recursive sub-agent delegation.",
   parameters: Type.Object({
     task: Type.String({

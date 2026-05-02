@@ -19,7 +19,6 @@ const CLAUDE_TAGS: Record<PromptSectionKey, string> = {
   executing_actions_with_care: "executing_actions_with_care",
   conditional_workflows: "workflow",
   handoff_protocol: "handoff_protocol",
-  task_list_protocol: "task_list_protocol",
   markdown_format: "markdown_format",
   file_references: "file_references",
   final_status_spec: "final_status",

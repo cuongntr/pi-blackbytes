@@ -1,10 +1,19 @@
 # pi-blackbytes
 
-Pi coding-agent extension that provides local search tools, direct HTTP replacements for the websearch/context7/grep.app MCP surfaces, hashline-based editing, and delegated sub-agents for exploration, research, consultation, implementation, and code review.
+Pi coding-agent extension that provides local search tools, locally-managed HTTP clients for the websearch / context7 / grep.app surfaces (replacing Pi's MCP-plugin dependency for these services), hashline-based editing, and delegated sub-agents for exploration, research, consultation, implementation, and code review.
+
+> **Note on the wire protocol.** `web_search` / `web_fetch` (Exa, Tavily) and `docs_resolve` / `docs_query` (Context7) are pure REST clients — no MCP involved. `gh_search` is also locally-managed (no Pi MCP plugin needed) but the upstream `mcp.grep.app` service still speaks MCP-over-HTTP, so the extension ships a small in-process MCP HTTP client just for that one tool. The user-facing benefit (extension owns auth, config, error handling, render) is the same for all three groups; the wire-level distinction matters only if you are debugging requests.
 
 ## What's new in v2 (Bytes v2)
 
-`v2.0.0` is a major rework of the Bytes system prompts and sub-agent
+`v2.1.0` ships three "Phase 4" capabilities that were deferred from
+v2.0.0 — `handoff`, `code-tour`, and `look_at`. They are all additive and
+capability-gated, so disabling any of them removes both the tool and
+its prompt overlay section. A fourth capability (`bytes_todo`) was
+shipped briefly in a pre-release of v2.1.0 and then removed before
+release; see CHANGELOG.
+
+`v2.0.0` was the major rework of the Bytes system prompts and sub-agent
 behaviour. Highlights:
 
 - **Strict Librarian gating.** `delegate_librarian` now requires ALL of
@@ -26,6 +35,20 @@ behaviour. Highlights:
   pre-fetch and warns on empty `context`. General + librarian got
   verification-gate + fluent-link rules.
 
+### New in v2.1.0
+
+- **`handoff` tool.** Spawn a fresh nested `pi -p` session with a
+  self-contained `goal` plus optional `mode` and `prior_summary` (4 KB
+  cap, secrets redacted). The `PI_NESTED_DEPTH` guard automatically
+  refuses recursive handoff. Default 30-minute timeout.
+- **`code-tour` sub-agent.** Read-only walk-through agent that returns a
+  numbered `[file#L-L](file://…)` list with one-line `what · why`
+  annotations. Use it when the caller needs to understand *how* an
+  existing flow works, not where files live.
+- **`look_at` tool.** Multimodal image inspector — loads a primary image
+  plus up to 3 references (PNG/JPG/GIF/WebP/BMP/SVG, 10 MB each) and
+  embeds them as `ImageContent` blocks alongside the analysis objective.
+
 See `CHANGELOG.md` for the full migration guide.
 
 ### pi-blackbytes vs raw Pi
@@ -34,10 +57,13 @@ See `CHANGELOG.md` for the full migration guide.
 |---|---|---|
 | System prompt | Pi default | Bytes v2 overlay (capability-aware, per-family) |
 | Codebase exploration | `read`/`grep`/`glob` | + `delegate_explore` (parallel, scoped, fluent links) |
+| Guided code walk-throughs | (manual) | `delegate_code_tour` (numbered file:line, what · why) |
 | Reasoning consultation | (manual) | `delegate_oracle` (Effort estimate, self-contained reply) |
 | External research | (manual) | `delegate_librarian` (strict gate, multi-source) |
 | Code review | (manual) | `delegate_reviewer` (severity verdict, abstraction-fit eval) |
 | Heavy implementation | (manual) | `delegate_general` (verification gates, AGENTS.md aware) |
+| Fresh-context handoff | (manual restart) | `handoff` (nested `pi -p`, recursion-guarded) |
+| Image inspection | (none) | `look_at` (PNG/JPG/GIF/WebP/BMP/SVG, multi-image compare) |
 | Edit workflow | `edit`/`write` | + `hashline_edit` (anchor-based) |
 | Web/docs lookup | (manual) | `web_search` / `web_fetch` / `docs_resolve` / `docs_query` / `gh_search` |
 

@@ -16,7 +16,6 @@ function createStaticPromptFeatures(hashlineEditEnabled: boolean): PromptFeature
     githubCodeSearch: true,
     webSearch: true,
     handoffEnabled: false,
-    taskListEnabled: false,
   };
 }
 

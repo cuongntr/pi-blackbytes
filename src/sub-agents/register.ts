@@ -336,6 +336,7 @@ const SUB_AGENT_ICONS: Record<string, string> = {
   librarian: "📚",
   general: "⚡",
   reviewer: "📋",
+  "code-tour": "🧭",
 };
 
 /** Derive the primary display key from a declaration's parameter schema. */

@@ -42,10 +42,10 @@ describe("enabled-set", () => {
     const set = computeEnabledSet(defaultConfig);
     assert.ok(set.tools.has("hashline_edit"));
     assert.ok(set.tools.has("gh_search"));
-    assert.equal(set.tools.size, 10);
+    assert.equal(set.tools.size, 12);
     assert.ok(set.subAgents.has("explore"));
     assert.ok(set.subAgents.has("oracle"));
-    assert.equal(set.subAgents.size, 5);
+    assert.equal(set.subAgents.size, 6);
     assert.ok(set.skills.has("implementing-beads"));
     assert.equal(set.skills.size, 9);
   });
@@ -59,7 +59,7 @@ describe("enabled-set", () => {
     assert.ok(!set.tools.has("hashline_edit"));
     assert.ok(!set.tools.has("grep"));
     assert.ok(set.tools.has("glob"));
-    assert.equal(set.tools.size, 8);
+    assert.equal(set.tools.size, 10);
   });
 
   it("disabled_sub_agents removes specific sub-agents", () => {
@@ -71,7 +71,7 @@ describe("enabled-set", () => {
     assert.ok(!set.subAgents.has("explore"));
     assert.ok(!set.subAgents.has("oracle"));
     assert.ok(set.subAgents.has("librarian"));
-    assert.equal(set.subAgents.size, 3);
+    assert.equal(set.subAgents.size, 4);
   });
 
   it("computeEnabledSet accepts dynamic agent names", () => {
@@ -168,8 +168,7 @@ describe("enabled-set", () => {
         documentationLookup: true,
         githubCodeSearch: true,
         webSearch: true,
-        handoffEnabled: false,
-        taskListEnabled: false,
+        handoffEnabled: true,
       });
     });
 
@@ -184,8 +183,9 @@ describe("enabled-set", () => {
           "docs_resolve",
           "docs_query",
           "gh_search",
+          "handoff",
         ],
-        disabled_sub_agents: ["explore", "oracle", "librarian", "general", "reviewer"],
+        disabled_sub_agents: ["explore", "oracle", "librarian", "general", "reviewer", "code-tour"],
       });
       const flags = derivePromptFeatureFlags(set.tools, set.subAgents);
 
@@ -196,7 +196,6 @@ describe("enabled-set", () => {
         githubCodeSearch: false,
         webSearch: false,
         handoffEnabled: false,
-        taskListEnabled: false,
       });
     });
 
@@ -214,8 +213,7 @@ describe("enabled-set", () => {
         documentationLookup: false,
         githubCodeSearch: true,
         webSearch: true,
-        handoffEnabled: false,
-        taskListEnabled: false,
+        handoffEnabled: true,
       });
     });
   });

@@ -19,6 +19,7 @@ import {
   captureAgentStartSystemPrompt,
   captureProviderSystemPrompts,
 } from "../shared/system-prompt-log.js";
+import { codeTourDeclaration } from "../sub-agents/code-tour.js";
 import { declarationToMeta } from "../sub-agents/declaration.js";
 import { setYamlDiagnostics } from "../sub-agents/diagnostics.js";
 import { exploreDeclaration } from "../sub-agents/explore.js";
@@ -38,7 +39,9 @@ import { registerResolveLibraryIdTool } from "../tools/context7/resolve.js";
 import { registerGlobTool } from "../tools/glob/index.js";
 import { registerGrepAppSearchTool } from "../tools/grep-app/search.js";
 import { registerGrepTool } from "../tools/grep/index.js";
+import { registerHandoffTool } from "../tools/handoff/register.js";
 import { registerHashlineEditTool } from "../tools/hashline-edit/index.js";
+import { registerLookAtTool } from "../tools/look-at/register.js";
 import { registerWebsearchFetchTool } from "../tools/websearch/fetch.js";
 import { registerWebsearchSearchTool } from "../tools/websearch/search.js";
 import { injectPromptAugmentation } from "./before-agent-start.js";
@@ -62,6 +65,7 @@ const BUILTIN_DECLARATIONS = [
   librarianDeclaration,
   generalDeclaration,
   reviewerDeclaration,
+  codeTourDeclaration,
 ];
 export async function handleSessionStart(
   pi: ExtensionAPI,
@@ -106,6 +110,8 @@ export async function handleSessionStart(
   registerAstGrepReplaceTool(pi);
   registerGlobTool(pi);
   registerGrepTool(pi);
+  registerHandoffTool(pi);
+  registerLookAtTool(pi);
 
   // HTTP-based tool groups
   registerWebsearchSearchTool(pi);

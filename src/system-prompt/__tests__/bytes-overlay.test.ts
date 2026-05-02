@@ -29,7 +29,7 @@ describe("bytes overlay rendering", () => {
       const prompt = renderPrompt(
         family,
         ["hashline_edit", "web_search", "web_fetch", "docs_resolve", "docs_query", "gh_search"],
-        ["explore", "oracle", "librarian", "general", "reviewer"],
+        ["explore", "oracle", "librarian", "general", "reviewer", "code-tour"],
       );
 
       assert.ok(prompt.includes("Precedence"));

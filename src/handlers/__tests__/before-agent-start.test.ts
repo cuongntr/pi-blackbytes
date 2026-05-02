@@ -159,7 +159,7 @@ it("renders capability-aware prompt sections from enabled resources", () => {
         "docs_query",
         "gh_search",
       ],
-      disabled_sub_agents: ["explore", "oracle", "librarian", "general", "reviewer"],
+      disabled_sub_agents: ["explore", "oracle", "librarian", "general", "reviewer", "code-tour"],
     }),
   );
 
@@ -197,6 +197,7 @@ it("advertises dynamically registered YAML agents in the resource block", () => 
     "librarian",
     "general",
     "reviewer",
+    "code-tour",
     "yaml-researcher",
   ]);
   const result = injectPromptAugmentation("prompt");

@@ -19,8 +19,8 @@ beforeEach(() => {
 
 /**
  * Features with backing metadata resources. Reserved flags without backing
- * resources (handoffEnabled, taskListEnabled) are excluded — they are always
- * false until their tools are implemented.
+ * resources (handoffEnabled) are excluded — they are always false until
+ * their tools are implemented.
  */
 const CAPABILITY_SNIPPETS: Partial<Record<PromptFeatureKey, string>> = {
   hashlineEdit: "Hashline Edit Workflow",
@@ -96,7 +96,6 @@ describe("prompt-to-runtime capability sync", () => {
       githubCodeSearch: true,
       webSearch: true,
       handoffEnabled: false,
-      taskListEnabled: false,
     });
   });
 

@@ -218,7 +218,7 @@ describe("handleBlackbytesStatus YAML diagnostics section", () => {
     const { setYamlDiagnostics } = await import("../../sub-agents/diagnostics.js");
     const { initAgentSnapshot } = await import("../../sub-agents/snapshot.js");
 
-    const builtinNames = ["explore", "oracle", "librarian", "general", "reviewer"];
+    const builtinNames = ["explore", "oracle", "librarian", "general", "reviewer", "code-tour"];
     assertUniqueNames(builtinNames);
     const { declarations, diagnostics } = await loadYamlDeclarations(builtinNames);
     setYamlDiagnostics(diagnostics);
@@ -252,7 +252,7 @@ describe("handleBlackbytesStatus YAML diagnostics section", () => {
     const { setYamlDiagnostics } = await import("../../sub-agents/diagnostics.js");
     const { initAgentSnapshot } = await import("../../sub-agents/snapshot.js");
 
-    const builtinNames = ["explore", "oracle", "librarian", "general", "reviewer"];
+    const builtinNames = ["explore", "oracle", "librarian", "general", "reviewer", "code-tour"];
     assertUniqueNames(builtinNames);
     const { declarations, diagnostics } = await loadYamlDeclarations(builtinNames);
     setYamlDiagnostics(diagnostics);

@@ -1,5 +1,195 @@
 # Changelog
 
+## 2.1.0 (Unreleased) — Bytes v2 Phase 4
+
+This is a **minor, additive** release on top of v2.0.0. It ships three of
+the four "Phase 4 — New capabilities" items that were deferred from
+v2.0.0 — `handoff`, `code-tour`, and `look_at`. The fourth item
+(`bytes_todo`) was implemented and then removed before release; see
+**Removed** below for the rationale. Nothing from v2.0.0 changes;
+capabilities are gated behind feature flags and only appear in the Bytes
+overlay when the backing tool / sub-agent is enabled.
+
+### Added
+
+- **`handoff` tool** (`src/tools/handoff/`): spawns a fresh nested `pi -p`
+  session via the existing `runNestedPi()` helper with a self-contained
+  `goal`, optional `mode` hint, and optional `prior_summary` (capped at
+  4 KB and run through `redactSecrets`). When `ctx.sessionManager` is
+  reachable in Pi's tool-execute callback, the tool also auto-distills
+  the last 10 message entries of the current branch (4 KB cap, redacted)
+  and embeds them under a separate "Auto-distilled prior summary"
+  section. The nested session does NOT inherit the parent transcript
+  otherwise. Recursive handoff is automatically refused inside an
+  already-nested session via the `PI_NESTED_DEPTH >= 1` guard. The user
+  abort signal is forwarded so cancelling the parent kills the nested
+  Pi. Default timeout 30 minutes. New Bytes overlay section
+  `handoff_protocol` (~600 chars) gated behind the `handoffEnabled`
+  feature flag — disabling the tool removes the section.
+- **`code-tour` sub-agent** (`src/sub-agents/code-tour.ts`): read-only
+  guided walk-through agent. Allowed tools: `read`, `grep`, `glob`,
+  `ast_search`. Returns a one-line summary plus a numbered list of
+  `[relpath#L-L](file:///abs#L-L) — what · why` steps using fluent
+  `file://` links. Output spec, scope discipline, and method match the
+  Amp finder reference style. Icon `🧭`, `delegate_code_tour` tool,
+  `medium` reasoning effort, 10-minute timeout. New
+  `delegate_code_tour` bullet in the conditional-workflows section gated
+  on `enabledSubAgents.has("code-tour")`.
+- **`look_at` tool** (`src/tools/look-at/`): real multimodal tool —
+  pre-check confirmed `AgentToolResult.content` accepts
+  `(TextContent | ImageContent)[]` in `@mariozechner/pi-coding-agent`
+  v0.69. Loads a primary image plus up to 3 reference images (PNG, JPEG,
+  GIF, WebP, BMP, SVG; 10 MB max each), embeds them as base64
+  `ImageContent` blocks, and prepends a text block with the analysis
+  objective and resolved paths. No prompt overlay change — model already
+  knows how to consume image content blocks.
+### Removed
+
+- **`bytes_todo` tool** (was at `src/tools/bytes-todo/`): the
+  lightweight in-memory task list shipped in a pre-release of v2.1.0
+  was removed before the v2.1.0 cut. Rationale: (a) modern reasoning
+  models (Claude extended thinking, GPT-5 reasoning, Gemini thinking)
+  plan internally without an external scratchpad; (b) project users
+  rely on richer external task systems (`beads`, Jira, Linear) that
+  persist, support dependency graphs, and survive process restarts —
+  `bytes_todo`'s module-level state was reset on every extension
+  reload; (c) the tool added ~480 tokens of permanent overhead (schema
+  + overlay section + capability bullet) per session whether or not it
+  was used; (d) the `runner.ts` `--no-session --no-context-files`
+  contract meant sub-agents could never see the parent's todo list,
+  capping its real value to a single agent's working memory. Net
+  effect: dead weight that signalled "use this" while the maintainer
+  could not recommend it. Removed surfaces: tool registration
+  (`registerBytesTodoTool` in `src/handlers/index.ts`), `BYTES_TODO`
+  in `TOOL_NAMES`, `taskListEnabled` flag in `PromptFeatureFlags`,
+  `task_list_protocol` `PromptSectionKey`, the matching
+  `SECTION_ORDER`/`CLAUDE_TAGS` entries, and the
+  `buildTaskListProtocolBody` + capability bullet in `overlay.ts`.
+  Disabling-by-config is no longer needed because the tool is gone.
+  Test count: 587 passing in 102 suites (was 594 / 103 with
+  `bytes_todo` shipped).
+
+### Documentation
+
+- **`gh_search` framing clarified.** Previous wording in `README.md` and
+  `AGENTS.md` ("replaces websearch, context7, and grep.app **MCP
+  surfaces** with **direct HTTP tools**") was ambiguous about whether
+  the wire protocol was also being replaced. Reality: `web_search` /
+  `web_fetch` (Exa, Tavily) and `docs_resolve` / `docs_query`
+  (Context7) are pure REST clients — no MCP involved. `gh_search` is
+  also locally-managed (no Pi MCP plugin needed) but the upstream
+  `mcp.grep.app` service still speaks MCP-over-HTTP, so the extension
+  ships an in-process `McpHttpClient` for that one tool. New wording
+  makes the two flavors explicit and adds a note in `README.md` for
+  anyone debugging requests.
+- **`glob` recency-sort rationale documented.** The `glob` tool sorts
+  results by `mtime` descending (newest first) and shows the top 25 of
+  up to 1000 scanned. This was previously documented only as "newest
+  matching file paths" without rationale or escape hatch. New
+  description spells out: (a) why the recency bias is intentional
+  (coding-agent workflows mostly care about currently-edited files);
+  (b) when it is *not* what you want (stable lexical enumeration); and
+  (c) the recommended alternative (`find` / `ls` Pi built-ins, or
+  `grep --files-with-matches`). No behavior change — just clearer
+  contract for the calling LLM.
+
+### Fixed
+
+- **`handoff` capability-gating consistency.** The `handoff` tool was
+  passing `allowedTools: []` to `runNestedPi()`, which made the runner
+  omit the `--tools` flag entirely. Pi's CLI default with no `--tools`
+  is to expose the full built-in tool surface to the nested session
+  (`bash`, `edit`, `write`, etc.). This was inconsistent with sub-agent
+  delegates (`explore`, `oracle`, `librarian`, `general`, `reviewer`,
+  `code-tour`), which have always computed and passed an explicit
+  allowlist via `finalizeNestedTools()`. The user-visible effect was
+  that `disabled_tools` config did not propagate into nested handoff
+  sessions: if a user disabled e.g. `bash` in
+  `~/.pi/agent/settings.json` to keep the agent away from shell
+  commands, the agent could still invoke `bash` from inside a
+  `handoff` nested session. Not a security boundary (the LLM is the
+  one making the decision in both cases, not an untrusted attacker)
+  but a **policy-correctness and architectural-consistency bug**:
+  config-level intent should propagate uniformly across all nested
+  execution paths. Fix: `handoff/tool.ts` now derives its nested
+  allowlist using the same pattern as `general.ts` — parent's enabled
+  extension tools (minus `delegate_*`) plus `PI_BUILTIN_TOOLS`, run
+  through `finalizeNestedTools` with `full-access` mutability so the
+  global `disabled_tools` denylist propagates and `delegate_*` names
+  are stripped at the allowlist layer (defense-in-depth on top of the
+  existing `PI_NESTED_DEPTH` recursion guard). Three new boundary
+  regression tests in `src/tools/handoff/__tests__/handoff.test.ts`
+  now pin: (a) parent enabled tools + Pi built-ins propagate to nested
+  allowlist; (b) `disabled_tools` is honored end-to-end; (c)
+  `delegate_*` is excluded. Production paths via `session_start`
+  always go through `getEnabledSet()`; isolated unit tests can inject
+  a stub via `getEnabledSetFn`. Test count: 590 passing in 102 suites
+  (was 587).
+
+### Changed
+
+- **`general` sub-agent gating tightened** (mirrors the Phase 1.6
+  Librarian gating fix). Previously `delegate_general` accepted nearly
+  any "implementation" task, including small single-file edits and
+  exploratory work that the host agent could finish faster directly.
+  Now both the tool description (`src/sub-agents/general.ts`) and the
+  Bytes overlay bullet (`src/system-prompt/bytes/overlay.ts`,
+  conditional-workflows section) require ALL of: (a) a concrete plan
+  (file paths + intended changes known up front, no exploration
+  needed); AND (b) work large enough to justify nested-Pi cost (~5+
+  file edits OR ~20K+ tokens of read/edit/verify churn); AND (c)
+  outcome independently verifiable (tests, diff, lint). An explicit
+  `DO NOT use for` denylist covers single-file edits, exploratory or
+  ambiguous tasks, work needing mid-stream parent feedback, and plans
+  that must evolve as you read code. The `general` persona prompt also
+  gained a `Plan-Sanity Check` guardrail that runs before any other
+  tool call: if the brief lacks concrete file paths or specifies only
+  goal-level intent, the sub-agent returns early with a "Plan too
+  vague" diagnostic instead of starting to explore. Rationale: the
+  legitimate value of `general` is **context-window offload** for
+  parent agents working on long sessions, not "do something the host
+  cannot". The strict gate aligns prompt with that real value
+  proposition.
+
+### Bytes overlay
+
+- New `PromptSectionKey` value `handoff_protocol` in
+  `src/system-prompt/bytes/types.ts`, threaded through `SECTION_ORDER`
+  (`render.ts`) and `CLAUDE_TAGS` (`default.ts`).
+- New feature flag `handoffEnabled` in `PromptFeatureFlags`, derived in
+  `derivePromptFeatureFlags()` from `enabledTools.has(TOOL_NAMES.HANDOFF)`.
+- Capability bullets added to `buildSessionCapabilitiesBody()` and the
+  conditional-workflows section for `code-tour` and `handoff`. All
+  bullets are gated on the matching feature / sub-agent flag, so
+  disabling the tool/agent fully removes the prompt mention. The
+  capability-sync test in `bytes-capability-sync.test.ts` continues to
+  enforce this without code changes.
+- Total rendered overlay size: still under the 12 KB budget.
+
+### Tests
+
+- 11 new tests across:
+  - `src/tools/handoff/__tests__/handoff.test.ts` (6 tests)
+  - `src/tools/look-at/__tests__/look-at.test.ts` (5 tests)
+- Six existing test files updated per AGENTS.md (`code-tour` added to the
+  hardcoded agent-name lists in `bytes-overlay.test.ts`,
+  `before-agent-start.test.ts`, `blackbytes-status.test.ts`,
+  `setup-models.test.ts`, `enabled-set.test.ts`, plus expected counts in
+  `enabled-set.test.ts` for new bundled tools and sub-agents).
+- Total test count: 587 passing in 102 suites (was 574 / 100 at v2.0.0
+  cut).
+
+### Versioning
+
+This is `2.1.0` (semver minor, additive). No breaking changes from v2.0.0:
+- Disabling any of the three new tools/agents removes them and their prompt
+  bullets cleanly.
+- Existing config files keep working unchanged. Configs that disabled
+  `bytes_todo` via `disabled_tools` will continue to load — `disabled_tools`
+  silently ignores unknown names.
+- Tool names follow snake_case (`handoff`, `look_at`) and are registered
+  in `TOOL_NAMES` in `src/config/resource-metadata.ts`.
+
 ## 2.0.0 (Unreleased) — Bytes v2
 
 This is a **major** release that overhauls Bytes system prompts and sub-agent
@@ -143,15 +333,20 @@ pain point**: Librarian was previously over-eager to fire on phrases like
   in the Bytes overlay sections (`final_status_spec`, `markdown_format`,
   `work_defaults`).
 
-### Phase 4 — New capabilities (deferred)
+### Phase 4 — New capabilities (shipped in v2.1.0)
 
-The following are scoped but not yet implemented:
+The following items were scoped under v2.0.0 but explicitly deferred to a
+follow-up minor release. Three of the four are shipped in v2.1.0 (see the
+v2.1.0 section above for details); the fourth was implemented and then
+removed before the v2.1.0 cut:
 
 - `handoff` tool (spawn nested `pi -p` with fresh context).
 - `code-tour` sub-agent (read-only numbered file:line walkthrough).
-- `look_at` tool (multimodal — pending Pi platform multimodal support).
-- `bytes_todo` lightweight in-memory TODO list (pending Pi `task_list` API
-  check).
+- `look_at` tool (multimodal — Pi platform multimodal verified supported).
+- ~~`bytes_todo` lightweight in-memory TODO list~~ — **removed before
+  v2.1.0**. Modern reasoning models plan internally; users with serious
+  task-tracking needs use external systems (`beads`, Jira, Linear). See
+  the v2.1.0 **Removed** section for details.
 
 ### Tests
 

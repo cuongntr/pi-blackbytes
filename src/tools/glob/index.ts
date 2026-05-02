@@ -112,9 +112,17 @@ export async function executeGlob(params: GlobParams): Promise<TextToolResult> {
 export function registerGlobTool(pi: ExtensionAPI): void {
   registerTool(pi, TOOL_NAMES.GLOB, {
     name: TOOL_NAMES.GLOB,
-    promptSnippet: "Fast file pattern matching with glob patterns like **/*.ts",
+    promptSnippet:
+      "Fast file pattern matching with glob patterns like **/*.ts. Sorted by recency (newest first).",
     description:
-      "Fast file pattern matching. Supports glob patterns like **/*.js or src/**/*.ts. Returns a compact status summary with the newest matching file paths (display-limited).",
+      "Fast file pattern matching using glob patterns (e.g. `**/*.js`, `src/**/*.ts`). " +
+      "Results are sorted by file modification time descending (newest first) and " +
+      "capped at 25 displayed entries from up to 1000 scanned. This bias toward recently-touched " +
+      "files is intentional: in a coding-agent workflow, the most useful files are usually " +
+      "the ones currently being edited. " +
+      "If you need a stable lexical or alphabetical ordering instead — e.g. for enumerating " +
+      "every test file in a stable order — use `find` / `ls` (Pi built-ins) or `grep --files-with-matches` " +
+      "instead. Use this tool when the recency bias is helpful or irrelevant.",
     parameters: Type.Object({
       pattern: Type.String({
         description: "Glob pattern (e.g. **/*.ts, src/**/*.js)",

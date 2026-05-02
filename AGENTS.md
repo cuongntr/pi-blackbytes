@@ -1,6 +1,6 @@
 # pi-blackbytes
 
-Pi coding-agent extension that replaces the websearch, context7, and grep.app MCP surfaces with direct HTTP tools, adds bundled local tools (`hashline_edit`, `ast_search`, `ast_replace`, `grep`, `glob`), and exposes delegated sub-agents (`explore`, `oracle`, `librarian`, `general`, `reviewer`).
+Pi coding-agent extension that replaces Pi's MCP-plugin dependency on the websearch, context7, and grep.app surfaces with locally-managed HTTP clients (note: `web_search` / `web_fetch` / `docs_resolve` / `docs_query` are pure REST; `gh_search` is HTTP-transported but still MCP at the protocol layer — see README for the distinction), adds bundled local tools (`hashline_edit`, `ast_search`, `ast_replace`, `grep`, `glob`), and exposes delegated sub-agents (`explore`, `oracle`, `librarian`, `general`, `reviewer`).
 
 ## Commands
 

@@ -41,19 +41,13 @@ function buildSessionCapabilitiesBody(context: BytesPromptRenderContext): string
 
   if (context.enabledSubAgents.has("code-tour")) {
     lines.push(
-      "- `code-tour` produces guided walk-throughs of an existing codepath as a numbered (file:line, what, why) list — use when you need to explain *how* code flows, not just where things are.",
+      "- `code-tour` walks an existing flow as a numbered (file:line, what, why) list — use to explain *how* code flows.",
     );
   }
 
   if (context.features.handoffEnabled) {
     lines.push(
-      "- `handoff` spawns a fresh nested Pi session for long-running follow-up work; use it when the current thread has accumulated substantial context and a clean slate is more productive than continuing.",
-    );
-  }
-
-  if (context.features.taskListEnabled) {
-    lines.push(
-      "- `bytes_todo` keeps a lightweight task list (add / check / list / remove); use it for multi-step plans the user wants to track explicitly.",
+      "- `handoff` spawns a fresh nested Pi session for follow-up work when a clean slate beats continuing.",
     );
   }
 
@@ -101,9 +95,7 @@ function buildConditionalWorkflowsBody(context: BytesPromptRenderContext): strin
 
   if (context.enabledSubAgents.has("code-tour")) {
     lines.push(
-      "- Use `delegate_code_tour` when the caller needs a guided walk-through of an " +
-        "existing flow (request → handler → side-effect), not just a list of file " +
-        "matches. Output is a numbered (file:line, what, why) sequence.",
+      "- Use `delegate_code_tour` when the caller needs a guided walk-through of an existing flow (request → handler → side-effect). Output is a numbered (file:line, what, why) sequence.",
     );
   }
 
@@ -118,6 +110,20 @@ function buildConditionalWorkflowsBody(context: BytesPromptRenderContext): strin
     lines.push(
       "- Use `delegate_general` only for well-scoped multi-file implementation work after " +
         "the desired behavior and file scope are clear.",
+    );
+    lines.push(
+      "- **General gating (strict)** — only delegate when ALL of these hold: " +
+        "(a) the plan is concrete (file paths and intended changes already known, " +
+        "no exploration needed inside); AND (b) the work is large enough to justify " +
+        "nested-Pi cost (~5+ file edits OR ~20K+ tokens of read/edit/verify churn); " +
+        "AND (c) the outcome is verifiable from outside (tests pass, diff inspectable, " +
+        "lint clean).",
+    );
+    lines.push(
+      "- **DO NOT delegate to `general`** for: single-file edits, exploratory or " +
+        "ambiguous tasks, work where the parent needs intermediate results mid-stream, " +
+        "refactors whose plan must evolve as you read code, or anything the parent " +
+        "can finish in 5–10 direct tool calls. When in doubt, do it directly.",
     );
   }
 
@@ -170,20 +176,11 @@ function buildConditionalWorkflowsBody(context: BytesPromptRenderContext): strin
 
 function buildHandoffProtocolBody(): string {
   return [
-    "- `handoff` is available: spawning a fresh nested Pi session is sometimes cheaper than continuing an exhausted thread.",
-    "- Use it when (a) the current context is near capacity and reasoning quality is degrading, OR (b) the next task is logically independent and benefits from a clean slate.",
-    "- Required `goal`: a one-paragraph self-contained brief — what to do, what was already established, key file paths, and the success criterion. The nested session does NOT inherit the parent transcript.",
-    "- Optional `mode`: a short hint (e.g. `deep`, `rush`) describing the cognitive style the new thread should adopt.",
-    "- Recursive handoff is automatically refused inside an already-nested session, so it is safe to call at any depth.",
-  ].join("\n");
-}
-
-function buildTaskListProtocolBody(): string {
-  return [
-    "- `bytes_todo` is a lightweight in-memory task list scoped to this session: add a step, check it off when done, list current state, and remove obsolete steps.",
-    "- Use it for plans with ≥3 distinct steps that the user wants visibility into, or for multi-stage refactors where serialized progress matters.",
-    "- Do NOT use it for one-shot operations (single edit, single search) — the overhead is not worth it.",
-    "- Update the list as work progresses: check off finished steps before moving on, remove cancelled steps, and add newly-discovered prerequisites in place rather than restarting the plan.",
+    "- `handoff` spawns a fresh nested Pi session. The nested session does NOT inherit the parent transcript.",
+    "- Use it when (a) context is near capacity and quality is degrading, OR (b) the next task is logically independent.",
+    "- Required `goal`: a self-contained brief — what to do, what's already established, key file paths, success criterion.",
+    "- Optional `mode`: short cognitive-style hint (e.g. `deep`, `rush`).",
+    "- Recursive handoff is auto-refused inside an already-nested session.",
   ].join("\n");
 }
 
@@ -313,10 +310,6 @@ export function buildBytesPromptOverlay(context: BytesPromptRenderContext): Prom
 
   if (context.features.handoffEnabled) {
     sections.push(section("Handoff Protocol", "handoff_protocol", buildHandoffProtocolBody()));
-  }
-
-  if (context.features.taskListEnabled) {
-    sections.push(section("Task List Protocol", "task_list_protocol", buildTaskListProtocolBody()));
   }
 
   sections.push(

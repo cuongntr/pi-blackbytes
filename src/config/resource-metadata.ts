@@ -17,7 +17,6 @@ export const TOOL_NAMES = {
   DOCS_QUERY: "docs_query",
   GH_SEARCH: "gh_search",
   HANDOFF: "handoff",
-  BYTES_TODO: "bytes_todo",
   LOOK_AT: "look_at",
 } as const;
 
@@ -45,6 +44,8 @@ export const BUNDLED_TOOLS: readonly ToolMeta[] = [
   { name: TOOL_NAMES.AST_REPLACE },
   { name: TOOL_NAMES.GREP },
   { name: TOOL_NAMES.GLOB },
+  { name: TOOL_NAMES.HANDOFF, promptFeatures: ["handoffEnabled"] },
+  { name: TOOL_NAMES.LOOK_AT },
 ];
 
 export const TOOL_GROUPS: readonly ToolGroupMeta[] = [
@@ -92,6 +93,11 @@ export const SUB_AGENTS: readonly SubAgentMeta[] = [
   {
     name: "reviewer",
     description: "Read-only code reviewer for diffs, branches, and PRs",
+    promptFeatures: ["subagentDelegation"],
+  },
+  {
+    name: "code-tour",
+    description: "Read-only code-walkthrough sub-agent for guided file tours",
     promptFeatures: ["subagentDelegation"],
   },
 ];
@@ -165,6 +171,5 @@ export function derivePromptFeatureFlags(
     githubCodeSearch: enabledTools.has(TOOL_NAMES.GH_SEARCH),
     webSearch: enabledTools.has(TOOL_NAMES.WEB_SEARCH) || enabledTools.has(TOOL_NAMES.WEB_FETCH),
     handoffEnabled: enabledTools.has(TOOL_NAMES.HANDOFF),
-    taskListEnabled: enabledTools.has(TOOL_NAMES.BYTES_TODO),
   };
 }

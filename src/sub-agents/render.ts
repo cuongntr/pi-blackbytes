@@ -1,13 +1,8 @@
 import { type Theme, keyText } from "@mariozechner/pi-coding-agent";
 import { Container, Text } from "@mariozechner/pi-tui";
+import type { ToolHistoryEntry } from "./progress-reporter.js";
 
-/** Single tool invocation recorded in the sub-agent activity timeline. */
-export interface ToolHistoryEntry {
-  readonly name: string;
-  readonly summary?: string;
-  readonly startMs: number;
-  readonly endMs?: number;
-}
+export type { ToolHistoryEntry };
 
 /**
  * Shape of the `details` payload emitted by sub-agent progress updates and

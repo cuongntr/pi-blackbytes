@@ -1,5 +1,49 @@
 # Changelog
 
+## 2.4.0 (2026-05-12)
+
+Removes the `handoff` tool and extracts the sub-agent progress reporter into
+a shared module.
+
+The `handoff` tool spawned a fresh nested Pi session when context was "near
+capacity." In practice, the trigger relied entirely on LLM self-diagnosis of
+context exhaustion — a condition models cannot reliably detect — and the
+auto-distilled 4 KB summary rarely preserved enough context for meaningful
+continuation. `delegate_general` covers the concrete-implementation use case
+with stronger safety overlays, delegation logging, and fallback chains;
+for everything else, starting a new conversation is simpler and more reliable.
+
+### Removed
+
+- **`handoff` tool** (`src/tools/handoff/`): deleted implementation,
+  registration, and tests. `TOOL_NAMES.HANDOFF` removed from
+  `resource-metadata.ts`; `BUNDLED_TOOLS` drops from 6 to 5 entries;
+  `ALL_TOOL_NAMES` drops from 11 to 10.
+- **`handoff_protocol` prompt section**: removed from the Bytes v2 overlay
+  (14 sections, down from 15), `PromptSectionKey`, `PromptFeatureFlags`,
+  section ordering, and all four provider-variant tag maps.
+
+### Changed
+
+- **Progress reporter extracted** (`src/sub-agents/progress-reporter.ts`):
+  `createProgressReporter()`, `SubAgentProgressStatus`,
+  `SubAgentProgressDetails`, `SubAgentProgressUsage`, `ToolHistoryEntry`,
+  and all supporting helpers moved out of `register.ts` into a dedicated
+  module. `register.ts` and `render.ts` import from the new location.
+- **`buildBytesPromptOverlay()`** simplified to a single `return [...]`
+  array now that the conditional handoff section no longer splits the list.
+- Documentation (`README.md`, `AGENTS.md`) updated to reflect the current
+  tool surface (10 tools, 14 prompt sections), adds the previously missing
+  `look_at` entry in the bundled-tools table, and corrects the
+  `createProgressReporter` source location.
+
+### Tests
+
+- `enabled-set.test.ts`: tool count assertions updated (11→10, 9→8);
+  `handoffEnabled` removed from all `derivePromptFeatureFlags` expectations.
+- `bytes-capability-sync.test.ts`: `handoffEnabled` removed from expected
+  feature flags.
+
 ## 2.3.0 (2026-05-05)
 
 Removes the extension's bundled `grep` tool. Pi's built-in `grep` (available

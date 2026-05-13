@@ -34,12 +34,6 @@ function buildSessionCapabilitiesBody(context: BytesPromptRenderContext): string
     );
   }
 
-  if (context.features.handoffEnabled) {
-    lines.push(
-      "- `handoff` spawns a fresh nested Pi session for follow-up work when a clean slate beats continuing.",
-    );
-  }
-
   if (context.features.documentationLookup) {
     lines.push(
       "- Documentation lookup may be available for library and framework behavior; use it when official docs matter.",
@@ -127,16 +121,6 @@ function buildConditionalWorkflowsBody(context: BytesPromptRenderContext): strin
   }
 
   return lines.join("\n");
-}
-
-function buildHandoffProtocolBody(): string {
-  return [
-    "- `handoff` spawns a fresh nested Pi session. The nested session does NOT inherit the parent transcript.",
-    "- Use it when (a) context is near capacity and quality is degrading, OR (b) the next task is logically independent.",
-    "- Required `goal`: a self-contained brief — what to do, what's already established, key file paths, success criterion.",
-    "- Optional `mode`: short cognitive-style hint (e.g. `deep`, `rush`).",
-    "- Recursive handoff is auto-refused inside an already-nested session.",
-  ].join("\n");
 }
 
 // ---------------------------------------------------------------------------
@@ -237,7 +221,7 @@ const COMPLETION_BODY = [
 // ---------------------------------------------------------------------------
 
 export function buildBytesPromptOverlay(context: BytesPromptRenderContext): PromptSection[] {
-  const sections: PromptSection[] = [
+  return [
     section("Identity", "identity", IDENTITY_BODY),
     section("Precedence", "precedence", PRECEDENCE_BODY),
     section("Autonomy & Persistence", "autonomy_and_persistence", AUTONOMY_BODY),
@@ -253,16 +237,8 @@ export function buildBytesPromptOverlay(context: BytesPromptRenderContext): Prom
       "conditional_workflows",
       buildConditionalWorkflowsBody(context),
     ),
-  ];
-
-  if (context.features.handoffEnabled) {
-    sections.push(section("Handoff Protocol", "handoff_protocol", buildHandoffProtocolBody()));
-  }
-
-  sections.push(
     section("Markdown Format", "markdown_format", MARKDOWN_BODY),
     section("File References", "file_references", FILE_REFERENCES_BODY),
     section("Completion", "completion_contract", COMPLETION_BODY),
-  );
-  return sections;
+  ];
 }

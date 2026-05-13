@@ -42,7 +42,7 @@ describe("enabled-set", () => {
     const set = computeEnabledSet(defaultConfig);
     assert.ok(set.tools.has("hashline_edit"));
     assert.ok(set.tools.has("gh_search"));
-    assert.equal(set.tools.size, 11);
+    assert.equal(set.tools.size, 10);
     assert.ok(set.subAgents.has("explore"));
     assert.ok(set.subAgents.has("oracle"));
     assert.equal(set.subAgents.size, 5);
@@ -59,7 +59,7 @@ describe("enabled-set", () => {
     assert.ok(!set.tools.has("hashline_edit"));
     assert.ok(!set.tools.has("glob"));
     assert.ok(set.tools.has("ast_search"));
-    assert.equal(set.tools.size, 9);
+    assert.equal(set.tools.size, 8);
   });
 
   it("disabled_sub_agents removes specific sub-agents", () => {
@@ -168,7 +168,6 @@ describe("enabled-set", () => {
         documentationLookup: true,
         githubCodeSearch: true,
         webSearch: true,
-        handoffEnabled: true,
       });
     });
 
@@ -183,7 +182,6 @@ describe("enabled-set", () => {
           "docs_resolve",
           "docs_query",
           "gh_search",
-          "handoff",
         ],
         disabled_sub_agents: ["explore", "oracle", "librarian", "general", "reviewer"],
       });
@@ -195,7 +193,6 @@ describe("enabled-set", () => {
         documentationLookup: false,
         githubCodeSearch: false,
         webSearch: false,
-        handoffEnabled: false,
       });
     });
 
@@ -213,7 +210,6 @@ describe("enabled-set", () => {
         documentationLookup: false,
         githubCodeSearch: true,
         webSearch: true,
-        handoffEnabled: true,
       });
     });
   });

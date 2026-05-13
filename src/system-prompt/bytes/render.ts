@@ -12,7 +12,6 @@ const SECTION_ORDER: PromptSectionKey[] = [
   "verification_contract",
   "executing_actions_with_care",
   "conditional_workflows",
-  "handoff_protocol",
   "markdown_format",
   "file_references",
   "completion_contract",

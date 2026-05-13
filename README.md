@@ -12,7 +12,6 @@ Blackbytes extends Pi with:
 - **Strict Librarian gating** — `delegate_librarian` requires ALL of (a) external information, (b) multiple independent sources or current-year authority, (c) direct tools individually insufficient — plus an explicit anti-pattern denylist.
 - **Five builtin sub-agents** — Explore (with Tour Mode for flow walk-throughs), Oracle, Librarian, General, and Reviewer, each with typed declarations, runtime overlays, model fallback chains (read-only agents), and per-agent timeout/model/reasoning configuration.
 - **Delegation ROI tracking** — in-memory session-scoped delegation log with per-agent metrics (call count, success rate, average duration, cost). Visible via `/blackbytes-status`.
-- **`handoff` tool** — spawn a fresh nested `pi -p` session with a self-contained `goal` plus optional `mode` and `prior_summary` (4 KB cap, secrets redacted). The `PI_NESTED_DEPTH` guard automatically refuses recursive handoff. Default 30-minute timeout.
 - **`look_at` tool** — multimodal image inspector that loads a primary image plus up to 3 references (PNG/JPG/GIF/WebP/BMP/SVG, 10 MB each) and embeds them as `ImageContent` blocks alongside the analysis objective.
 - **Fluent `file://` links** — sub-agent output uses `[relpath#L-L](file:///abs/path#L-L)` links throughout.
 
@@ -26,7 +25,6 @@ Blackbytes extends Pi with:
 | External research | (manual) | `delegate_librarian` (strict gate, multi-source) |
 | Code review | (manual) | `delegate_reviewer` (severity verdict, abstraction-fit eval) |
 | Heavy implementation | (manual) | `delegate_general` (verification gates, AGENTS.md aware) |
-| Fresh-context handoff | (manual restart) | `handoff` (nested `pi -p`, recursion-guarded) |
 | Image inspection | (none) | `look_at` (PNG/JPG/GIF/WebP/BMP/SVG, multi-image compare) |
 | Edit workflow | `edit`/`write` | + `hashline_edit` (anchor-based) |
 | Web/docs lookup | (manual) | `web_search` / `web_fetch` / `docs_resolve` / `docs_query` / `gh_search` |
@@ -122,7 +120,7 @@ Running `/blackbytes-status` opens an interactive section picker rather than pri
 A compact summary line is always shown first regardless of which section is selected:
 
 ```
-Tools: **11** enabled | Agents: **5** enabled | Skills: **2** enabled
+Tools: **10** enabled | Agents: **5** enabled | Skills: **2** enabled
 ```
 
 ### Section picker
@@ -262,6 +260,7 @@ Every Blackbytes tool provides structured, scannable result rendering with three
 | `ast_search` | 🌳 | AST-aware structural search across 25 languages |
 | `ast_replace` | ✏️ | AST-aware structural rewrite with dry-run default |
 | `hashline_edit` | ✎ | LINE#ID-anchored file editing with snapshot semantics |
+| `look_at` | 👁️ | Multimodal image inspector (PNG/JPG/GIF/WebP/BMP/SVG, up to 3 reference images) |
 
 ### HTTP-backed tools
 

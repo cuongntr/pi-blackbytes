@@ -1,6 +1,6 @@
 # pi-blackbytes
 
-Pi coding-agent extension that replaces Pi's MCP-plugin dependency on the websearch, context7, and grep.app surfaces with locally-managed HTTP clients (note: `web_search` / `web_fetch` / `docs_resolve` / `docs_query` are pure REST; `gh_search` is HTTP-transported but still MCP at the protocol layer — see README for the distinction), adds bundled local tools (`hashline_edit`, `ast_search`, `ast_replace`, `glob`, `handoff`, `look_at`), and exposes delegated sub-agents (`explore`, `oracle`, `librarian`, `general`, `reviewer`).
+Pi coding-agent extension that replaces Pi's MCP-plugin dependency on the websearch, context7, and grep.app surfaces with locally-managed HTTP clients (note: `web_search` / `web_fetch` / `docs_resolve` / `docs_query` are pure REST; `gh_search` is HTTP-transported but still MCP at the protocol layer — see README for the distinction), adds bundled local tools (`hashline_edit`, `ast_search`, `ast_replace`, `glob`, `look_at`), and exposes delegated sub-agents (`explore`, `oracle`, `librarian`, `general`, `reviewer`).
 
 ## Commands
 
@@ -97,7 +97,7 @@ The schema is `.passthrough()`, so wizard-managed extra keys in the `blackbytes`
 
 ### Prompt injection
 
-The `before_agent_start` handler renders a capability-aware Bytes v2 policy overlay from runtime state. The overlay contains 15 sections (identity, precedence, autonomy, investigation, session capabilities, hard boundaries, work defaults, tool-use protocol, verification contract, executing-actions-with-care, conditional workflows, handoff protocol, markdown format, file references, and completion contract); it only mentions enabled capabilities, builds a concise positive delegation routing matrix from the enabled sub-agent set, resolves model-family formatting deterministically from the event model or cached family, and falls back to a minimal safe overlay when runtime state is incomplete. The sentinel-delimited augmentation remains idempotent: re-running the handler replaces the existing block instead of appending duplicates.
+The `before_agent_start` handler renders a capability-aware Bytes v2 policy overlay from runtime state. The overlay contains 14 sections (identity, precedence, autonomy, investigation, session capabilities, hard boundaries, work defaults, tool-use protocol, verification contract, executing-actions-with-care, conditional workflows, markdown format, file references, and completion contract); it only mentions enabled capabilities, builds a concise positive delegation routing matrix from the enabled sub-agent set, resolves model-family formatting deterministically from the event model or cached family, and falls back to a minimal safe overlay when runtime state is incomplete. The sentinel-delimited augmentation remains idempotent: re-running the handler replaces the existing block instead of appending duplicates.
 
 ### Sub-agents
 
@@ -113,7 +113,7 @@ Tool result rendering is split into three layers:
 
 1. **Compact builtins** (`src/tools/compact-tools/`): wraps Pi's `read`, `bash`, `edit`, `write`, `find`, `ls` with one-line `✓`/`✗` summaries and partial states (`Reading...`, `Running...`).
 2. **Extension tools** (`src/tools/_shared/stats-render.ts`): `buildStatsRenderResult()` factory provides `✓`/`✗` status icons, partial-state messages (`Searching...`, `Fetching...`, etc.), and collapsed summaries for all bundled and HTTP-backed tools.
-3. **Sub-agents** (`src/sub-agents/render.ts`): `SubAgentResultComponent` renders a live-updating header with status icon (`✓`/`✗`/`⚠`), elapsed time, tool call count, current tool with argument summary, output chars, model, and cost. Expanded view shows a tool activity timeline (last 30 calls with `✓`/`▸` icons, names, arg summaries, durations). Progress is driven by `createProgressReporter()` in `register.ts`, which tracks tool execution via `tool_execution_start`/`tool_execution_end` events and captures argument summaries from `toolcall_end` events.
+3. **Sub-agents** (`src/sub-agents/render.ts`): `SubAgentResultComponent` renders a live-updating header with status icon (`✓`/`✗`/`⚠`), elapsed time, tool call count, current tool with argument summary, output chars, model, and cost. Expanded view shows a tool activity timeline (last 30 calls with `✓`/`▸` icons, names, arg summaries, durations). Progress is driven by `createProgressReporter()` in `src/sub-agents/progress-reporter.ts`, which tracks tool execution via `tool_execution_start`/`tool_execution_end` events and captures argument summaries from `toolcall_end` events.
 
 Tool icons are unique per tool to avoid visual ambiguity when scanning call lines. The icon map for sub-agents lives in `SUB_AGENT_ICONS` in `src/sub-agents/register.ts`.
 

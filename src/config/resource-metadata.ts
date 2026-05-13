@@ -15,7 +15,6 @@ export const TOOL_NAMES = {
   DOCS_RESOLVE: "docs_resolve",
   DOCS_QUERY: "docs_query",
   GH_SEARCH: "gh_search",
-  HANDOFF: "handoff",
   LOOK_AT: "look_at",
 } as const;
 
@@ -42,7 +41,6 @@ export const BUNDLED_TOOLS: readonly ToolMeta[] = [
   { name: TOOL_NAMES.AST_SEARCH },
   { name: TOOL_NAMES.AST_REPLACE },
   { name: TOOL_NAMES.GLOB },
-  { name: TOOL_NAMES.HANDOFF, promptFeatures: ["handoffEnabled"] },
   { name: TOOL_NAMES.LOOK_AT },
 ];
 
@@ -163,6 +161,5 @@ export function derivePromptFeatureFlags(
     documentationLookup: enabledTools.has(TOOL_NAMES.DOCS_QUERY),
     githubCodeSearch: enabledTools.has(TOOL_NAMES.GH_SEARCH),
     webSearch: enabledTools.has(TOOL_NAMES.WEB_SEARCH) || enabledTools.has(TOOL_NAMES.WEB_FETCH),
-    handoffEnabled: enabledTools.has(TOOL_NAMES.HANDOFF),
   };
 }

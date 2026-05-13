@@ -12,7 +12,6 @@ export type PromptSectionKey =
   | "verification_contract"
   | "executing_actions_with_care"
   | "conditional_workflows"
-  | "handoff_protocol"
   | "markdown_format"
   | "file_references"
   | "completion_contract";
@@ -23,7 +22,6 @@ export interface PromptFeatureFlags {
   readonly documentationLookup: boolean;
   readonly githubCodeSearch: boolean;
   readonly webSearch: boolean;
-  readonly handoffEnabled: boolean;
 }
 
 export interface PromptSection {

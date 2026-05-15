@@ -1,6 +1,6 @@
 import { readFile, stat } from "node:fs/promises";
 import { extname, isAbsolute, resolve } from "node:path";
-import type { AgentToolResult } from "@mariozechner/pi-coding-agent";
+import type { AgentToolResult } from "@earendil-works/pi-coding-agent";
 import type { ToolResultStats } from "../_shared/stats-render.js";
 
 const MAX_IMAGE_BYTES = 10 * 1024 * 1024; // 10 MB hard cap per image

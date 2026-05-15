@@ -6,7 +6,7 @@ jobs:
     strategy:
       matrix:
         bun-version: ['1']
-        pi-version: ['0.67.0']
+        pi-version: ['0.74.0']
     steps:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v2
@@ -15,7 +15,7 @@ jobs:
       - name: Install ripgrep
         run: sudo apt-get update && sudo apt-get install -y ripgrep
       - run: bun install
-      - run: bun add @mariozechner/pi-coding-agent@${{ matrix.pi-version }}
+      - run: bun add @earendil-works/pi-coding-agent@${{ matrix.pi-version }} @earendil-works/pi-tui@${{ matrix.pi-version }}
       - run: bun run build
       - run: bun run test
   budgets:

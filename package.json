@@ -1,6 +1,6 @@
 {
   "name": "pi-blackbytes",
-  "version": "2.4.0",
+  "version": "2.5.0",
   "type": "module",
   "engines": {
     "node": ">=20"
@@ -42,7 +42,8 @@
     "zod": "^4"
   },
   "peerDependencies": {
-    "@mariozechner/pi-coding-agent": "^0.69.0",
+    "@earendil-works/pi-coding-agent": ">=0.74.0 <1",
+    "@earendil-works/pi-tui": ">=0.74.0 <1",
     "typebox": "*"
   },
   "overrides": {

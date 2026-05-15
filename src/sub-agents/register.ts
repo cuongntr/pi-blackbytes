@@ -1,4 +1,4 @@
-import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
+import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { getEnabledSet } from "../config/enabled-set.js";
 import { getLogger } from "../shared/logger.js";
 import { redactSecrets } from "../shared/redact.js";

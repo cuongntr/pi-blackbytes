@@ -16,7 +16,7 @@ import type {
   Theme,
   ToolDefinition,
   WriteToolInput,
-} from "@mariozechner/pi-coding-agent";
+} from "@earendil-works/pi-coding-agent";
 import {
   SettingsManager,
   createBashToolDefinition,
@@ -26,8 +26,8 @@ import {
   createReadToolDefinition,
   createWriteToolDefinition,
   keyHint,
-} from "@mariozechner/pi-coding-agent";
-import { Text } from "@mariozechner/pi-tui";
+} from "@earendil-works/pi-coding-agent";
+import { Text } from "@earendil-works/pi-tui";
 import type { Static, TSchema } from "typebox";
 import type { BlackbytesConfig } from "../../config/schema.js";
 

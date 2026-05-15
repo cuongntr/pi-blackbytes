@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { beforeEach, describe, it } from "node:test";
-import type { ExtensionContext, SessionShutdownEvent } from "@mariozechner/pi-coding-agent";
+import type { ExtensionContext, SessionShutdownEvent } from "@earendil-works/pi-coding-agent";
 import { _resetEnabledSet, initEnabledSet } from "../../config/enabled-set.js";
 import { parseBlackbytesConfig } from "../../config/schema.js";
 import { handleSessionShutdown } from "../index.js";

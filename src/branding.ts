@@ -4,8 +4,8 @@
  *
  * Uses fixed 24-bit RGB colors so the look is consistent regardless of theme.
  */
-import type { ExtensionContext } from "@mariozechner/pi-coding-agent";
-import { visibleWidth } from "@mariozechner/pi-tui";
+import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
+import { visibleWidth } from "@earendil-works/pi-tui";
 
 // ── ANSI helpers ─────────────────────────────────────────────────────────────
 const RESET_FG = "\x1b[39m";

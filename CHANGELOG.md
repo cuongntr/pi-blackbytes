@@ -1,5 +1,26 @@
 # Changelog
 
+## 2.5.0 (2026-05-15)
+
+Compatibility release for Pi's package-scope migration to `@earendil-works/*`.
+
+### Changed
+
+- Migrated all Pi imports and package metadata from `@mariozechner/*` to
+  `@earendil-works/pi-coding-agent` and `@earendil-works/pi-tui`.
+- Updated peer dependencies to require Pi `>=0.74.0 <1` and refreshed both
+  Bun and npm lockfiles.
+- Updated CI to install the new Pi packages under the `@earendil-works` scope.
+- Updated nested-Pi compatibility evidence for Pi `0.74.0` and the current
+  `--mode json` invocation.
+
+### Fixed
+
+- Wrapped `hashline_edit` file mutations in Pi's `withFileMutationQueue()` so
+  edits participate in Pi's parallel-tool per-file mutation queue.
+- Queued both source and destination paths for `hashline_edit` rename/move
+  operations to avoid races with concurrent writes to the destination.
+
 ## 2.4.0 (2026-05-12)
 
 Removes the `handoff` tool and extracts the sub-agent progress reporter into

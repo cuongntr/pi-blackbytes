@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
+import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 // We import via dynamic import to avoid top-level console.log at import time.
 // Instead, we test bootstrap directly.
 import { bootstrap } from "../bootstrap.js";

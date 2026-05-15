@@ -1,5 +1,5 @@
-import { readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
-import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
+import { readFileSync, unlinkSync, writeFileSync } from "node:fs";
+import { type ExtensionAPI, withFileMutationQueue } from "@earendil-works/pi-coding-agent";
 import { type Static, Type } from "typebox";
 import { TOOL_NAMES } from "../../config/resource-metadata.js";
 import { computeCID } from "../../utils/cid.js";
@@ -338,6 +338,23 @@ export function applyHashlineEdits(input: HashlineEditInput): ToolResult {
   }
 }
 
+async function runQueuedHashlineEdit(input: HashlineEditInput): Promise<ToolResult> {
+  const queuePaths = [input.filePath];
+  if (input.rename && input.rename !== input.filePath) {
+    queuePaths.push(input.rename);
+  }
+
+  const sortedQueuePaths = [...new Set(queuePaths)].sort();
+  let run = async () => applyHashlineEdits(input);
+
+  for (const filePath of sortedQueuePaths.reverse()) {
+    const next = run;
+    run = () => withFileMutationQueue(filePath, next);
+  }
+
+  return run();
+}
+
 // ---------------------------------------------------------------------------
 // Tool registration
 // ---------------------------------------------------------------------------
@@ -360,7 +377,7 @@ export function registerHashlineEditTool(pi: ExtensionAPI): void {
       "On >>> mismatch errors, copy the updated anchors from the error output and retry.",
     parameters: HashlineEditSchema,
     execute: async (_toolCallId: string, input: HashlineEditInput) => {
-      const result = applyHashlineEdits(input);
+      const result = await runQueuedHashlineEdit(input);
       if (result.success) {
         return {
           content: [{ type: "text", text: result.message }],

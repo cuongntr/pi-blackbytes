@@ -7,7 +7,7 @@ import type {
   ToolResultEvent as PiToolResultEvent,
   SessionShutdownEvent,
   SessionStartEvent,
-} from "@mariozechner/pi-coding-agent";
+} from "@earendil-works/pi-coding-agent";
 import { setupBranding } from "../branding.js";
 import { getEnabledSet, initEnabledSet } from "../config/enabled-set.js";
 import { loadBlackbytesConfig } from "../config/loader.js";

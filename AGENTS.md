@@ -128,7 +128,7 @@ Tool icons are unique per tool to avoid visual ambiguity when scanning call line
 
 ## Key constraints
 
-- Peer dependency: `@mariozechner/pi-coding-agent@^0.69.0`, `typebox@*`
+- Peer dependencies: `@earendil-works/pi-coding-agent@>=0.74.0 <1`, `@earendil-works/pi-tui@>=0.74.0 <1`, `typebox@*`
 - Node `>=20`
 - Package budget: `< 500KB` gzipped
 - Dependencies stay minimal: `zod`, `fast-glob`, `yaml`

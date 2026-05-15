@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
+import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { registerCopilotHeader } from "../copilot-header.js";
 
 function makeMockPi(): { pi: ExtensionAPI; calls: Array<[string, unknown]> } {

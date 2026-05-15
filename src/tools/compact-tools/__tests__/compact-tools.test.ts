@@ -8,7 +8,7 @@ import type {
   ExtensionCommandContext,
   ExtensionContext,
   Theme,
-} from "@mariozechner/pi-coding-agent";
+} from "@earendil-works/pi-coding-agent";
 import { parseBlackbytesConfig } from "../../../config/schema.js";
 import {
   getCompactToolsConfig,

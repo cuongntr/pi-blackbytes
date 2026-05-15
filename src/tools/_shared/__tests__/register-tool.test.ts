@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { beforeEach, describe, it } from "node:test";
-import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
+import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { _resetEnabledSet, initEnabledSet } from "../../../config/enabled-set.js";
 import { parseBlackbytesConfig } from "../../../config/schema.js";
 import { registerTool } from "../register-tool.js";

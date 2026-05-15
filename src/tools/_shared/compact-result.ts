@@ -1,5 +1,5 @@
-import { type Theme, keyText } from "@mariozechner/pi-coding-agent";
-import { Text } from "@mariozechner/pi-tui";
+import { type Theme, keyText } from "@earendil-works/pi-coding-agent";
+import { Text } from "@earendil-works/pi-tui";
 
 export interface CompactResultDetails {
   readonly fullText?: string;

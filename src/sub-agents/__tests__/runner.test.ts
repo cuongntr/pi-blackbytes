@@ -5,13 +5,14 @@ import type { SpawnFn } from "../runner.js";
 import { runNestedPi } from "../runner.js";
 
 const PI_CLI_COMPATIBILITY_EVIDENCE = {
-  installedCliVersion: "0.67.6",
-  inspectedPackageVersion: "@mariozechner/pi-coding-agent@0.67.68",
+  installedCliVersion: "0.74.0",
+  inspectedPackageVersion: "@earendil-works/pi-coding-agent@0.74.0",
   acceptedFlags: [
     "-p",
     "--system-prompt",
     "--no-session",
     "--no-context-files",
+    "--mode",
     "--model",
     "--tools",
     "--thinking",
@@ -252,10 +253,10 @@ describe("runNestedPi", () => {
   });
 
   it("records deterministic Pi CLI compatibility evidence", () => {
-    assert.equal(PI_CLI_COMPATIBILITY_EVIDENCE.installedCliVersion, "0.67.6");
+    assert.equal(PI_CLI_COMPATIBILITY_EVIDENCE.installedCliVersion, "0.74.0");
     assert.equal(
       PI_CLI_COMPATIBILITY_EVIDENCE.inspectedPackageVersion,
-      "@mariozechner/pi-coding-agent@0.67.68",
+      "@earendil-works/pi-coding-agent@0.74.0",
     );
     assert.deepEqual(PI_CLI_COMPATIBILITY_EVIDENCE.acceptedBuiltinTools, [
       "read",

@@ -1,5 +1,5 @@
-import { type Theme, keyText } from "@mariozechner/pi-coding-agent";
-import { Container, Text } from "@mariozechner/pi-tui";
+import { type Theme, keyText } from "@earendil-works/pi-coding-agent";
+import { Container, Text } from "@earendil-works/pi-tui";
 import type { ToolHistoryEntry } from "./progress-reporter.js";
 
 export type { ToolHistoryEntry };

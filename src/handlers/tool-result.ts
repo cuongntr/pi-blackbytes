@@ -40,20 +40,6 @@ export function processToolResult(
       return { ...event, content: newContent };
     }
 
-    if (event.toolName === "write") {
-      if (!event.content) return null;
-      let changed = false;
-      const newContent = event.content.map((block) => {
-        if (block.type !== "text" || block.text === undefined) return block;
-        // Count lines from original content
-        const lineCount = block.text.split("\n").length;
-        changed = true;
-        return { ...block, text: `File written successfully. ${lineCount} lines written.` };
-      });
-      if (!changed) return null;
-      return { ...event, content: newContent };
-    }
-
     return null;
   } catch {
     return null;

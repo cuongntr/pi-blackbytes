@@ -1,5 +1,15 @@
 # Changelog
 
+## 2.6.1 (2026-05-17)
+
+### Fixed
+
+- Stop mutating `event.content` in `tool_result` handler so Pi's built-in
+  `renderResult` displays clean file content without `LINE#ID|` anchors.
+  Anchors are still returned to conversation history for `hashline_edit`.
+- Remove write tool content rewrite — Pi's native response passes through
+  unchanged, giving the LLM proper feedback for verification.
+
 ## 2.6.0 (2026-05-17)
 
 Removes the compact tool renderers feature entirely.

@@ -168,9 +168,9 @@ export async function handleToolResult(
     hashline_edit: config.hashline_edit,
   });
   if (modified) {
-    // Apply modifications back to the mutable event for local tests and return
-    // the result for Pi's return-based tool_result contract.
-    (event as LocalToolResultEvent).content = modified.content;
+    // Return modified content for conversation history (LLM sees anchors)
+    // but do NOT mutate event.content so Pi's built-in renderResult
+    // continues to display the original un-anchored content to the user.
     return { content: modified.content as PiToolResultEvent["content"] };
   }
   return undefined;

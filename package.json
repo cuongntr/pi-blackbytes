@@ -1,6 +1,6 @@
 {
   "name": "pi-blackbytes",
-  "version": "2.6.0",
+  "version": "2.6.1",
   "type": "module",
   "engines": {
     "node": ">=20"

@@ -55,51 +55,20 @@ describe("processToolResult — read branch", () => {
 });
 
 describe("processToolResult — write branch", () => {
-  it("happy path: replaces content with line count summary", () => {
+  it("does not modify write tool results (pass-through)", () => {
     const event: ToolResultEvent = {
       toolName: "write",
-      content: [{ type: "text", text: "line1\nline2\nline3" }],
+      content: [{ type: "text", text: "Successfully wrote 45 bytes to src/index.ts" }],
     };
-    const result = processToolResult(event, cfg);
-    assert.ok(result !== null);
-    assert.equal(result!.content![0].text, "File written successfully. 3 lines written.");
+    assert.equal(processToolResult(event, cfg), null);
   });
 
-  it("isError: returns null", () => {
+  it("does not modify write tool errors", () => {
     const event: ToolResultEvent = {
       toolName: "write",
       isError: true,
       content: [{ type: "text", text: "oops" }],
     };
     assert.equal(processToolResult(event, cfg), null);
-  });
-
-  it("hashline_edit=false: returns null", () => {
-    const event: ToolResultEvent = {
-      toolName: "write",
-      content: [{ type: "text", text: "a\nb" }],
-    };
-    assert.equal(processToolResult(event, cfgOff), null);
-  });
-
-  it("line count accuracy for multi-line content", () => {
-    const lines = Array.from({ length: 100 }, (_, i) => `line ${i + 1}`).join("\n");
-    const event: ToolResultEvent = {
-      toolName: "write",
-      content: [{ type: "text", text: lines }],
-    };
-    const result = processToolResult(event, cfg);
-    assert.ok(result !== null);
-    assert.equal(result!.content![0].text, "File written successfully. 100 lines written.");
-  });
-
-  it("single line content counts as 1 line", () => {
-    const event: ToolResultEvent = {
-      toolName: "write",
-      content: [{ type: "text", text: "just one line" }],
-    };
-    const result = processToolResult(event, cfg);
-    assert.ok(result !== null);
-    assert.equal(result!.content![0].text, "File written successfully. 1 lines written.");
   });
 });

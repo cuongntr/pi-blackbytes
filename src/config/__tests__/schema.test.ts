@@ -11,7 +11,6 @@ describe("BlackbytesConfigSchema", () => {
       assert.deepEqual(result.value.disabled_sub_agents, []);
       assert.equal(result.value.hashline_edit, true);
       assert.equal(result.value.copilot_initiator_header, true);
-      assert.equal(result.value.compact_tools, undefined);
       assert.equal(result.value.websearch, undefined);
       assert.equal(result.value.context7, undefined);
       assert.equal(result.value.system_prompt_log, undefined);
@@ -42,7 +41,6 @@ describe("BlackbytesConfigSchema", () => {
       disabled_sub_agents: ["explore", "oracle"],
       hashline_edit: false,
       copilot_initiator_header: false,
-      compact_tools: { enabled: true, default_expanded: true },
       websearch: { provider: "exa", exa_api_key: "key123" },
       context7: { api_key: "c7key" },
       system_prompt_log: {
@@ -60,8 +58,6 @@ describe("BlackbytesConfigSchema", () => {
       assert.deepEqual(result.value.disabled_tools, ["tool1", "tool2"]);
       assert.deepEqual(result.value.disabled_sub_agents, ["explore", "oracle"]);
       assert.equal(result.value.hashline_edit, false);
-      assert.equal(result.value.compact_tools?.enabled, true);
-      assert.equal(result.value.compact_tools?.default_expanded, true);
       assert.equal(result.value.websearch?.provider, "exa");
       assert.equal(result.value.websearch?.exa_api_key, "key123");
       assert.equal(result.value.context7?.api_key, "c7key");
@@ -72,15 +68,6 @@ describe("BlackbytesConfigSchema", () => {
       assert.equal(result.value.system_prompt_log?.include_nested, false);
       assert.equal(result.value.system_prompt_log?.dedupe, true);
       assert.equal(result.value.sub_agents?.myAgent?.model, "gpt-4o");
-    }
-  });
-
-  it("applies compact_tools nested defaults when configured", () => {
-    const result = parseBlackbytesConfig({ compact_tools: {} });
-    assert.ok(result.ok);
-    if (result.ok) {
-      assert.equal(result.value.compact_tools?.enabled, true);
-      assert.equal(result.value.compact_tools?.default_expanded, false);
     }
   });
 

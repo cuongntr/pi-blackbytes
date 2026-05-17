@@ -6,12 +6,6 @@ export const BlackbytesConfigSchema = z
     disabled_sub_agents: z.array(z.string()).default([]),
     hashline_edit: z.boolean().default(true),
     copilot_initiator_header: z.boolean().default(true),
-    compact_tools: z
-      .object({
-        enabled: z.boolean().default(true),
-        default_expanded: z.boolean().default(false),
-      })
-      .optional(),
     websearch: z
       .object({
         provider: z.enum(["exa", "tavily"]).default("exa"),

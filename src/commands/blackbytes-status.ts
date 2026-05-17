@@ -8,7 +8,6 @@ import { getDelegationSummary } from "../sub-agents/delegation-log.js";
 import { type YamlDiagnostics, getYamlDiagnostics } from "../sub-agents/diagnostics.js";
 import { getAgentSnapshot } from "../sub-agents/snapshot.js";
 import type { AgentSnapshot } from "../sub-agents/snapshot.js";
-import { getCompactToolsConfig } from "../tools/compact-tools/index.js";
 
 const SECRET_KEYS = ["api_key", "exa_api_key", "tavily_api_key", "authorization"];
 
@@ -177,7 +176,6 @@ interface StatusSections {
   enabledSkills: string[];
   delegationRoi: string[];
   systemPromptLog: string[];
-  compactTools: string[];
   reserved: string[];
   snapshot: string[];
   yaml: string[];
@@ -232,13 +230,6 @@ async function buildStatusSections(): Promise<StatusSections> {
     `- include_nested: ${systemPromptLog.include_nested}`,
     `- dedupe: ${systemPromptLog.dedupe}`,
   ];
-  const compactTools = getCompactToolsConfig(config);
-  const compactToolsLines = [
-    "### Compact Tool Output",
-    `- enabled: ${compactTools.enabled}`,
-    `- default_expanded: ${compactTools.defaultExpanded}`,
-    "- command: `/toggle-verbose`",
-  ];
 
   const toolCount = enabledSet ? enabledSet.tools.size : 0;
   const agentCount = enabledSet ? enabledSet.subAgents.size : 0;
@@ -266,7 +257,6 @@ async function buildStatusSections(): Promise<StatusSections> {
     ],
     delegationRoi: ["### Delegation ROI", getDelegationSummary()],
     systemPromptLog: systemPromptLogLines,
-    compactTools: compactToolsLines,
     reserved: reservedLines,
     snapshot: snapshotLines,
     yaml: yamlLines,
@@ -287,8 +277,6 @@ function buildFullOutput(sections: StatusSections): string {
     ...sections.delegationRoi,
     "",
     ...sections.systemPromptLog,
-    "",
-    ...sections.compactTools,
     "",
     ...sections.reserved,
     "",
@@ -312,7 +300,6 @@ const SECTION_MENU: Array<{ label: string; key: keyof StatusSections }> = [
   { label: "Sub-Agent Snapshot", key: "snapshot" },
   { label: "YAML Diagnostics", key: "yaml" },
   { label: "System Prompt Log", key: "systemPromptLog" },
-  { label: "Compact Tool Output", key: "compactTools" },
   { label: "Reserved / Unsupported Settings", key: "reserved" },
   { label: "Full Config (JSON)", key: "config" },
 ];

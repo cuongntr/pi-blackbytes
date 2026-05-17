@@ -32,7 +32,6 @@ import { initAgentSnapshot } from "../sub-agents/snapshot.js";
 import { assertUniqueNames } from "../sub-agents/validate-unique.js";
 import { registerAstGrepReplaceTool } from "../tools/ast-grep/replace.js";
 import { registerAstGrepSearchTool } from "../tools/ast-grep/search.js";
-import { registerCompactToolRenderers } from "../tools/compact-tools/index.js";
 import { registerQueryDocsTool } from "../tools/context7/query.js";
 import { registerResolveLibraryIdTool } from "../tools/context7/resolve.js";
 import { registerGlobTool } from "../tools/glob/index.js";
@@ -99,7 +98,6 @@ export async function handleSessionStart(
 
   registerCopilotHeader(pi, config);
 
-  registerCompactToolRenderers(pi, config, _ctx);
   // Local tools
   registerHashlineEditTool(pi);
   registerAstGrepSearchTool(pi);

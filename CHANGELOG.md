@@ -1,5 +1,21 @@
 # Changelog
 
+## 2.6.0 (2026-05-17)
+
+Removes the compact tool renderers feature entirely.
+
+The compact tools system wrapped Pi's built-in tools (`read`, `bash`, `edit`,
+`write`, `find`, `ls`) with one-line summary renderers and a `/toggle-verbose`
+command. In practice the extra abstraction added complexity without meaningful
+benefit — full tool output is perfectly readable.
+
+### Removed
+
+- `src/tools/compact-tools/` — compact render wrappers for Pi built-in tools.
+- `/toggle-verbose` command — no longer needed without compact renderers.
+- `compact_tools` config block (`enabled`, `default_expanded`) from schema.
+- "Compact Tool Output" section from `/blackbytes-status`.
+
 ## 2.5.0 (2026-05-15)
 
 Compatibility release for Pi's package-scope migration to `@earendil-works/*`.

@@ -37,6 +37,7 @@ import { registerResolveLibraryIdTool } from "../tools/context7/resolve.js";
 import { registerGlobTool } from "../tools/glob/index.js";
 import { registerGrepAppSearchTool } from "../tools/grep-app/search.js";
 import { registerHashlineEditTool } from "../tools/hashline-edit/index.js";
+import { registerCleanReadRenderer } from "../tools/hashline-edit/read-renderer.js";
 import { registerLookAtTool } from "../tools/look-at/register.js";
 import { registerWebsearchFetchTool } from "../tools/websearch/fetch.js";
 import { registerWebsearchSearchTool } from "../tools/websearch/search.js";
@@ -100,6 +101,7 @@ export async function handleSessionStart(
 
   // Local tools
   registerHashlineEditTool(pi);
+  registerCleanReadRenderer(pi, _ctx.cwd ?? process.cwd());
   registerAstGrepSearchTool(pi);
   registerAstGrepReplaceTool(pi);
   registerGlobTool(pi);

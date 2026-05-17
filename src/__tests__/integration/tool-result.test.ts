@@ -86,8 +86,8 @@ describe("integration: tool_result", () => {
     assert.ok(lines[2].startsWith("3#"), "third line prefix starts with '3#'");
   });
 
-  it("write tool result normalized to 'File written successfully. N lines written.'", async () => {
-    const originalText = "line one\nline two\nline three";
+  it("write tool result passes through unchanged", async () => {
+    const originalText = "Successfully wrote 45 bytes to src/index.ts";
     const event: ToolResultEvent = {
       toolName: "write",
       content: [{ type: "text", text: originalText }],
@@ -95,9 +95,7 @@ describe("integration: tool_result", () => {
 
     const result = processToolResult(event, { hashline_edit: true });
 
-    assert.ok(result !== null, "processToolResult should return a result for 'write'");
-    const text = result!.content![0].text!;
-    assert.equal(text, "File written successfully. 3 lines written.");
+    assert.equal(result, null, "processToolResult should not modify write results");
   });
 
   it("hashline_edit=false: read tool result content unchanged (returns null)", async () => {
@@ -162,11 +160,13 @@ describe("integration: tool_result", () => {
       await mock.emit("tool_result", event);
       await settle();
 
-      // Handler is wired, mutates the mock event for local compatibility, and returns
-      // the rewritten result for Pi's return-based tool_result contract.
+      // Handler is wired and returns the rewritten result for Pi's
+      // return-based tool_result contract, but does NOT mutate event.content
+      // so the built-in renderer displays clean content to the user.
       const toolResultReg = mock.calls.on.find((c) => c.event === "tool_result");
       assert.ok(toolResultReg, "bootstrap should register a tool_result handler");
-      assert.match(event.content![0].text!, /^1#[A-Z]{2}\|line A/);
+      // event.content should remain unmutated (clean for rendering)
+      assert.equal(event.content![0].text!, "line A\nline B");
     } finally {
       await fs.rm(subDir, { recursive: true, force: true });
     }

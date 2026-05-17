@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.6.2 (2026-05-17)
+
+### Fixed
+
+- Override read tool `renderResult` to strip `LINE#ID|` anchors from TUI
+  display. Users now see clean syntax-highlighted code; LLM still receives
+  anchored content for `hashline_edit` precision.
+
 ## 2.6.1 (2026-05-17)
 
 ### Fixed

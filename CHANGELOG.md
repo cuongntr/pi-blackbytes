@@ -1,5 +1,85 @@
 # Changelog
 
+## 2.8.0 (2026-05-26)
+
+Sub-agent inline UI polish: agent identity in the header, braille spinner,
+smart duration/cost formatters, path-aware tool argument truncation, inline
+failed-error hint, and an aggregated expanded footer.
+
+### Added
+
+- **Agent identity in the header** — each delegation row shows the agent icon
+  (🔭 explore, 🧠 oracle, 📚 librarian, ⚡ general, 📋 reviewer; `▸` for YAML
+  agents) and the bold agent name colored by status.
+- **Braille spinner** — `⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏` animates at 10 fps while a delegation
+  is running, driven by a per-row `setInterval` at 100 ms. Frame is computed
+  from `Date.now()` so parallel delegations stay visually in sync.
+- **Smart duration formatter** (`formatDuration`) — progressive precision
+  `<1ms` → `47ms` → `3.2s` → `2m 7s` → `1h 12m`. Applied to both header
+  elapsed time and tool-timeline entries; replaces the previous flat
+  `(0.0s)` rendering for sub-second tools.
+- **Smart cost formatter** (`formatCost`) — progressive tiers `<$0.001` →
+  `$0.004` → `$0.420` → `$1.23` → `$1235`. Threshold guards prevent
+  rollover artefacts (e.g. `99.999` renders as `$100`, not `$100.00`).
+- **Inline failed-error hint** — when status is `failed`, the collapsed header
+  surfaces a one-line, red-colored hint extracted from the result text (leading
+  `Error:` stripped, clamped to 60 chars with ellipsis) so the user can see
+  the cause without expanding.
+- **Path-aware tool argument truncation** (`truncatePath`) — progress-reporter
+  argument summaries for `path` / `filePath` keys collapse the middle
+  (`…/sub-agents/render.ts`) instead of tail-cutting the filename. Falls back
+  to left-truncating the basename when even that overflows the budget.
+- **Between-calls last-tool indicator** — while a delegation is between tool
+  invocations, the header keeps the last finished tool visible as
+  `◷ <name>` in muted color so the row never goes silent while the elapsed
+  counter ticks.
+- **Split coloring on the active tool** — accent wrench icon, `toolTitle`
+  tool name, muted arg summary; matches the convention used by
+  `_shared/call-render.ts` for top-level tool calls.
+- **Expanded footer aggregate** — below the assistant output the expanded view
+  renders `<model> · Tools: 12× read · 4× bash · $0.004` (muted). Tool mix
+  is sorted by call count descending, ties broken alphabetically. Any of the
+  three bits is omitted when the corresponding data is unavailable.
+- **`src/sub-agents/format.ts`** — new module exporting `SPINNER_FRAMES`,
+  `SPINNER_TICK_MS`, `getSpinnerFrame`, `formatDuration`, `formatCost`, and
+  `truncatePath`. Pure functions, no theme dependency, independently tested.
+- **`src/sub-agents/icons.ts`** — new module exporting `SUB_AGENT_ICONS` and
+  the `getAgentIcon(name)` fallback helper (`▸` for unknown/YAML agents).
+  Single source of truth shared by the call-line renderer and the result
+  renderer.
+- **53 new sub-agent rendering tests** (598 → 648 total) covering header bits,
+  current/last tool display, error hint extraction, footer aggregate, spinner
+  cycling, and all formatter edge cases.
+
+### Changed
+
+- **Status word dropped from the collapsed header** — the spinner / `✓` / `✗`
+  / `⚠` glyph carries the meaning; the redundant `completed`/`failed`/etc.
+  word is gone. Matches the convention used by `_shared/stats-render.ts`.
+- **Model name moved out of the collapsed header** into the expanded footer
+  aggregate to reduce header noise.
+- **Render loop tick** raised from 1 s to 100 ms (`SPINNER_TICK_MS`) to drive
+  the spinner animation and keep the elapsed counter smooth between tool
+  events.
+- **`register.ts`** uses `getAgentIcon()` from `icons.ts` instead of the inline
+  `SUB_AGENT_ICONS[name] ?? "▸"` fallback, eliminating the duplicated literal.
+
+### Fixed
+
+- **`formatDuration(999.6)`** previously rendered as `1000ms` because rounding
+  spilled past the seconds boundary. Now bucketed after rounding, producing
+  `1.0s`.
+- **`formatCost(99.999)`** previously rendered as `$100.00` because
+  `.toFixed(2)` rolled the display past the tier threshold. Threshold guards
+  (`0.9995` / `99.995`) bucket boundary values into the correct tier.
+- **`getSpinnerFrame(now)`** now clamps `now ≥ 0` so negative timestamps (JS
+  `%` returns negative remainders, which would index out-of-bounds and return
+  `undefined`) always resolve to a real spinner frame.
+- **`truncatePath(p, 0)`** previously returned the full string because
+  `slice(-0)` equals `slice(0)`. Now returns `""` for non-positive budgets.
+
+---
+
 ## 2.7.0 (2026-05-26)
 
 Prompt system hardening: typed routing metadata, per-model-family prompt

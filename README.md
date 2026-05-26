@@ -388,18 +388,34 @@ Delegate tools emit bounded, redacted `onUpdate` status events while the nested 
 A single-line header showing real-time execution status:
 
 ```
-✓ completed · 12.5s · 8 calls · 2,048 chars · gpt-4o · $0.0312 · ctrl+o to expand
+✓ 🔭 explore · 12.5s · 8 calls · 2,048 chars · $0.031 · ctrl+o to expand
+```
+
+While a delegation is running:
+
+```
+⠹ 🔭 explore · 9.0s · 4 calls · 🔧 read …/sub-agents/render.ts
+```
+
+On failure:
+
+```
+✗ 🔭 explore · 1.4s · 2 calls · budget exhausted · ctrl+o to expand
 ```
 
 Header elements (left to right):
-- **Status icon + text**: `✓ completed` (green), `✗ failed` (red), `⚠ timed_out` / `⚠ cancelled` (yellow), `running` (accent, no icon)
-- **Elapsed time**: live-ticking wall-clock counter
-- **Tool call count**: total number of tool invocations by the sub-agent
-- **Current tool** (running only): `🔧 read src/config/schema.ts` — the active tool name with a truncated argument summary
-- **Output chars**: total captured assistant output size
-- **Model**: the model used for the current or final attempt
-- **Cost**: accumulated token cost across all turns
-- **Expand hint**: `ctrl+o to expand`
+
+- **Status indicator**: a braille spinner (`⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏`) animating at 10 fps while running, `✓` (success), `✗` (failure), or `⚠` (cancelled / timed out) once complete. The status word (`completed`, `failed`, etc.) is omitted because the glyph carries the meaning.
+- **Agent identity**: the agent icon (🔭 explore, 🧠 oracle, 📚 librarian, ⚡ general, 📋 reviewer; `▸` for YAML-defined agents) followed by the bold agent name colored to match the status (red for failed, accent for running, success for completed).
+- **Elapsed time**: live-ticking wall-clock counter with progressive precision — `<1ms`, `47ms`, `3.2s`, `2m 7s`, or `1h 12m`.
+- **Tool call count**: total number of tool invocations by the sub-agent.
+- **Current tool** (running only): `🔧 read …/sub-agents/render.ts` — the active tool name with a truncated argument summary. The wrench icon is accent-colored, the tool name uses the `toolTitle` token, and the argument hint is muted. Between calls (after one tool completes but before the next starts), the last finished tool is kept visible as `◷ <name>` in muted color so the row never goes silent.
+- **Output chars**: total captured assistant output size.
+- **Cost** (when > 0): smart-formatted USD — `<$0.001`, `$0.004`, `$0.420`, `$1.23`, `$42.05`, or `$1235`.
+- **Error hint** (failed only): the first line of the failure message, stripped of any leading `Error:` prefix and clamped to 60 characters, rendered in red so the cause is visible without expanding.
+- **Expand hint**: `ctrl+o to expand`.
+
+The model name is intentionally absent from the collapsed header — it appears in the expanded footer instead to keep the header scannable.
 
 ### Expanded view (`Ctrl+O`)
 
@@ -407,16 +423,22 @@ When expanded, the header is followed by a **tool activity timeline** showing th
 
 ```
   [+5 earlier calls]
-  ✓ read src/config/schema.ts (0.2s)
+  ✓ read src/config/schema.ts (234ms)
   ✓ ast_search 'registerTool' (1.2s)
-  ✓ bash grep -r "subagent" (0.8s)
-  ✓ read src/sub-agents/runner.ts (0.1s)
+  ✓ bash grep -r "subagent" (847ms)
+  ✓ read …/sub-agents/runner.ts (47ms)
   ▸ bash bun run build (running…)
 ```
 
-Each entry shows a `✓` (completed, green) or `▸` (running, accent) icon, the tool name, an optional argument summary (path, command, query, etc.), and the execution duration. Tool arguments are extracted from well-known parameter names (`path`, `command`, `query`, `pattern`, `url`, etc.) and truncated to 50 characters.
+Each entry shows a `✓` (completed, green) or `▸` (running, accent) icon, the tool name colored with the `toolTitle` token, an optional muted argument summary (path, command, query, etc.), and the execution duration. Sub-second tools display millisecond precision instead of `0.0s`. Tool arguments are extracted from well-known parameter names (`path`, `filePath`, `command`, `query`, `pattern`, `url`, etc.) and truncated to 50 characters. Path-like arguments (`path`, `filePath`) are truncated from the **left** to preserve the filename and as many trailing parent segments as fit: `/Users/invoker/Work/personal/pi-blackbytes/src/sub-agents/render.ts` becomes `…/sub-agents/render.ts` rather than losing the filename to a tail-cut.
 
-Below the timeline, the expanded view shows the assistant's output preview (while running) or the final result text (when complete).
+Below the timeline, the expanded view shows the assistant's output preview (while running) or the final result text (when complete), followed by a **muted footer aggregate**:
+
+```
+gemini-3-flash-preview · Tools: 12× read · 4× ast_search · 1× bash · $0.004
+```
+
+The footer carries the model name, a flattened tool-mix summary sorted by call count descending (ties broken alphabetically), and the smart-formatted cost. Any of the three is omitted when the corresponding data is unavailable; the entire footer is suppressed when nothing remains to display.
 
 ### Design constraints
 

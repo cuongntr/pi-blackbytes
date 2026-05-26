@@ -1,4 +1,5 @@
 import { getLogger } from "../shared/logger.js";
+import { truncatePath } from "./format.js";
 import { redactDelegateText } from "./runner.js";
 import type { PiSessionEvent } from "./types.js";
 
@@ -168,6 +169,9 @@ export function createProgressReporter(opts: ProgressReporterOptions): ProgressR
 
   const isStringRecord = (v: unknown): v is Record<string, unknown> => !!v && typeof v === "object";
 
+  /** Path-like arg keys: truncate from the LEFT (preserve filename) instead of the right. */
+  const PATH_LIKE_KEYS = new Set(["path", "filePath"]);
+
   /** Extract a short human-readable hint from tool arguments. */
   const summarizeToolArgs = (args: Record<string, unknown>): string | undefined => {
     // Try well-known parameter names in priority order
@@ -185,9 +189,9 @@ export function createProgressReporter(opts: ProgressReporterOptions): ProgressR
     ]) {
       const val = args[key];
       if (typeof val === "string" && val.length > 0) {
-        return val.length > MAX_TOOL_ARG_SUMMARY
-          ? `${val.slice(0, MAX_TOOL_ARG_SUMMARY - 1)}\u2026`
-          : val;
+        if (val.length <= MAX_TOOL_ARG_SUMMARY) return val;
+        if (PATH_LIKE_KEYS.has(key)) return truncatePath(val, MAX_TOOL_ARG_SUMMARY);
+        return `${val.slice(0, MAX_TOOL_ARG_SUMMARY - 1)}\u2026`;
       }
     }
     return undefined;

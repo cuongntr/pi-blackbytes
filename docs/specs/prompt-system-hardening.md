@@ -1,6 +1,6 @@
 # Prompt System Hardening — Sub-Agent Persona Spec
 
-> **Status**: Draft
+> **Status**: ✅ Done
 > **Date**: 2026-05-26
 > **Goal**: Close concrete gaps in the 5 builtin sub-agent prompts surfaced by a side-by-side review against `../oc-blackbytes`, while preserving the existing runtime-overlay contract and avoiding prompt-size growth for default users.
 

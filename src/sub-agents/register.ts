@@ -7,6 +7,7 @@ import type { SubAgentDeclaration } from "./declaration.js";
 import { finalizeNestedTools } from "./delegable-tools.js";
 import { logDelegation } from "./delegation-log.js";
 import { type FallbackResult, executeWithFallback, formatAttempts } from "./fallback.js";
+import { getAgentIcon } from "./icons.js";
 import { type SubAgentProgressStatus, createProgressReporter } from "./progress-reporter.js";
 import { buildSystemPrompt, resolveSystemPromptBody } from "./prompt-builder.js";
 import { buildSubAgentRenderResult } from "./render.js";
@@ -25,14 +26,6 @@ export interface RegisterSubAgentOptions {
   /** Override the default spawn function (for testing). */
   spawnFn?: SpawnFn;
 }
-
-const SUB_AGENT_ICONS: Record<string, string> = {
-  explore: "🔭",
-  oracle: "🧠",
-  librarian: "📚",
-  general: "⚡",
-  reviewer: "📋",
-};
 
 /** Derive the primary display key from a declaration's parameter schema. */
 function resolvePrimaryKey(decl: SubAgentDeclaration): string {
@@ -74,7 +67,7 @@ export function registerSubAgent(
     executionMode: getAgentSnapshotFor(declaration.name)?.executionMode,
     renderShell: "default",
     renderCall: makeSubAgentRenderCall(
-      SUB_AGENT_ICONS[declaration.name] ?? "▸",
+      getAgentIcon(declaration.name),
       declaration.name,
       resolvePrimaryKey(declaration),
     ),

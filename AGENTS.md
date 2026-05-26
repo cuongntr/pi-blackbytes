@@ -57,7 +57,7 @@ All tools and sub-agents are registered in `handleSessionStart()` (`src/handlers
 1. Define a declaration with `defineSubAgent()` in `src/sub-agents/<name>.ts`
 2. Export the declaration and add it to `BUILTIN_DECLARATIONS` in `src/handlers/index.ts`
 3. Add metadata to `SUB_AGENTS` in `src/config/resource-metadata.ts`
-4. Add the icon to `SUB_AGENT_ICONS` in `src/sub-agents/register.ts`
+4. Add the icon to `SUB_AGENT_ICONS` in `src/sub-agents/icons.ts`
 5. Add `routing` metadata to the declaration (category, cost, useWhen, avoidWhen, keyTrigger)
 6. Update the hardcoded agent-name lists in the affected test files (see `src/config/__tests__/enabled-set.test.ts` for the pattern)
 
@@ -112,9 +112,11 @@ Read-only sub-agents (explore, oracle, librarian, reviewer) each declare a `prep
 Tool result rendering is split into two layers:
 
 1. **Extension tools** (`src/tools/_shared/stats-render.ts`): `buildStatsRenderResult()` factory provides `✓`/`✗` status icons, partial-state messages (`Searching...`, `Fetching...`, etc.), and collapsed summaries for all bundled and HTTP-backed tools.
-2. **Sub-agents** (`src/sub-agents/render.ts`): `SubAgentResultComponent` renders a live-updating header with status icon (`✓`/`✗`/`⚠`), elapsed time, tool call count, current tool with argument summary, output chars, model, and cost. Expanded view shows a tool activity timeline (last 30 calls with `✓`/`▸` icons, names, arg summaries, durations). Progress is driven by `createProgressReporter()` in `src/sub-agents/progress-reporter.ts`, which tracks tool execution via `tool_execution_start`/`tool_execution_end` events and captures argument summaries from `toolcall_end` events.
+2. **Sub-agents** (`src/sub-agents/render.ts`): `SubAgentResultComponent` renders a live-updating header with a status indicator (braille spinner `⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏` while running, `✓`/`✗`/`⚠` once complete; the status word itself is dropped), the agent icon and bold name colored by status, elapsed time with progressive precision (`<1ms` → `ms` → `s` → `m s` → `h m`), tool call count, active tool with split coloring (accent icon, `toolTitle` name, muted args) or the last finished tool as `◷ <name>` muted between calls, output chars, smart-formatted cost (`<$0.001` / `$0.004` / `$0.420` / `$1.23` / `$1235`), and a one-line red error hint on failure. Expanded view shows the tool activity timeline (last 30 calls with `✓`/`▸` icons, `toolTitle`-colored names, muted arg summaries, and durations sharing the same progressive precision formatter as the header) followed by the assistant output and a muted footer aggregate `<model> · Tools: 12× read · 4× bash · $0.004` (sorted by count descending, ties broken alphabetically). The spinner is driven by a per-row `setInterval` at `SPINNER_TICK_MS` (100 ms) that calls `context.invalidate()`; the frame is computed from `Date.now()` so parallel delegations stay in sync without a shared counter. Progress is driven by `createProgressReporter()` in `src/sub-agents/progress-reporter.ts`, which tracks tool execution via `tool_execution_start`/`tool_execution_end` events and captures argument summaries from `toolcall_end` events. Path-like argument keys (`path`, `filePath`) are summarised by `truncatePath()` (`src/sub-agents/format.ts`), which collapses the middle to preserve the filename and as many trailing parents as fit; non-path keys fall back to a 50-character tail-cut with ellipsis.
 
-Tool icons are unique per tool to avoid visual ambiguity when scanning call lines. The icon map for sub-agents lives in `SUB_AGENT_ICONS` in `src/sub-agents/register.ts`.
+Display-format helpers (`SPINNER_FRAMES`, `getSpinnerFrame`, `formatDuration`, `formatCost`, `truncatePath`) live in `src/sub-agents/format.ts` as pure functions — no theme dependency, no I/O — and are tested independently. The agent icon map (`SUB_AGENT_ICONS`) and the `getAgentIcon(name)` fallback helper (`▸` for unknown agents) live in `src/sub-agents/icons.ts` and are imported by both the call-line renderer (`register.ts`) and the result renderer (`render.ts`) so there is one source of truth.
+
+Tool icons are unique per tool to avoid visual ambiguity when scanning call lines.
 
 ## Code style
 

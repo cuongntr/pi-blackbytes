@@ -1,5 +1,7 @@
 import { type Theme, keyText } from "@earendil-works/pi-coding-agent";
 import { Container, Text } from "@earendil-works/pi-tui";
+import { SPINNER_TICK_MS, formatCost, formatDuration, getSpinnerFrame } from "./format.js";
+import { getAgentIcon } from "./icons.js";
 import type { ToolHistoryEntry } from "./progress-reporter.js";
 
 export type { ToolHistoryEntry };
@@ -44,10 +46,6 @@ interface RenderState {
   startedAt: number | undefined;
   endedAt: number | undefined;
   interval: NodeJS.Timeout | undefined;
-}
-
-function formatDuration(ms: number): string {
-  return `${(ms / 1000).toFixed(1)}s`;
 }
 
 function statusColor(
@@ -108,48 +106,85 @@ export function rebuildSubAgentResultComponent(
         ? (state.endedAt ?? Date.now()) - state.startedAt
         : undefined));
 
-  // Single-line header: "<status> · <elapsed> · <calls> · 🔧 <tool> · <chars> · <model> · $<cost> · ⌃O expand"
-  // Everything fits on one row; press Ctrl+O for full output.
-  const statusIcon =
-    status === "completed"
-      ? "✓ "
-      : status === "failed"
-        ? "✗ "
-        : status === "cancelled" || status === "timed_out"
-          ? "⚠ "
-          : "";
-  const headerBits: string[] = [theme.fg(color, theme.bold(`${statusIcon}${status}`))];
+  // Header: "<status-icon> <agent-icon> <agent> · <elapsed> · <calls> · <tool> · <chars> · $<cost> · ⌃O expand"
+  // Model name is intentionally NOT in the header — it moves to the expanded body to reduce noise.
+  // Status indicator: spinner braille while running, terminal glyph otherwise.
+  // The word "running"/"completed"/etc. is dropped — the icon carries the meaning,
+  // matching the convention used by stats-render.ts for other tools.
+  const statusIndicator =
+    status === "running"
+      ? theme.fg("accent", getSpinnerFrame())
+      : status === "completed"
+        ? theme.fg("success", "✓")
+        : status === "failed"
+          ? theme.fg("error", "✗")
+          : status === "cancelled" || status === "timed_out"
+            ? theme.fg("warning", "⚠")
+            : "";
+  // Agent identity: <icon> <bold name> in the agent's status color so the row
+  // is recognisable at a glance even when many delegations run in parallel.
+  const agentLabel = details.agent
+    ? `${getAgentIcon(details.agent)} ${theme.fg(color, theme.bold(details.agent))}`
+    : "";
+  // Fuse status + agent into one bit so the " · " separator does not appear
+  // between them (we want "⠹ 🔭 explore", not "⠹ · 🔭 explore").
+  const identity =
+    statusIndicator && agentLabel
+      ? `${statusIndicator} ${agentLabel}`
+      : statusIndicator || agentLabel;
+  const headerBits: string[] = [];
+  if (identity) headerBits.push(identity);
   if (elapsedMs !== undefined) {
     headerBits.push(theme.fg("muted", formatDuration(elapsedMs)));
   }
   if (typeof details.toolCallCount === "number" && details.toolCallCount > 0) {
     headerBits.push(theme.fg("muted", `${details.toolCallCount} calls`));
   }
-  if (status === "running" && details.currentTool) {
-    const toolLabel = details.currentTool;
-    const currentEntry =
-      details.toolHistory && details.toolHistory.length > 0
-        ? details.toolHistory[details.toolHistory.length - 1]
-        : undefined;
-    const argHint =
-      currentEntry && currentEntry.endMs === undefined && currentEntry.summary
-        ? ` ${currentEntry.summary}`
-        : "";
-    headerBits.push(theme.fg("accent", `🔧 ${toolLabel}${argHint}`));
+  if (status === "running") {
+    if (details.currentTool) {
+      // Active tool: split coloring — icon accent ("in progress"), tool name in
+      // toolTitle (recognisable identifier), arg hint muted (supporting detail).
+      // Matches the convention used by src/tools/_shared/call-render.ts.
+      const toolLabel = details.currentTool;
+      const currentEntry =
+        details.toolHistory && details.toolHistory.length > 0
+          ? details.toolHistory[details.toolHistory.length - 1]
+          : undefined;
+      const argHint =
+        currentEntry && currentEntry.endMs === undefined && currentEntry.summary
+          ? currentEntry.summary
+          : "";
+      const iconAndName = `${theme.fg("accent", "🔧")} ${theme.fg("toolTitle", toolLabel)}`;
+      const tail = argHint ? ` ${theme.fg("muted", argHint)}` : "";
+      headerBits.push(`${iconAndName}${tail}`);
+    } else if (details.toolHistory && details.toolHistory.length > 0) {
+      // Between calls (e.g. agent is thinking after a tool completed): keep the
+      // last tool visible but muted so the row never goes "silent" while the
+      // elapsed counter ticks on. ◷ glyph signals "just finished".
+      const last = details.toolHistory[details.toolHistory.length - 1];
+      if (last.endMs !== undefined) {
+        const hint = last.summary ? ` ${last.summary}` : "";
+        headerBits.push(theme.fg("muted", `◷ ${last.name}${hint}`));
+      }
+    }
   }
   if (typeof details.outputChars === "number" && details.outputChars > 0) {
     headerBits.push(theme.fg("muted", `${details.outputChars.toLocaleString("en-US")} chars`));
   }
-  if (details.model) {
-    headerBits.push(theme.fg("muted", details.model));
-  }
   if (details.usage && typeof details.usage.cost === "number" && details.usage.cost > 0) {
-    headerBits.push(theme.fg("muted", `$${details.usage.cost.toFixed(4)}`));
+    headerBits.push(theme.fg("muted", formatCost(details.usage.cost)));
+  }
+  // Failed state: surface a one-line error hint in red so the user can see
+  // *why* the run failed without expanding. First line of the result text,
+  // stripped of a leading "Error: " marker and truncated to ~60 chars.
+  if (status === "failed") {
+    const hint = extractErrorHint(result);
+    if (hint) headerBits.push(theme.fg("error", hint));
   }
   if (!options.expanded) {
-    // Always show the hint. keyText() may return "" before keybindings are
-    // fully loaded; fall back to the default "ctrl+o". Use "accent" so it's
-    // visibly distinct from the other muted bits.
+    // Manual compose instead of keyHint() because keyHint() requires the host
+    // theme to be initialized; before that we'd throw. keyText() has a safer
+    // fallback ("" → default literal).
     const key = keyText("app.tools.expand") || "ctrl+o";
     headerBits.push(theme.fg("accent", `${key} to expand`));
   }
@@ -177,7 +212,9 @@ export function rebuildSubAgentResultComponent(
           ? theme.fg("muted", `(${formatDuration(entry.endMs! - entry.startMs)})`)
           : theme.fg("accent", "(running…)");
         const hint = entry.summary ? ` ${theme.fg("muted", entry.summary)}` : "";
-        historyLines.push(`  ${icon} ${theme.bold(entry.name)}${hint} ${dur}`);
+        // Tool name colored with toolTitle (same convention as call-render.ts)
+        // makes the activity log scannable when there are many entries.
+        historyLines.push(`  ${icon} ${theme.fg("toolTitle", entry.name)}${hint} ${dur}`);
       }
       component.addChild(new Text(`\n${historyLines.join("\n")}`, 0, 0));
     }
@@ -194,7 +231,54 @@ export function rebuildSubAgentResultComponent(
     } else if (options.isPartial) {
       component.addChild(new Text(`\n${theme.fg("muted", "(no output captured yet)")}`, 0, 0));
     }
+
+    // Aggregate footer: model · Tools: 12× read · 8× edit · 4× bash · $0.42
+    // Surfaces the model (removed from header in T1) plus a flattened tool-mix
+    // summary that complements the chronological timeline above.
+    const footerBits: string[] = [];
+    if (details.model) footerBits.push(theme.fg("muted", details.model));
+    const toolMix = aggregateToolHistory(details.toolHistory);
+    if (toolMix) footerBits.push(theme.fg("muted", `Tools: ${toolMix}`));
+    if (details.usage && typeof details.usage.cost === "number" && details.usage.cost > 0) {
+      footerBits.push(theme.fg("muted", formatCost(details.usage.cost)));
+    }
+    if (footerBits.length > 0) {
+      component.addChild(new Text(`\n${footerBits.join(theme.fg("muted", " · "))}`, 0, 0));
+    }
   }
+}
+
+/**
+ * Pull a single-line error hint from the tool result.
+ *
+ * On failure the first content text block typically begins with `Error: ...`
+ * or a `Sub-agent "xxx" failed ...` preamble; we strip the redundant prefix
+ * and clamp to ~60 chars so it fits alongside other header bits.
+ */
+function extractErrorHint(result: RenderResult): string | undefined {
+  const text = result.content?.[0]?.text;
+  if (typeof text !== "string" || text.length === 0) return undefined;
+  let firstLine = (text.split("\n", 1)[0] ?? "").trim();
+  firstLine = firstLine.replace(/^Error:\s*/i, "");
+  if (!firstLine) return undefined;
+  const MAX = 60;
+  return firstLine.length > MAX ? `${firstLine.slice(0, MAX - 1)}\u2026` : firstLine;
+}
+
+/**
+ * Group tool calls by name and produce a compact `N× name · ...` summary,
+ * sorted descending by call count so the most-used tools surface first.
+ */
+function aggregateToolHistory(history?: readonly ToolHistoryEntry[]): string {
+  if (!history || history.length === 0) return "";
+  const counts = new Map<string, number>();
+  for (const entry of history) {
+    counts.set(entry.name, (counts.get(entry.name) ?? 0) + 1);
+  }
+  return [...counts.entries()]
+    .sort(([nameA, a], [nameB, b]) => b - a || nameA.localeCompare(nameB))
+    .map(([name, n]) => `${n}× ${name}`)
+    .join(" · ");
 }
 
 /**
@@ -220,7 +304,9 @@ export function buildSubAgentRenderResult() {
       state.startedAt = Date.now();
     }
     if (options.isPartial && !state.interval) {
-      state.interval = setInterval(() => context.invalidate(), 1000);
+      // 100 ms tick drives the braille spinner animation. Same timer also keeps
+      // the elapsed counter ticking between tool events.
+      state.interval = setInterval(() => context.invalidate(), SPINNER_TICK_MS);
     }
     if (!options.isPartial) {
       state.endedAt ??= Date.now();

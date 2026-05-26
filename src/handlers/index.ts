@@ -12,6 +12,7 @@ import { setupBranding } from "../branding.js";
 import { getEnabledSet, initEnabledSet } from "../config/enabled-set.js";
 import { loadBlackbytesConfig } from "../config/loader.js";
 import { registerSubAgentMeta } from "../config/resource-metadata.js";
+import { getHashlineEditConfig } from "../config/schema.js";
 import { getLogger } from "../shared/logger.js";
 import { setModelFamily } from "../shared/model-capability.js";
 import { resetSessionRuntimeState } from "../shared/session-state.js";
@@ -100,7 +101,7 @@ export async function handleSessionStart(
   registerCopilotHeader(pi, config);
 
   // Local tools
-  registerHashlineEditTool(pi);
+  registerHashlineEditTool(pi, { strictPatch: getHashlineEditConfig(config).strict_patch });
   registerCleanReadRenderer(pi, _ctx.cwd ?? process.cwd());
   registerAstGrepSearchTool(pi);
   registerAstGrepReplaceTool(pi);
@@ -167,7 +168,7 @@ export async function handleToolResult(
 ): Promise<ToolResultResult | undefined> {
   const config = await loadBlackbytesConfig();
   const modified = processToolResult(event as LocalToolResultEvent, {
-    hashline_edit: config.hashline_edit,
+    hashline_edit: getHashlineEditConfig(config).enabled,
   });
   if (modified) {
     // Return modified content for conversation history (LLM sees anchors)

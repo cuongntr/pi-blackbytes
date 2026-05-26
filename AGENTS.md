@@ -1,6 +1,6 @@
 # pi-blackbytes
 
-Pi coding-agent extension that replaces Pi's MCP-plugin dependency on the websearch, context7, and grep.app surfaces with locally-managed HTTP clients (note: `web_search` / `web_fetch` / `docs_resolve` / `docs_query` are pure REST; `gh_search` is HTTP-transported but still MCP at the protocol layer — see README for the distinction), adds bundled local tools (`hashline_edit`, `ast_search`, `ast_replace`, `glob`, `look_at`), and exposes delegated sub-agents (`explore`, `oracle`, `librarian`, `general`, `reviewer`).
+Pi coding-agent extension that replaces Pi's MCP-plugin dependency on the websearch, context7, and grep.app surfaces with locally-managed HTTP clients (note: `web_search` / `web_fetch` / `docs_resolve` / `docs_query` are pure REST; `gh_search` is HTTP-transported but still MCP at the protocol layer — see README for the distinction), adds bundled local tools (`hashline_edit` with anchored ops + `replace_text` substring mode + `insert_after` / `insert_before` / `replace_range` aliases + optional `postEditVerify`, atomic write, canonical-path queue, and `[E_*]` error taxonomy; plus `ast_search`, `ast_replace`, `glob`, `look_at`), and exposes delegated sub-agents (`explore`, `oracle`, `librarian`, `general`, `reviewer`).
 
 ## Commands
 
@@ -79,7 +79,8 @@ Config lives in `~/.pi/agent/settings.json` (or `$PI_AGENT_DIR/settings.json`) u
 Core settings:
 
 - `disabled_tools` / `disabled_sub_agents`
-- `hashline_edit`
+- `hashline_edit` (boolean shorthand or object: `{ enabled?: boolean, strict_patch?: boolean }`)
+  - `hashline_edit.strict_patch` (default `true`) — reject `lines` payloads that include accidental `LINE#ID|` prefixes with `[E_INVALID_PATCH]`. Set to `false` to restore the legacy silent-strip behaviour.
 - `copilot_initiator_header`
 - `websearch.provider`, `websearch.exa_api_key`, `websearch.tavily_api_key`
 - `context7.api_key`

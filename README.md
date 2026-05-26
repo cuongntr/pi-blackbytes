@@ -163,7 +163,7 @@ Blackbytes reads the top-level `blackbytes` object from the Pi settings file.
   "blackbytes": {
     "disabled_tools": [],
     "disabled_sub_agents": [],
-    "hashline_edit": true,
+    "hashline_edit": { "strict_patch": true },
     "copilot_initiator_header": true,
     "websearch": {
       "provider": "exa",
@@ -202,7 +202,7 @@ Blackbytes reads the top-level `blackbytes` object from the Pi settings file.
 |---|---|---|
 | `disabled_tools` | `string[]` | Disables specific public tool names for the entire session |
 | `disabled_sub_agents` | `("explore" \| "oracle" \| "librarian" \| "general" \| "reviewer")[]` | Disables delegate tools by agent name |
-| `hashline_edit` | `boolean` | Enables hashline rewriting for Pi `read`/`write` tool results |
+| `hashline_edit` | `boolean` \| `{ enabled?: boolean, strict_patch?: boolean }` | Enables hashline rewriting for Pi `read`/`write` tool results. Object form exposes `strict_patch` (default `true`) — `lines` payloads containing accidental `LINE#ID\|` prefixes are rejected with `[E_INVALID_PATCH]`. Set `strict_patch: false` to restore the legacy silent-strip behaviour. |
 | `copilot_initiator_header` | `boolean` | Registers the GitHub Copilot provider header `X-Initiator: agent` |
 | `websearch.provider` | `"exa" \| "tavily"` | Selects the web backend. Defaults to `exa` when omitted. |
 | `websearch.exa_api_key` | `string` | Exa credential. Overrides `EXA_API_KEY` when set. |
@@ -448,21 +448,60 @@ The final delegate result remains a concise text block returned after the nested
 
 ## `hashline_edit`
 
-`hashline_edit` works alongside Pi's native `edit` tool. It is optimized for precise, low-ambiguity edits by anchoring each mutation to a tagged line reference from `read` output.
+`hashline_edit` works alongside Pi's native `edit` tool. It is optimized for precise, low-ambiguity edits by anchoring each mutation to a tagged line reference from `read` output, with a substring fallback (`replace_text`) for the cases where anchors are not needed.
 
 ### Workflow
 
 1. Read the file first and copy the `LINE#ID` anchors.
 2. Build one `hashline_edit` call per file with all related edits batched together.
-3. Use `replace`, `append`, or `prepend` against the copied anchors.
-4. Re-read the file before issuing a second `hashline_edit` call on that same file.
+3. Use `replace`, `append`, `prepend`, or `replace_text` against the copied anchors. The aliases `insert_after`, `insert_before`, and `replace_range` carry the same semantics with clearer intent.
+4. The success response includes an `--- Updated anchors ---` block (with ±3 lines of context) and a `--- Diff preview ---` block, so a follow-up edit nearby usually does not need a re-read round-trip.
+5. Re-read the file before issuing a second `hashline_edit` call when the structural change is large or when the previous response did not surface the anchors you need.
+
+### Operations
+
+| Op | Anchors | Semantics |
+|---|---|---|
+| `replace` | `pos`; optional `end` for ranges | Replace the targeted line (or `[pos..end]` inclusive range) with `lines`. `lines: null` deletes. |
+| `append` | optional `pos` | Insert `lines` after `pos`. With no `pos`, appends at EOF. |
+| `prepend` | optional `pos` | Insert `lines` before `pos`. With no `pos`, prepends at BOF. |
+| `insert_after` | required `pos` | Alias for `append` with required `pos`. Missing `pos` rejects with `[E_BAD_REF]`. |
+| `insert_before` | required `pos` | Alias for `prepend` with required `pos`. Missing `pos` rejects with `[E_BAD_REF]`. |
+| `replace_range` | required `pos` + `end` | Alias for `replace` with required `pos` + `end`. Missing either rejects with `[E_BAD_REF]`. |
+| `replace_text` | none (`oldText` + `newText`) | Exact-unique substring edit. `oldText` must occur exactly once (LF only, multi-line allowed); zero matches → `[E_NO_MATCH]`, multiple → `[E_MULTI_MATCH]` with the first three matching line numbers. Runs before anchored edits; overlap with an anchored range is rejected pre-mutation with `[E_OVERLAP]`. |
 
 ### Properties
 
 - All edits in a single call refer to the original file snapshot.
-- The tool supports single-line replacement, range replacement, deletion, prepend, append, and BOF/EOF insertion.
 - `lines: null` deletes the targeted line or range.
-- When a mismatch occurs, the tool returns updated anchors for recovery.
+- Strict-patch rejection (default): `lines` payloads containing accidental `LINE#ID|` prefixes are rejected with `[E_INVALID_PATCH]` instead of silently stripped. The escape hatch is `"hashline_edit": { "strict_patch": false }`.
+- Atomic write with alias preservation: fresh-inode targets are written via temp+rename in the same directory; hard-linked files (`nlink > 1`) are written in place with `O_TRUNC` to preserve the alias chain; symlinks are followed to their canonical target so the link itself remains a symlink; the existing mode bits are restored on the new inode using an `fchmod` that bypasses the process umask. Non-regular-file targets are refused with `[E_WRITE_FAILED]`.
+- Canonical-path mutation queue: concurrent edits that arrive via different symlink paths to the same inode serialise on the same key.
+- Optional `postEditVerify: true` per call: re-reads the file after the atomic write and compares byte-for-byte against the intended content. On mismatch, rolls back to the pre-edit bytes and returns `[E_VERIFY_FAILED]` with a compact line/column + windowed-byte divergence context. If rollback itself fails, the error message notes that the file may be partially corrupted.
+- `delete: true` removes the file (requires `edits: []`).
+- `rename: <new path>` writes to the new path and unlinks the old one.
+- When an anchor mismatch occurs, the tool returns the updated anchors around the affected lines for recovery.
+
+### Error codes
+
+Every error is formatted as `[CODE] message` (optionally followed by a context block). The taxonomy:
+
+| Code | Meaning |
+|---|---|
+| `E_BAD_REF` | Anchor did not parse, or an alias was missing a required anchor. |
+| `E_HASH_MISMATCH` | Anchor parsed but its CID does not match the file's current content. |
+| `E_OUT_OF_RANGE` | Anchor's line number is outside the file. |
+| `E_INVALID_PATCH` | Payload shape is refused (e.g. a `LINE#ID\|` prefix inside `lines` under strict mode). |
+| `E_OVERLAP` | Two or more edits target overlapping regions, or a `replace_text` span overlaps an anchored range. |
+| `E_NO_MATCH` | `replace_text.oldText` produced zero matches. |
+| `E_MULTI_MATCH` | `replace_text.oldText` produced more than one match. |
+| `E_WRITE_FAILED` | Filesystem write failed (`EACCES` / `EPERM` / `ENOSPC` / `EROFS` / non-regular-file refusal / unexpected). |
+| `E_NOT_FOUND` | Target file does not exist on the read path. |
+| `E_VERIFY_FAILED` | `postEditVerify` re-read did not match the intended bytes (the file is rolled back unless rollback itself fails). |
+
+### Result rendering
+
+Collapsed view shows `✓ <summary> · ctrl+o to expand` for success and `✗ <summary> · ctrl+o to expand` for errors. Expanded view renders the structured `diffData` returned alongside the response with `▌- ` (error colour) and `▌+ ` (success colour) gutter markers per changed range, width-clamped per line, so the diff is visible in both colour terminals and plain-text transcripts.
 
 ## Delegation model
 

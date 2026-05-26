@@ -4,7 +4,17 @@ export const BlackbytesConfigSchema = z
   .object({
     disabled_tools: z.array(z.string()).default([]),
     disabled_sub_agents: z.array(z.string()).default([]),
-    hashline_edit: z.boolean().default(true),
+    hashline_edit: z
+      .union([
+        z.boolean(),
+        z
+          .object({
+            enabled: z.boolean().default(true),
+            strict_patch: z.boolean().default(true),
+          })
+          .passthrough(),
+      ])
+      .default(true),
     copilot_initiator_header: z.boolean().default(true),
     websearch: z
       .object({
@@ -83,4 +93,27 @@ export function parseBlackbytesConfig(
     return `${path}${issue.message}`;
   });
   return { ok: false, errors };
+}
+
+/**
+ * Normalize the `hashline_edit` config field, which accepts either a boolean
+ * shorthand or an object form, into a stable `{ enabled, strict_patch }` shape.
+ *
+ * Backward compatibility: a `true` / `false` value preserves the legacy
+ * semantics (enable/disable the tool) and uses the default `strict_patch=true`
+ * for the new behaviour. Users who want to opt back into the old silent-strip
+ * behaviour set `{ enabled: true, strict_patch: false }`.
+ */
+export function getHashlineEditConfig(config: BlackbytesConfig): {
+  enabled: boolean;
+  strict_patch: boolean;
+} {
+  const raw = config.hashline_edit;
+  if (typeof raw === "boolean") {
+    return { enabled: raw, strict_patch: true };
+  }
+  return {
+    enabled: raw.enabled ?? true,
+    strict_patch: raw.strict_patch ?? true,
+  };
 }

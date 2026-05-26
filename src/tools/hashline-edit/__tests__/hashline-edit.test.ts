@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { existsSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, it } from "node:test";
@@ -216,7 +216,7 @@ describe("hashline_edit", () => {
     }
   });
 
-  it("strips LINE#ID prefixes from user-provided lines", () => {
+  it("rejects lines containing LINE#ID prefix under strict_patch (default)", () => {
     writeTmp("foo\nbar\nbaz\n");
     const pos = anchor(2, "bar");
 
@@ -224,6 +224,38 @@ describe("hashline_edit", () => {
       filePath: tmpFile,
       edits: [{ op: "replace", pos, lines: "2#AB|replacement" }],
     });
+
+    assert.equal(result.success, false);
+    assert.ok("error" in result && result.error.startsWith("[E_INVALID_PATCH]"));
+    // File untouched on rejection
+    assert.equal(readTmp(), "foo\nbar\nbaz\n");
+  });
+
+  it("rejects shape-only prefix even when CID alphabet is outside the canonical set", () => {
+    writeTmp("foo\nbar\nbaz\n");
+    const pos = anchor(2, "bar");
+
+    // "OL" is not in the CID alphabet but matches the [A-Z]{2} shape
+    const result = applyHashlineEdits({
+      filePath: tmpFile,
+      edits: [{ op: "replace", pos, lines: "99#OL|replacement" }],
+    });
+
+    assert.equal(result.success, false);
+    assert.ok("error" in result && result.error.startsWith("[E_INVALID_PATCH]"));
+  });
+
+  it("strips LINE#ID prefixes under strict_patch=false (legacy behaviour)", () => {
+    writeTmp("foo\nbar\nbaz\n");
+    const pos = anchor(2, "bar");
+
+    const result = applyHashlineEdits(
+      {
+        filePath: tmpFile,
+        edits: [{ op: "replace", pos, lines: "2#AB|replacement" }],
+      },
+      { strictPatch: false },
+    );
 
     assert.equal(result.success, true);
     assert.equal(readTmp(), "foo\nreplacement\nbaz\n");
@@ -301,5 +333,80 @@ describe("hashline_edit", () => {
     assert.match(result.details.summary ?? "", />>> mismatch/);
     assert.match(result.details.fullText, /Current file/);
     assert.match(result.details.fullText, /line 300/);
+  });
+});
+
+describe("edit op aliases (T8)", () => {
+  const tmpDir = mkdtempSync(join(tmpdir(), "hl-aliases-"));
+  const tmpFile = join(tmpDir, "f.txt");
+
+  function writeTmp(content: string) {
+    writeFileSync(tmpFile, content);
+  }
+  function readTmp(): string {
+    return readFileSync(tmpFile, "utf8");
+  }
+  function anchor(lineNum: number, content: string): string {
+    return `${lineNum}#${computeCID(lineNum, content)}`;
+  }
+
+  it("insert_after acts like append with pos", () => {
+    writeTmp("a\nb\nc\n");
+    const r = applyHashlineEdits({
+      filePath: tmpFile,
+      edits: [{ op: "insert_after", pos: anchor(1, "a"), lines: "A2" }],
+    });
+    assert.equal(r.success, true);
+    assert.equal(readTmp(), "a\nA2\nb\nc\n");
+  });
+
+  it("insert_before acts like prepend with pos", () => {
+    writeTmp("a\nb\nc\n");
+    const r = applyHashlineEdits({
+      filePath: tmpFile,
+      edits: [{ op: "insert_before", pos: anchor(3, "c"), lines: "C0" }],
+    });
+    assert.equal(r.success, true);
+    assert.equal(readTmp(), "a\nb\nC0\nc\n");
+  });
+
+  it("replace_range acts like replace with pos+end", () => {
+    writeTmp("a\nb\nc\nd\n");
+    const r = applyHashlineEdits({
+      filePath: tmpFile,
+      edits: [{ op: "replace_range", pos: anchor(2, "b"), end: anchor(3, "c"), lines: "BC" }],
+    });
+    assert.equal(r.success, true);
+    assert.equal(readTmp(), "a\nBC\nd\n");
+  });
+
+  it("insert_after without pos → E_BAD_REF", () => {
+    writeTmp("a\n");
+    const r = applyHashlineEdits({
+      filePath: tmpFile,
+      edits: [{ op: "insert_after", lines: "x" }],
+    });
+    assert.equal(r.success, false);
+    assert.ok("error" in r && r.error.startsWith("[E_BAD_REF]"));
+  });
+
+  it("insert_before without pos → E_BAD_REF", () => {
+    writeTmp("a\n");
+    const r = applyHashlineEdits({
+      filePath: tmpFile,
+      edits: [{ op: "insert_before", lines: "x" }],
+    });
+    assert.equal(r.success, false);
+    assert.ok("error" in r && r.error.startsWith("[E_BAD_REF]"));
+  });
+
+  it("replace_range without end → E_BAD_REF", () => {
+    writeTmp("a\nb\n");
+    const r = applyHashlineEdits({
+      filePath: tmpFile,
+      edits: [{ op: "replace_range", pos: anchor(1, "a"), lines: "x" }],
+    });
+    assert.equal(r.success, false);
+    assert.ok("error" in r && r.error.startsWith("[E_BAD_REF]"));
   });
 });

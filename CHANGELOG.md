@@ -1,5 +1,109 @@
 # Changelog
 
+## 2.9.0 (2026-05-26) — Hashline Edit Hardening Phase 1 + 2
+
+Port hardening features from `pi-hashline-edit` and `pi-hashline-readmap` into
+the bundled `hashline_edit` tool: typed error taxonomy, canonical-path queue,
+atomic write with symlink/hardlink/mode preservation, exact-unique substring
+edits, and a built-in diff preview so follow-up edits no longer need a
+re-read round-trip.
+
+Spec: `docs/specs/hashline-edit-hardening.md` (bead epic `pib-hl-hardening-epic-4x8`).
+
+### Added
+
+- **Error code taxonomy** (10 codes) — every `hashline_edit` error is now
+  formatted as `[E_CODE] message[\n<context>]`. Codes: `E_BAD_REF`,
+  `E_HASH_MISMATCH`, `E_OUT_OF_RANGE`, `E_INVALID_PATCH`, `E_OVERLAP`,
+  `E_NO_MATCH`, `E_MULTI_MATCH`, `E_WRITE_FAILED`, `E_NOT_FOUND`,
+  `E_VERIFY_FAILED` (last one reserved for Phase 2).
+- **`op: "replace_text"`** — exact-unique substring edit. Provide `oldText`
+  (LF only, multi-line allowed) and `newText`. Zero matches → `[E_NO_MATCH]`;
+  >1 matches → `[E_MULTI_MATCH]` with the first three matching line numbers.
+  Runs BEFORE anchored edits inside the same call; overlap with an anchored
+  range produces `[E_OVERLAP]` pre-mutation.
+- **Diff preview in success response** — every successful edit now appends
+  two blocks: `--- Updated anchors ---` (`LINE#CID|content` with ±3 context
+  lines) and `--- Diff preview ---` (`- <ln>| ...` for removals,
+  `+ <ln>#<CID>| ...` for additions). Capped at 50 lines with middle-cut.
+  Structured `diffData` is attached to `tool_result.details` for future TUI
+  rendering. Removed-line format intentionally omits `#` so it cannot match
+  the strict-patch regex.
+- **`safeRealpath(path)` export** — best-effort canonicalisation; falls back
+  to the input on `ENOENT`, rethrows other errors.
+- **`resolveWriteTarget(path)` / `writeFileAtomically(...)`** — new
+  `src/tools/hashline-edit/fs-write.ts` module exposing the atomic write
+  primitives for reuse.
+- **`hashline_edit.strict_patch` config** (default `true`) — see Changed.
+
+### Changed
+
+- **BREAKING (opt-in escape): strict patch rejection is on by default.**
+  `lines` payloads containing accidental `LINE#ID|` prefixes are now
+  rejected with `[E_INVALID_PATCH]` instead of silently stripped. Restore
+  legacy behaviour with `"hashline_edit": { "strict_patch": false }` in
+  `~/.pi/agent/settings.json`. The config field accepts either the legacy
+  `boolean` shorthand (enable/disable the tool) or the new object form
+  `{ enabled?, strict_patch? }`; both forms continue to work.
+- **Canonical-path mutation queue** — `runQueuedHashlineEdit` now
+  canonicalises every queue key via `safeRealpath` before set-dedup, so
+  concurrent edits that arrive via different symlink paths to the same
+  inode serialise on the same key.
+- **Atomic write with symlink + hardlink + mode preservation** —
+  `writeFileSync` is replaced with a write-via-temp-then-rename path when
+  `nlink == 1` (atomic on POSIX; temp lives in the SAME directory as the
+  target) and an in-place `O_TRUNC` path when `nlink > 1` (preserves
+  hard-link inodes). Original mode bits are preserved (via `fchmod` on the
+  temp fd before rename so the requested mode bypasses the process umask).
+  Symlinks are resolved to canonical target before write so the link itself
+  remains a symlink. Non-regular-file targets are refused with `[E_WRITE_FAILED]`.
+  Friendly filesystem error codes (`EACCES` / `EPERM` / `ENOSPC` / `EROFS`)
+  surface through the same code.
+- **Tool description and prompt guidelines** — mention strict patch policy,
+  the `replace_text` op, and the `[E_*]` error code surface.
+
+### Fixed
+
+- Concurrent edits via a symlink and its canonical path no longer race —
+  prior behaviour could lose writes when two callers hit different aliases
+  of the same inode.
+- Mid-write crashes no longer leave a truncated/corrupt file (atomic
+  rename path); hard-linked files no longer have their alias relationship
+  silently broken by a fresh-inode write.
+
+### Notes
+
+- Bundle: ~145 KB gzipped (within 500 KB budget).
+- Tests: 732 passing (+75 new across `errors.test.ts`, `canonical-queue.test.ts`,
+  `atomic-write.test.ts`, `replace-text.test.ts`, `diff-preview.test.ts`,
+  `post-verify.test.ts`, `result-renderer.test.ts`, plus 6 alias tests in
+  `hashline-edit.test.ts` and a `mode bypasses umask` regression test).
+- Phase 3 (`replace_symbol` via ast-grep) deferred to its own spec.
+
+### Phase 2 additions (T7–T9)
+
+- **`postEditVerify: boolean`** — per-call opt-in flag (default `false`).
+  When `true`, the tool re-reads the file after the atomic write and
+  compares byte-for-byte against the intended content. On mismatch, rolls
+  back to the pre-edit bytes and returns `[E_VERIFY_FAILED]` with a
+  compact diff context (line/column of first divergence + windowed byte
+  view). If rollback itself fails (e.g. EROFS), the error message warns
+  the file may be partially corrupted.
+- **Edit op aliases** for clearer intent (identical behaviour):
+  - `insert_after` → `append` with required `pos`
+  - `insert_before` → `prepend` with required `pos`
+  - `replace_range` → `replace` with required `pos` + `end`
+  Missing required anchor on an alias rejects with `[E_BAD_REF]`. The
+  original op names continue to work unchanged.
+- **Inline TUI diff in expanded view** — `hashline_edit` results now have
+  a dedicated `renderResult`. Collapsed view is `✓ <summary> · ctrl+o to
+  expand` (or `✗` for errors). Expanded view renders the structured
+  `diffData` from Phase 1 with `▌- ` (error colour) and `▌+ ` (success
+  colour) gutter markers per range, so the diff is visible in plain-text
+  transcripts as well as colour terminals. Width-clamped per line.
+
+---
+
 ## 2.8.1 (2026-05-26)
 
 Deduplicate the sub-agent header when expanded: cost and the last/current

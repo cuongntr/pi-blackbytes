@@ -33,7 +33,34 @@
  * Track in: CHANGELOG.md Unreleased → "append mode deferred (pib-vyj.2.3)".
  */
 
+import { classifyModel } from "../shared/model-capability.js";
 import type { SubAgentDeclaration } from "./declaration.js";
+
+// ---------------------------------------------------------------------------
+// Prompt body resolver
+// ---------------------------------------------------------------------------
+
+/**
+ * Resolve the system prompt body for a sub-agent, selecting a family-specific
+ * variant only when `modelId` is explicitly provided and a matching variant
+ * exists on the declaration.
+ *
+ * @param decl The sub-agent declaration.
+ * @param modelId The explicitly configured nested model ID (from snapshot).
+ *   When undefined, the default `systemPrompt` is always used — the parent's
+ *   cached model family is never consulted.
+ * @returns The resolved prompt body string.
+ */
+export function resolveSystemPromptBody(
+  decl: Pick<SubAgentDeclaration, "systemPrompt" | "systemPromptByFamily">,
+  modelId?: string,
+): string {
+  if (!modelId || !decl.systemPromptByFamily) {
+    return decl.systemPrompt;
+  }
+  const family = classifyModel(modelId);
+  return decl.systemPromptByFamily[family] ?? decl.systemPrompt;
+}
 
 // ---------------------------------------------------------------------------
 // Public types

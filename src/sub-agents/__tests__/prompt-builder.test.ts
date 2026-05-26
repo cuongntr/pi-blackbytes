@@ -15,7 +15,7 @@ import { exploreDeclaration } from "../explore.js";
 import { generalDeclaration } from "../general.js";
 import { librarianDeclaration } from "../librarian.js";
 import { oracleDeclaration } from "../oracle.js";
-import { buildSystemPrompt } from "../prompt-builder.js";
+import { buildSystemPrompt, resolveSystemPromptBody } from "../prompt-builder.js";
 
 const defaultConfig: BlackbytesConfig = {
   disabled_tools: [],
@@ -173,5 +173,61 @@ describe("buildSystemPrompt — register.ts contract", () => {
         sample,
       );
     }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// resolveSystemPromptBody
+// ---------------------------------------------------------------------------
+
+describe("resolveSystemPromptBody", () => {
+  const DEFAULT_PROMPT = "Default system prompt";
+  const GPT_PROMPT = "GPT-optimized system prompt";
+  const declWithGpt = {
+    systemPrompt: DEFAULT_PROMPT,
+    systemPromptByFamily: { gpt: GPT_PROMPT },
+  };
+  const declWithoutFamily = {
+    systemPrompt: DEFAULT_PROMPT,
+  };
+
+  it("returns default prompt when modelId is undefined", () => {
+    const result = resolveSystemPromptBody(declWithGpt);
+    assert.equal(result, DEFAULT_PROMPT);
+  });
+
+  it("returns default prompt when modelId is undefined even with systemPromptByFamily", () => {
+    const result = resolveSystemPromptBody(declWithGpt, undefined);
+    assert.equal(result, DEFAULT_PROMPT);
+  });
+
+  it("returns GPT variant when modelId classifies as gpt", () => {
+    const result = resolveSystemPromptBody(declWithGpt, "gpt-4o");
+    assert.equal(result, GPT_PROMPT);
+  });
+
+  it("returns GPT variant for o3-mini model", () => {
+    const result = resolveSystemPromptBody(declWithGpt, "o3-mini");
+    assert.equal(result, GPT_PROMPT);
+  });
+
+  it("returns GPT variant for o4-mini model", () => {
+    const result = resolveSystemPromptBody(declWithGpt, "o4-mini");
+    assert.equal(result, GPT_PROMPT);
+  });
+
+  it("returns default prompt when model family has no variant", () => {
+    const result = resolveSystemPromptBody(declWithGpt, "claude-3.5-sonnet");
+    assert.equal(result, DEFAULT_PROMPT);
+  });
+
+  it("returns default prompt when declaration has no systemPromptByFamily", () => {
+    const result = resolveSystemPromptBody(declWithoutFamily, "gpt-4o");
+    assert.equal(result, DEFAULT_PROMPT);
+  });
+
+  it("returns default prompt for non-GPT model even with GPT variant defined", () => {
+    const result = resolveSystemPromptBody(declWithGpt, "gemini-pro");
+    assert.equal(result, DEFAULT_PROMPT);
   });
 });

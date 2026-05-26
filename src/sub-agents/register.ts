@@ -8,7 +8,7 @@ import { finalizeNestedTools } from "./delegable-tools.js";
 import { logDelegation } from "./delegation-log.js";
 import { type FallbackResult, executeWithFallback, formatAttempts } from "./fallback.js";
 import { type SubAgentProgressStatus, createProgressReporter } from "./progress-reporter.js";
-import { buildSystemPrompt } from "./prompt-builder.js";
+import { buildSystemPrompt, resolveSystemPromptBody } from "./prompt-builder.js";
 import { buildSubAgentRenderResult } from "./render.js";
 import { type SpawnFn, formatDelegateFailure, runNestedPi } from "./runner.js";
 import { getAgentSnapshotFor } from "./snapshot.js";
@@ -87,14 +87,14 @@ export function registerSubAgent(
       ctx?: { cwd?: string },
     ) => {
       try {
-        const baseSystemPrompt = declaration.systemPrompt;
+        // Resolve the per-agent snapshot up front so promptMode and model
+        // (both may be overridden via JSON config) can flow into the prompt builders.
+        const snapshot = getAgentSnapshotFor(declaration.name);
+
+        const baseSystemPrompt = resolveSystemPromptBody(declaration, snapshot?.model);
         if (baseSystemPrompt.trim().length === 0) {
           throw new Error(`Sub-agent "${declaration.name}" has an empty systemPrompt`);
         }
-
-        // Resolve the per-agent snapshot up front so promptMode (which may
-        // be overridden via JSON config) can flow into the prompt builder.
-        const snapshot = getAgentSnapshotFor(declaration.name);
 
         // Build the system prompt through the centralised assembler. In static
         // mode (the only currently supported mode) this is a no-op pass-through.

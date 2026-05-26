@@ -1,6 +1,10 @@
 # Changelog
 
-## Unreleased
+## 2.7.0 (2026-05-26)
+
+Prompt system hardening: typed routing metadata, per-model-family prompt
+variants, Oracle guardrails, metadata-driven overlay routing, and tighter
+delegate descriptions.
 
 ### Added
 

@@ -1,6 +1,5 @@
 import { Type } from "typebox";
 import { getEnabledSet } from "../config/enabled-set.js";
-import { TOOL_NAMES } from "../config/resource-metadata.js";
 import { defineSubAgent } from "./declaration.js";
 import { PI_BUILTIN_TOOLS, resolveToolStrategy } from "./delegable-tools.js";
 import { buildGeneralSafetyOverlay } from "./general-safety-overlay.js";
@@ -13,22 +12,11 @@ You are the General sub-agent: a focused implementation executor. You receive we
 
 ## Tool Access
 
-The host prepends a safety/context overlay with the **finalized allowed tool list** for this invocation. Treat that overlay as authoritative. Use only tools listed there; do not attempt tools that are disabled or absent from the allowlist.
-
-Depending on session configuration, your tools may include:
-- \`read\` — read file contents
-- \`${TOOL_NAMES.GLOB}\` — find files by pattern
-- \`grep\` — search file contents
-- \`${TOOL_NAMES.AST_SEARCH}\` — AST-aware search
-- \`${TOOL_NAMES.AST_REPLACE}\` — AST-aware bulk replace
-- \`write\` — write files
-- \`edit\` — precise string replacement in files
-- \`${TOOL_NAMES.HASHLINE_EDIT}\` — line-precise edits
-- \`bash\` — run shell commands (build, test, lint, git)
-- \`${TOOL_NAMES.WEB_SEARCH}\` — web search
-- \`${TOOL_NAMES.WEB_FETCH}\` — fetch web page content
-- \`${TOOL_NAMES.DOCS_RESOLVE}\` + \`${TOOL_NAMES.DOCS_QUERY}\` — library documentation
-- \`${TOOL_NAMES.GH_SEARCH}\` — GitHub code search across public repos
+The host prepends a safety/context overlay containing the **finalized allowed
+tool list** for this invocation along with working directory, repository
+conventions from \`AGENTS.md\`, and verification commands. Treat that overlay as
+the authoritative source of truth for what is callable and how to verify work —
+do not attempt tools that are not listed there.
 
 ## Behavior
 
@@ -75,25 +63,72 @@ When the task is complete, provide a structured summary:
 
 Detect the language the user writes in and respond in the same language. Keep code, technical terms, file paths, and structured output in English.`;
 
+const GENERAL_GPT_PROMPT = `# General — Sub-Agent Persona (GPT Implementation Executor)
+
+Do NOT open with filler such as "Great question!", "Sure!", "Of course!", "Got it",
+"Certainly!", "Absolutely!", "Let me help with that", "Happy to help", or any
+similar opener. Start with action.
+
+## Role
+
+You are the General sub-agent: a focused implementation executor. You receive
+well-defined tasks and execute them completely. You do not plan, do not ask
+follow-up questions, and do not expand scope.
+
+## Tool Access
+
+The host prepends a safety/context overlay containing the **finalized allowed
+tool list** for this invocation along with working directory, repository
+conventions from \`AGENTS.md\`, and verification commands. Treat that overlay as
+the authoritative source of truth for what is callable and how to verify work —
+do not attempt tools that are not listed there.
+
+## Behavior
+
+### Plan-Sanity Check (do this FIRST)
+- Read the task brief. Confirm it specifies: file paths, intended change, verifiable outcome.
+- If the brief is missing concrete file paths OR has only goal-level descriptions,
+  return early: "Plan too vague to execute — caller should refine the brief or
+  use \\\`delegate_explore\\\` first."
+
+### Execution
+- The plan is already made. Your job is pure execution.
+- Implement completely. No TODOs, no placeholders, no stubs unless instructed.
+- Use reasonable defaults for non-critical missing details. Do NOT ask for clarification.
+- Do not expand scope. Do not spawn additional agents.
+- The safety overlay is authoritative for build/test/lint commands.
+
+### Standards
+- Read targets before modifying. Match existing conventions.
+- Strong typing. No \`any\` unless the codebase requires it.
+- Precise edits. Batch independent tool calls.
+
+### Verification
+- Run available checks: typecheck, lint, tests, build.
+- Fix failures before reporting back.
+
+### Reporting
+- **Changes made:** files modified and what changed
+- **Verification:** check results
+- **Notes:** decisions or edge cases
+
+## Constraints
+- No follow-up questions. No new dependencies without instruction.
+- No files outside task scope. No additional agent spawning.
+
+## Language Matching
+
+Respond in the user's language. Keep code, technical terms, and output in English.`;
+
 export const generalDeclaration = defineSubAgent<{ task: string; context?: string }>({
   name: "general",
   toolName: "delegate_general",
   description:
-    "Delegate a heavy implementation task to a General sub-agent — a focused executor " +
-    "for well-defined work. Strict gating: only delegate when ALL of these hold: " +
-    "(a) the plan is concrete (file paths + intended changes known up front, no " +
-    "exploration needed inside); AND (b) the work is large enough to justify " +
-    "nested-Pi cost (~5+ file edits OR ~20K+ tokens of read/edit/verify churn); " +
-    "AND (c) the outcome is independently verifiable (tests, diff, lint). " +
-    "Cost signal: spawning the sub-agent is ~5–10× more tokens and ~10–30s startup " +
-    "overhead vs direct execution — only worthwhile when offloading work from the " +
-    "parent's context window has clear value. " +
-    "DO NOT use for: single-file edits, exploratory/ambiguous tasks, work requiring " +
-    "mid-stream parent feedback, plans that must evolve while reading code, or " +
-    "anything the parent can finish in 5–10 direct tool calls. " +
-    "Full-access agent: the sub-agent receives the session's finalized allowed tool list " +
-    "(read/write/bash/search/extension tools when enabled) except delegate_* tools " +
-    "to prevent recursive sub-agent delegation.",
+    "Delegate a heavy implementation task to a focused executor. Only when ALL hold: " +
+    "(a) plan is concrete (file paths + intended changes known); (b) large enough " +
+    "(~5+ file edits); (c) outcome verifiable (tests, diff, lint). " +
+    "Cost signal: ~5\u201310\u00d7 tokens/latency. DO NOT use for single-file edits, " +
+    "exploratory tasks, or anything finishable in 5\u201310 direct calls.",
   parameters: Type.Object({
     task: Type.String({
       description:
@@ -110,6 +145,7 @@ export const generalDeclaration = defineSubAgent<{ task: string; context?: strin
     ),
   }),
   systemPrompt: GENERAL_SYSTEM_PROMPT,
+  systemPromptByFamily: { gpt: GENERAL_GPT_PROMPT },
   allowedTools: () => [
     ...resolveToolStrategy({ kind: "all-except-delegates" }, getEnabledSet().tools),
     ...PI_BUILTIN_TOOLS,
@@ -117,6 +153,21 @@ export const generalDeclaration = defineSubAgent<{ task: string; context?: strin
   mutability: "full-access",
   finalizeMode: "strict",
   source: "builtin",
+  routing: {
+    category: "implementation",
+    cost: "high",
+    useWhen: [
+      "Concrete plan with known file paths and intended changes",
+      "5+ file edits or 20K+ tokens of read/edit/verify churn",
+      "Outcome independently verifiable via tests/diff/lint",
+    ],
+    avoidWhen: [
+      "Single-file edits or exploratory tasks",
+      "Work requiring mid-stream parent feedback",
+      "Anything finishable in 5-10 direct tool calls",
+    ],
+    keyTrigger: "Heavy well-defined implementation with verifiable outcome",
+  },
   staticOverrides: { timeoutMs: 1_800_000 },
   prependSystemPrompt: ({ cwd, finalizedTools }) =>
     buildGeneralSafetyOverlay({

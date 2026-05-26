@@ -1,6 +1,7 @@
 // Shared resource metadata — single source of truth for enabled-set filtering
 // and prompt/resource injection.
 
+import type { SubAgentRoutingMetadata } from "../sub-agents/declaration.js";
 import type { PromptFeatureFlags } from "../system-prompt/bytes/types.js";
 
 export type PromptFeatureKey = keyof PromptFeatureFlags;
@@ -34,6 +35,7 @@ export interface SubAgentMeta {
   readonly name: string;
   readonly description: string;
   readonly promptFeatures?: readonly PromptFeatureKey[];
+  readonly routing?: SubAgentRoutingMetadata;
 }
 
 export const BUNDLED_TOOLS: readonly ToolMeta[] = [

@@ -462,4 +462,91 @@ describe("loadYamlDeclarations", () => {
     assert.equal(declarations.length, 1);
     assert.equal(declarations[0].promptMode, undefined);
   });
+
+  // -------------------------------------------------------------------------
+  // routing field
+  // -------------------------------------------------------------------------
+
+  it("accepts valid routing metadata and copies to declaration", async () => {
+    const yaml = validYaml({
+      routing: {
+        category: "exploration",
+        cost: "medium",
+        use_when: ["Broad codebase search", "Cross-file discovery"],
+        avoid_when: ["Simple grep suffices"],
+        key_trigger: "Find code across files",
+      },
+    });
+    await writeYaml(tmpDir, "agent.yaml", yaml);
+
+    const { declarations, diagnostics } = await loadYamlDeclarations();
+    assert.equal(diagnostics.skippedFiles.length, 0);
+    assert.equal(declarations.length, 1);
+    assert.ok(declarations[0].routing);
+    assert.equal(declarations[0].routing!.category, "exploration");
+    assert.equal(declarations[0].routing!.cost, "medium");
+    assert.deepEqual(declarations[0].routing!.useWhen, [
+      "Broad codebase search",
+      "Cross-file discovery",
+    ]);
+    assert.deepEqual(declarations[0].routing!.avoidWhen, ["Simple grep suffices"]);
+    assert.equal(declarations[0].routing!.keyTrigger, "Find code across files");
+  });
+
+  it("loads YAML agents without routing unchanged", async () => {
+    await writeYaml(tmpDir, "agent.yaml", validYaml());
+
+    const { declarations } = await loadYamlDeclarations();
+    assert.equal(declarations.length, 1);
+    assert.equal(declarations[0].routing, undefined);
+  });
+
+  it("skips YAML with invalid routing category", async () => {
+    const yaml = validYaml({
+      routing: {
+        category: "advisor",
+        cost: "low",
+        use_when: ["test"],
+        avoid_when: ["test"],
+      },
+    });
+    await writeYaml(tmpDir, "agent.yaml", yaml);
+
+    const { declarations, diagnostics } = await loadYamlDeclarations();
+    assert.equal(declarations.length, 0);
+    assert.equal(diagnostics.skippedFiles.length, 1);
+    assert.match(diagnostics.skippedFiles[0].reason, /Schema validation failed/);
+  });
+
+  it("skips YAML with too many useWhen entries", async () => {
+    const yaml = validYaml({
+      routing: {
+        category: "exploration",
+        cost: "low",
+        use_when: ["a", "b", "c", "d", "e", "f", "g"],
+        avoid_when: [],
+      },
+    });
+    await writeYaml(tmpDir, "agent.yaml", yaml);
+
+    const { declarations, diagnostics } = await loadYamlDeclarations();
+    assert.equal(declarations.length, 0);
+    assert.equal(diagnostics.skippedFiles.length, 1);
+  });
+
+  it("skips YAML with useWhen entry exceeding 60 chars", async () => {
+    const yaml = validYaml({
+      routing: {
+        category: "exploration",
+        cost: "low",
+        use_when: ["a".repeat(61)],
+        avoid_when: [],
+      },
+    });
+    await writeYaml(tmpDir, "agent.yaml", yaml);
+
+    const { declarations, diagnostics } = await loadYamlDeclarations();
+    assert.equal(declarations.length, 0);
+    assert.equal(diagnostics.skippedFiles.length, 1);
+  });
 });

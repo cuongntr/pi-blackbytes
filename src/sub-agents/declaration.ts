@@ -1,5 +1,6 @@
 import type { TObject } from "typebox";
 import type { SubAgentMeta } from "../config/resource-metadata.js";
+import type { ModelFamily } from "../shared/model-capability.js";
 import type { AgentMutability, FinalizeMode } from "./delegable-tools.js";
 
 /** Model and reasoning-effort overrides resolved at execution time. */
@@ -15,6 +16,15 @@ export interface ModelOverrides {
  * Dynamic resolvers are called per invocation so config changes are picked up.
  */
 export type AllowedToolsResolver = readonly string[] | (() => readonly string[]);
+
+/** Typed routing metadata for sub-agent delegation decisions. */
+export interface SubAgentRoutingMetadata {
+  readonly category: "exploration" | "reasoning" | "research" | "implementation" | "review";
+  readonly cost: "low" | "medium" | "high";
+  readonly useWhen: readonly string[];
+  readonly avoidWhen: readonly string[];
+  readonly keyTrigger?: string;
+}
 
 /**
  * Declaration contract shared by builtin and YAML-defined sub-agents.
@@ -122,6 +132,20 @@ export interface SubAgentDeclaration<
     readonly cwd?: string;
     readonly finalizedTools: readonly string[];
   }) => string | Promise<string>;
+
+  /**
+   * Per-model-family system prompt overrides. When the configured nested
+   * model classifies as a known family, the corresponding prompt body
+   * is used instead of the default `systemPrompt`.
+   */
+  readonly systemPromptByFamily?: Partial<Record<ModelFamily, string>>;
+
+  /**
+   * Typed routing metadata consumed by overlay and status renderers.
+   * Builtins populate this directly; YAML agents may set it via the
+   * optional `routing` YAML field.
+   */
+  readonly routing?: SubAgentRoutingMetadata;
 }
 
 /**
@@ -140,5 +164,6 @@ export function declarationToMeta(decl: SubAgentDeclaration): SubAgentMeta {
     name: decl.name,
     description: decl.description,
     promptFeatures: ["subagentDelegation"],
+    routing: decl.routing,
   };
 }

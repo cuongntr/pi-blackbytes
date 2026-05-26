@@ -22,6 +22,20 @@ import { buildSubAgentRuntimeOverlay } from "./runtime-overlay.js";
 // YAML schema
 // ---------------------------------------------------------------------------
 
+const YamlRoutingMetadataSchema = z
+  .object({
+    category: z.enum(["exploration", "reasoning", "research", "implementation", "review"]),
+    cost: z.enum(["low", "medium", "high"]),
+    use_when: z
+      .array(z.string().max(60, "useWhen entries must be ≤ 60 chars"))
+      .max(6, "useWhen must not exceed 6 entries"),
+    avoid_when: z
+      .array(z.string().max(60, "avoidWhen entries must be ≤ 60 chars"))
+      .max(6, "avoidWhen must not exceed 6 entries"),
+    key_trigger: z.string().optional(),
+  })
+  .strict();
+
 const YamlSubAgentSchema = z
   .object({
     name: z
@@ -76,6 +90,7 @@ const YamlSubAgentSchema = z
      * May be overridden at runtime via `sub_agents.<name>.executionMode` in settings.json.
      */
     execution_mode: z.enum(["sequential", "parallel"]).optional(),
+    routing: YamlRoutingMetadataSchema.optional(),
   })
   .refine((d) => !(d.allowed_tools && d.denied_tools), {
     message: "allowed_tools and denied_tools are mutually exclusive",
@@ -193,6 +208,16 @@ function toDeclaration(
         }
       : undefined;
 
+  const routing = input.routing
+    ? {
+        category: input.routing.category,
+        cost: input.routing.cost,
+        useWhen: input.routing.use_when,
+        avoidWhen: input.routing.avoid_when,
+        keyTrigger: input.routing.key_trigger,
+      }
+    : undefined;
+
   // Auto-detect mutability for allowlist mode unless explicitly set.
   const declaredMutability: AgentMutability =
     input.mutability ??
@@ -211,6 +236,7 @@ function toDeclaration(
     sourcePath,
     promptMode: input.prompt_mode,
     executionMode: input.execution_mode,
+    routing,
     buildUserPrompt(params: YamlAgentParams) {
       return params.prompt;
     },

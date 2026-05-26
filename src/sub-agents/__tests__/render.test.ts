@@ -354,4 +354,57 @@ describe("rebuildSubAgentResultComponent — expanded footer aggregate", () => {
     assert.ok(out.includes("$0.420"), `expected smart cost, got: ${out}`);
     assert.ok(!out.includes("$0.4200"), "must not use the old 4-decimal format");
   });
+
+  it("does NOT duplicate cost in the header when expanded (footer carries it)", () => {
+    const out = renderToText({
+      details: {
+        agent: "explore",
+        status: "completed",
+        elapsedMs: 1_000,
+        model: "sonnet-4-5",
+        usage: { cost: 0.399 },
+      },
+      expanded: true,
+    });
+    // Cost must appear exactly once — in the footer aggregate, not in the
+    // header. Regression: v2.8.0 showed `$0.399` twice when expanded.
+    const occurrences = out.split("$0.399").length - 1;
+    assert.equal(occurrences, 1, `cost should appear once when expanded, got: ${out}`);
+  });
+
+  it("does NOT duplicate the last/current tool in the header when expanded", () => {
+    const out = renderToText({
+      details: {
+        agent: "explore",
+        status: "running",
+        elapsedMs: 5_000,
+        toolCallCount: 2,
+        // No currentTool — emulate the "between calls" state.
+        toolHistory: [
+          { name: "read", summary: "src/foo.ts", startMs: 0, endMs: 10 },
+          { name: "grep", summary: "src/bar.ts", startMs: 10, endMs: 20 },
+        ],
+      },
+      expanded: true,
+      isPartial: true,
+    });
+    // The ◷ between-calls hint must NOT appear in the header when the timeline
+    // already lists the same tool below. Regression: v2.8.0 rendered both.
+    assert.ok(!out.includes("◷ grep"), `◷ hint must be hidden when expanded, got: ${out}`);
+    // Timeline still shows the tool.
+    assert.ok(out.includes("grep"), "timeline must still surface the tool name");
+  });
+
+  it("keeps cost in the header when collapsed (no footer to delegate to)", () => {
+    const out = renderToText({
+      details: {
+        agent: "explore",
+        status: "completed",
+        elapsedMs: 1_000,
+        usage: { cost: 0.399 },
+      },
+      expanded: false,
+    });
+    assert.ok(out.includes("$0.399"), "cost must remain in collapsed header");
+  });
 });

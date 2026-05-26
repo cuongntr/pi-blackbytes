@@ -140,7 +140,9 @@ export function rebuildSubAgentResultComponent(
   if (typeof details.toolCallCount === "number" && details.toolCallCount > 0) {
     headerBits.push(theme.fg("muted", `${details.toolCallCount} calls`));
   }
-  if (status === "running") {
+  if (status === "running" && !options.expanded) {
+    // When expanded, the tool activity timeline below shows the active /
+    // most-recent tool anyway; repeating it in the header is redundant.
     if (details.currentTool) {
       // Active tool: split coloring — icon accent ("in progress"), tool name in
       // toolTitle (recognisable identifier), arg hint muted (supporting detail).
@@ -171,7 +173,14 @@ export function rebuildSubAgentResultComponent(
   if (typeof details.outputChars === "number" && details.outputChars > 0) {
     headerBits.push(theme.fg("muted", `${details.outputChars.toLocaleString("en-US")} chars`));
   }
-  if (details.usage && typeof details.usage.cost === "number" && details.usage.cost > 0) {
+  if (
+    !options.expanded &&
+    details.usage &&
+    typeof details.usage.cost === "number" &&
+    details.usage.cost > 0
+  ) {
+    // Cost moves to the expanded footer aggregate when expanded; showing it in
+    // both places at once is duplication that the user noticed in v2.8.0.
     headerBits.push(theme.fg("muted", formatCost(details.usage.cost)));
   }
   // Failed state: surface a one-line error hint in red so the user can see

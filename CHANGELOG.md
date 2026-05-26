@@ -1,5 +1,30 @@
 # Changelog
 
+## 2.8.1 (2026-05-26)
+
+Deduplicate the sub-agent header when expanded: cost and the last/current
+tool bit are dropped from the header because the expanded footer aggregate
+and tool timeline already surface the same information.
+
+### Fixed
+
+- **Cost duplicated in expanded view** — v2.8.0 rendered the cost in both the
+  collapsed-style header bit and the expanded footer aggregate. The header now
+  omits the cost when `options.expanded === true`; the footer remains the sole
+  source of truth in that state. Collapsed view is unchanged.
+- **Last/current tool duplicated in expanded view** — v2.8.0 rendered the
+  `🔧 <name>` (active) and `◷ <name>` (between calls) header bits even when the
+  tool activity timeline below already listed the same entries. The header now
+  omits both bits when expanded.
+
+### Result
+
+Expanded header is now: `<spinner|glyph> <icon> <agent> · <elapsed> · N calls · N chars`
+plus the failed-error hint when applicable. Collapsed header behaviour is
+unchanged.
+
+---
+
 ## 2.8.0 (2026-05-26)
 
 Sub-agent inline UI polish: agent identity in the header, braille spinner,

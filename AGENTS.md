@@ -24,13 +24,12 @@ Run in order: `lint -> build -> test`.
 
 - `/setup-models` — interactive per-agent model and thinking level configuration wizard with grouped provider picker, batch shortcuts, and summary confirmation
 - `/blackbytes-status` — interactive section-based status viewer with compact overview and drill-down into individual sections
-- `/toggle-verbose` — toggle compact vs expanded tool-result rendering
 
 ## Architecture
 
 ```text
-src/index.ts -> bootstrap(pi) -> wires 7 event handlers + 3 commands:
-  session_start           -> loads config, computes enabled set, registers compact built-in renderers, tools/sub-agents, sets up branding widget
+src/index.ts -> bootstrap(pi) -> wires 7 event handlers + 2 commands:
+  session_start           -> loads config, computes enabled set, registers tools/sub-agents, sets up branding widget
   before_agent_start      -> renders capability-aware Bytes v2 overlay + <available_resources>
   agent_start             -> captures Pi-effective system prompt to JSONL when system_prompt_log.enabled
   model_select            -> tracks current model family
@@ -40,7 +39,6 @@ src/index.ts -> bootstrap(pi) -> wires 7 event handlers + 3 commands:
 
   /setup-models           -> interactive per-agent model+thinking wizard with summary
   /blackbytes-status      -> interactive section picker for enabled resources + redacted config
-  /toggle-verbose         -> toggles compact/expanded tool output
 ```
 
 ### Registration flow (critical)
@@ -60,7 +58,8 @@ All tools and sub-agents are registered in `handleSessionStart()` (`src/handlers
 2. Export the declaration and add it to `BUILTIN_DECLARATIONS` in `src/handlers/index.ts`
 3. Add metadata to `SUB_AGENTS` in `src/config/resource-metadata.ts`
 4. Add the icon to `SUB_AGENT_ICONS` in `src/sub-agents/register.ts`
-5. Update the hardcoded agent-name lists in the affected test files (see `src/config/__tests__/enabled-set.test.ts` for the pattern)
+5. Add `routing` metadata to the declaration (category, cost, useWhen, avoidWhen, keyTrigger)
+6. Update the hardcoded agent-name lists in the affected test files (see `src/config/__tests__/enabled-set.test.ts` for the pattern)
 
 **User-defined sub-agents** are loaded from YAML files in `$PI_AGENT_DIR/sub-agents/*.{yaml,yml}` via `loadYamlDeclarations()`. Conflicts with builtins or earlier YAML files in the same directory are skipped with a diagnostic (not fatal); `/blackbytes-status` surfaces all skipped files and reasons.
 
@@ -82,7 +81,6 @@ Core settings:
 - `disabled_tools` / `disabled_sub_agents`
 - `hashline_edit`
 - `copilot_initiator_header`
-- `compact_tools.enabled`, `compact_tools.default_expanded` (compact render wrappers for Pi built-in read/bash/edit/write/find/ls; `/toggle-verbose` toggles expansion)
 - `websearch.provider`, `websearch.exa_api_key`, `websearch.tavily_api_key`
 - `context7.api_key`
 - `system_prompt_log.enabled`, `.path`, `.capture_agent_start`, `.capture_provider_system`, `.include_nested`, `.dedupe` (opt-in JSONL capture of full system prompts; provider capture extracts only system-like fields)
@@ -97,11 +95,13 @@ The schema is `.passthrough()`, so wizard-managed extra keys in the `blackbytes`
 
 ### Prompt injection
 
-The `before_agent_start` handler renders a capability-aware Bytes v2 policy overlay from runtime state. The overlay contains 14 sections (identity, precedence, autonomy, investigation, session capabilities, hard boundaries, work defaults, tool-use protocol, verification contract, executing-actions-with-care, conditional workflows, markdown format, file references, and completion contract); it only mentions enabled capabilities, builds a concise positive delegation routing matrix from the enabled sub-agent set, resolves model-family formatting deterministically from the event model or cached family, and falls back to a minimal safe overlay when runtime state is incomplete. The sentinel-delimited augmentation remains idempotent: re-running the handler replaces the existing block instead of appending duplicates.
+The `before_agent_start` handler renders a capability-aware Bytes v2 policy overlay from runtime state. The overlay contains 14 sections (identity, precedence, autonomy, investigation, session capabilities, hard boundaries, work defaults, tool-use protocol, verification contract, executing-actions-with-care, conditional workflows, markdown format, file references, and completion contract); it only mentions enabled capabilities, builds a concise positive delegation routing matrix from registered sub-agent routing metadata (`SubAgentRoutingMetadata`), resolves model-family formatting deterministically from the event model or cached family, and falls back to a minimal safe overlay when runtime state is incomplete. The sentinel-delimited augmentation remains idempotent: re-running the handler replaces the existing block instead of appending duplicates.
 
 ### Sub-agents
 
 Sub-agents are defined as typed declarations (`SubAgentDeclaration`) and registered via `registerSubAgent()`. Builtin declarations live in `src/sub-agents/{explore,oracle,librarian,general,reviewer}.ts`. User-defined agents are loaded from YAML files via `src/sub-agents/loader.ts`. All agents spawn nested `pi -p` sessions through `src/sub-agents/runner.ts`, which forces `--no-session`, `--no-context-files`, and (when reasoning is configured) `--thinking <effort>` on the nested CLI. Delegate allowlists are enforced at runtime, and nested sessions do not receive `delegate_*` tools again.
+
+Declarations carry optional `systemPromptByFamily` (per-model-family prompt overrides) and `routing` (`SubAgentRoutingMetadata`) fields. Oracle and General define GPT-optimized prompt variants selected via `resolveSystemPromptBody()` in `src/sub-agents/prompt-builder.ts` when the configured nested model classifies as GPT family. Routing metadata drives the Bytes overlay routing matrix (via `buildOverlayRoutingMatrix()`) and the `/blackbytes-status` Sub-Agent Routing section (via `buildRoutingSummary()`), both in `src/sub-agents/routing.ts`.
 
 Each delegation is logged to an in-memory, session-scoped delegation log (`src/sub-agents/delegation-log.ts`) tracking agent, duration, success, tool call count, output size, and cost. The log resets via `resetDelegationLog()` (called from `resetSessionRuntimeState()`). `/blackbytes-status` surfaces per-agent delegation metrics under the "Delegation ROI" section.
 
@@ -109,11 +109,10 @@ Read-only sub-agents (explore, oracle, librarian, reviewer) each declare a `prep
 
 ### Tool rendering
 
-Tool result rendering is split into three layers:
+Tool result rendering is split into two layers:
 
-1. **Compact builtins** (`src/tools/compact-tools/`): wraps Pi's `read`, `bash`, `edit`, `write`, `find`, `ls` with one-line `✓`/`✗` summaries and partial states (`Reading...`, `Running...`).
-2. **Extension tools** (`src/tools/_shared/stats-render.ts`): `buildStatsRenderResult()` factory provides `✓`/`✗` status icons, partial-state messages (`Searching...`, `Fetching...`, etc.), and collapsed summaries for all bundled and HTTP-backed tools.
-3. **Sub-agents** (`src/sub-agents/render.ts`): `SubAgentResultComponent` renders a live-updating header with status icon (`✓`/`✗`/`⚠`), elapsed time, tool call count, current tool with argument summary, output chars, model, and cost. Expanded view shows a tool activity timeline (last 30 calls with `✓`/`▸` icons, names, arg summaries, durations). Progress is driven by `createProgressReporter()` in `src/sub-agents/progress-reporter.ts`, which tracks tool execution via `tool_execution_start`/`tool_execution_end` events and captures argument summaries from `toolcall_end` events.
+1. **Extension tools** (`src/tools/_shared/stats-render.ts`): `buildStatsRenderResult()` factory provides `✓`/`✗` status icons, partial-state messages (`Searching...`, `Fetching...`, etc.), and collapsed summaries for all bundled and HTTP-backed tools.
+2. **Sub-agents** (`src/sub-agents/render.ts`): `SubAgentResultComponent` renders a live-updating header with status icon (`✓`/`✗`/`⚠`), elapsed time, tool call count, current tool with argument summary, output chars, model, and cost. Expanded view shows a tool activity timeline (last 30 calls with `✓`/`▸` icons, names, arg summaries, durations). Progress is driven by `createProgressReporter()` in `src/sub-agents/progress-reporter.ts`, which tracks tool execution via `tool_execution_start`/`tool_execution_end` events and captures argument summaries from `toolcall_end` events.
 
 Tool icons are unique per tool to avoid visual ambiguity when scanning call lines. The icon map for sub-agents lives in `SUB_AGENT_ICONS` in `src/sub-agents/register.ts`.
 

@@ -8,9 +8,10 @@ Pi coding-agent extension that provides local search tools, locally-managed HTTP
 
 Blackbytes extends Pi with:
 
-- **Bytes v2 system prompt overlay** — capability-aware, per-model-family prompt with sections covering identity, autonomy, investigation rules, tool-use protocol, verification contracts, and workflow guidance. Four provider variants: `claude` (semantic XML tags), `gpt` (Markdown + Parallel Execution Policy footer), `gemini` (numbered headings + worked examples), and `kimi` (terse instruction-dense Markdown).
+- **Bytes v2 system prompt overlay** — capability-aware, per-model-family prompt with sections covering identity, autonomy, investigation rules, tool-use protocol, verification contracts, and workflow guidance. The Conditional Workflows section includes a metadata-driven delegation routing matrix built from typed `SubAgentRoutingMetadata` on each sub-agent declaration. Four provider variants: `claude` (semantic XML tags), `gpt` (Markdown + Parallel Execution Policy footer), `gemini` (numbered headings + worked examples), and `kimi` (terse instruction-dense Markdown).
 - **Strict Librarian gating** — `delegate_librarian` requires ALL of (a) external information, (b) multiple independent sources or current-year authority, (c) direct tools individually insufficient — plus an explicit anti-pattern denylist.
-- **Five builtin sub-agents** — Explore (with Tour Mode for flow walk-throughs), Oracle, Librarian, General, and Reviewer, each with typed declarations, runtime overlays, model fallback chains (read-only agents), and per-agent timeout/model/reasoning configuration.
+- **Five builtin sub-agents** — Explore (with Tour Mode for flow walk-throughs), Oracle (with long-context handling and high-risk self-check guardrails), Librarian, General, and Reviewer, each with typed declarations, typed routing metadata, runtime overlays, model fallback chains (read-only agents), per-model-family prompt variants (Oracle and General carry GPT-optimized prompt bodies), and per-agent timeout/model/reasoning configuration.
+- **Typed routing metadata** — each sub-agent declaration carries a `SubAgentRoutingMetadata` object with `category`, `cost`, `useWhen`, `avoidWhen`, and optional `keyTrigger` fields. This metadata drives the Bytes overlay routing matrix and the `/blackbytes-status` Sub-Agent Routing section, replacing hardcoded routing prose.
 - **Delegation ROI tracking** — in-memory session-scoped delegation log with per-agent metrics (call count, success rate, average duration, cost). Visible via `/blackbytes-status`.
 - **`look_at` tool** — multimodal image inspector that loads a primary image plus up to 3 references (PNG/JPG/GIF/WebP/BMP/SVG, 10 MB each) and embeds them as `ImageContent` blocks alongside the analysis objective.
 - **Fluent `file://` links** — sub-agent output uses `[relpath#L-L](file:///abs/path#L-L)` links throughout.
@@ -52,7 +53,6 @@ The wizard maps Blackbytes sub-agents to models that Pi already has available in
 |---|---|
 | `/setup-models` | Interactive per-agent model and thinking level configuration wizard with grouped provider picker, batch shortcuts, and summary confirmation |
 | `/blackbytes-status` | Interactive section-based status viewer with compact overview and drill-down into individual sections |
-| `/toggle-verbose` | Toggle compact vs expanded tool-result rendering during the current session |
 
 ## Setup wizard
 
@@ -131,12 +131,12 @@ The picker presents 10 named sections plus a **Show All** option:
 |---|---|---|
 | 1 | Enabled Tools | Lists all registered tool names with their enabled/disabled state |
 | 2 | Enabled Sub-Agents | Lists builtin and YAML sub-agents with their enabled/disabled state |
-| 3 | Enabled Skills | Lists discovered Pi skills |
-| 4 | Delegation ROI | Session-scoped delegation metrics: per-agent call count, success rate, average duration, and accumulated cost |
-| 5 | Sub-Agent Snapshot | Resolved per-agent config snapshot (model, reasoning, timeout, fallback chain) |
-| 6 | YAML Diagnostics | Skipped YAML sub-agent files and reasons |
-| 7 | System Prompt Log | Current system prompt logging configuration |
-| 8 | Compact Tool Output | Compact tool rendering state and `/toggle-verbose` status |
+| 3 | Sub-Agent Routing | Typed routing metadata for each enabled sub-agent: category, cost, use-when/avoid-when hints, and key trigger |
+| 4 | Enabled Skills | Lists discovered Pi skills |
+| 5 | Delegation ROI | Session-scoped delegation metrics: per-agent call count, success rate, average duration, and accumulated cost |
+| 6 | Sub-Agent Snapshot | Resolved per-agent config snapshot (model, reasoning, timeout, fallback chain) |
+| 7 | YAML Diagnostics | Skipped YAML sub-agent files and reasons |
+| 8 | System Prompt Log | Current system prompt logging configuration |
 | 9 | Reserved / Unsupported Settings | Settings accepted by schema but not yet functional (e.g. `temperature`) |
 | 10 | Full Config (JSON) | Raw `blackbytes` config object with secrets redacted |
 | — | Show All | Prints all sections in order |
@@ -165,10 +165,6 @@ Blackbytes reads the top-level `blackbytes` object from the Pi settings file.
     "disabled_sub_agents": [],
     "hashline_edit": true,
     "copilot_initiator_header": true,
-    "compact_tools": {
-      "enabled": true,
-      "default_expanded": false
-    },
     "websearch": {
       "provider": "exa",
       "exa_api_key": "YOUR_EXA_KEY"
@@ -208,8 +204,6 @@ Blackbytes reads the top-level `blackbytes` object from the Pi settings file.
 | `disabled_sub_agents` | `("explore" \| "oracle" \| "librarian" \| "general" \| "reviewer")[]` | Disables delegate tools by agent name |
 | `hashline_edit` | `boolean` | Enables hashline rewriting for Pi `read`/`write` tool results |
 | `copilot_initiator_header` | `boolean` | Registers the GitHub Copilot provider header `X-Initiator: agent` |
-| `compact_tools.enabled` | `boolean` | Registers compact renderers for Pi built-in `read`, `bash`, `edit`, `write`, `find`, and `ls` results. Defaults to `true`. |
-| `compact_tools.default_expanded` | `boolean` | Initial tool-result expansion state when compact renderers are enabled. `false` means compact by default. |
 | `websearch.provider` | `"exa" \| "tavily"` | Selects the web backend. Defaults to `exa` when omitted. |
 | `websearch.exa_api_key` | `string` | Exa credential. Overrides `EXA_API_KEY` when set. |
 | `websearch.tavily_api_key` | `string` | Tavily credential. Overrides `TAVILY_API_KEY` when set. |
@@ -235,7 +229,6 @@ Blackbytes reads the top-level `blackbytes` object from the Pi settings file.
 - `disabled_tools` uses public tool names such as `hashline_edit` or `docs_query`. Disabled tools are enforced through every nested delegate path - builtin agents, and both the default and allowlist/denylist forms of YAML agents.
 - `disabled_sub_agents` uses agent names, not tool names: `explore`, `oracle`, `librarian`, `general`, `reviewer`.
 - `system_prompt_log` is intentionally opt-in. The `agent_start` capture is the canonical Pi-effective prompt; provider capture is only for verifying serialization and extracts system-like fields instead of dumping the full provider payload.
-- Compact tool output preserves Pi's full built-in renderers when expanded (`Ctrl+O`) and can be toggled during a session with `/toggle-verbose`.
 - `temperature` is accepted by the schema for forward-compatibility but is NOT applied. See `/blackbytes-status` → "Reserved / Unsupported Settings" for details.
 
 ## Tool surface
@@ -250,7 +243,6 @@ Every Blackbytes tool provides structured, scannable result rendering with three
 | **Collapsed** (default) | A one-line summary with a `✓` (success) or `✗` (error) icon, followed by a brief summary and a `ctrl+o to expand` hint |
 | **Expanded** (`Ctrl+O`) | Full tool output in `toolOutput` color |
 
-**Compact Pi built-in rendering**: When `compact_tools.enabled` is true, Blackbytes wraps Pi's built-in `read`, `bash`, `edit`, `write`, `find`, and `ls` tools so collapsed results render as one-line summaries with `✓`/`✗` icons, paths, and metadata. Expanded results still use Pi's original renderers.
 
 ### Bundled local tools
 
@@ -286,7 +278,7 @@ Every Blackbytes tool provides structured, scannable result rendering with three
 
 User-defined sub-agents can be placed in `$PI_AGENT_DIR/sub-agents/*.{yaml,yml}` (defaulting to `~/.pi/agent/sub-agents/`). Each file must define `name`, `description`, and `system_prompt`. Tool access is optional via either `allowed_tools` or `denied_tools` (mutually exclusive); when neither is provided the agent receives the default read/search/docs tool set.
 
-Additional optional YAML fields: `model`, `reasoning_effort`, `timeout_ms`, `mutability`, `prompt_mode`, `fallback_models`.
+Additional optional YAML fields: `model`, `reasoning_effort`, `timeout_ms`, `mutability`, `prompt_mode`, `fallback_models`, `execution_mode`, `routing`.
 
 ```yaml
 # ~/.pi/agent/sub-agents/deep-reviewer.yaml
@@ -303,6 +295,15 @@ fallback_models:            # read-only agents only; at most 5 entries
   - anthropic/claude-opus-4
   - google/gemini-2.5-pro
 prompt_mode: static         # 'static' only; 'append' throws at runtime
+routing:                    # optional typed routing metadata
+  category: review           # exploration | reasoning | research | implementation | review
+  cost: medium               # low | medium | high
+  use_when:
+    - "After significant implementation"
+    - "Pre-merge code quality check"
+  avoid_when:
+    - "Trivial changes"
+  key_trigger: "Deep code review"   # optional one-line summary
 ```
 
 Key behaviors:
@@ -312,10 +313,19 @@ Key behaviors:
 - Conflicts with a builtin name or an earlier YAML file in the same directory are skipped with a diagnostic instead of causing a fatal error. All non-conflicting agents in the same directory still load.
 - Diagnostics (skipped files and reasons) appear in `/blackbytes-status` under **### YAML Sub-Agents**.
 - `disabled_tools` is enforced on YAML agents the same as on builtins.
+- The optional `routing` field provides typed routing metadata for the `/blackbytes-status` Sub-Agent Routing section and the Bytes overlay. YAML agents without `routing` display a placeholder (`—`) in status output. Invalid routing values cause the file to be skipped with a diagnostic.
+- Routing field validation: `category` must be one of `exploration`, `reasoning`, `research`, `implementation`, `review`; `cost` must be `low`, `medium`, or `high`; `use_when` and `avoid_when` accept at most 6 entries of ≤ 60 characters each; the schema uses `.strict()` mode so unknown routing keys are rejected.
 
-### Sub-agent system prompts
+### Sub-agent prompt system
 
-Each builtin sub-agent receives a two-layer system prompt: a runtime overlay prepended by the host, followed by the agent's static persona prompt.
+Each builtin sub-agent receives a multi-layer system prompt:
+
+1. A **runtime overlay** prepended by the host (read-only agents: ~4 KB; General: ~8 KB safety overlay).
+2. The **resolved persona prompt body**, selected at execution time from either the default `systemPrompt` or a model-family-specific variant from `systemPromptByFamily`.
+
+Prompt body resolution uses `resolveSystemPromptBody()` in `src/sub-agents/prompt-builder.ts`. When a nested model is explicitly configured via `sub_agents.<name>.model`, the model is classified into a `ModelFamily` (`claude`, `gpt`, `gemini`, `kimi`, `other`). If a matching family entry exists in `systemPromptByFamily`, that variant is used; otherwise the default `systemPrompt` applies. The parent session's cached model family is never consulted — only the explicitly configured nested model drives variant selection.
+
+Oracle and General carry GPT-optimized prompt variants (`systemPromptByFamily.gpt`) that feature an explicit opener blacklist, prose-first output for simple questions, and concise structured formats. These are used only when the nested model is a GPT-family model (e.g. `gpt-4o`, `o3-mini`, `o4-mini`).
 
 **Read-only sub-agent runtime overlay (~4 KB)** — applied to Explore, Oracle, Librarian, and Reviewer via `prependSystemPrompt`. Contains:
 
@@ -332,6 +342,41 @@ The overlay is capped at ~4 KB, built by `src/sub-agents/runtime-overlay.ts`, an
 - Enabled and disabled resource summary
 - Hard rules: no recursive delegation, no destructive git commands, no committing secrets, no introducing new dependencies, stay in task scope
 - Constraints derived from `AGENTS.md` (truncated, with secrets redacted)
+
+General's persona prompt defers to the safety overlay for the authoritative tool list rather than maintaining a static tool-name list in the prompt text.
+
+### Oracle prompt guardrails
+
+The Oracle default prompt includes two domain-specific guardrail sections:
+
+- **Long-Context Handling** — when input exceeds ~50 tool-result blocks or spans many files, Oracle anchors every factual claim to a specific file path and line range, labels inferred vs. verified items, and flags contradictions between code sections.
+- **High-Risk Self-Check** — before finalising any answer on architecture, security, or performance, Oracle re-scans reasoning for unstated assumptions, verifies the recommendation does not introduce new failure modes, and discloses any unread files it relied upon.
+
+### Routing metadata
+
+Each builtin sub-agent declaration carries a `routing` field of type `SubAgentRoutingMetadata`:
+
+```ts
+export interface SubAgentRoutingMetadata {
+  readonly category: "exploration" | "reasoning" | "research" | "implementation" | "review";
+  readonly cost: "low" | "medium" | "high";
+  readonly useWhen: readonly string[];     // max 6 items, each ≤ 60 chars
+  readonly avoidWhen: readonly string[];   // max 6 items, each ≤ 60 chars
+  readonly keyTrigger?: string;            // optional one-line summary
+}
+```
+
+Builtin routing metadata:
+
+| Agent | Category | Cost | Key Trigger |
+|---|---|---|---|
+| explore | exploration | medium | Deep contextual grep across multiple files |
+| oracle | reasoning | high | Deep analytical reasoning on hard problems |
+| librarian | research | high | Multi-source external research requiring triangulation |
+| general | implementation | high | Heavy well-defined implementation with verifiable outcome |
+| reviewer | review | medium | Severity-classified code review with verdict |
+
+The Bytes overlay Conditional Workflows section uses `buildOverlayRoutingMatrix()` to render a concise one-line routing entry per enabled agent from this metadata. `/blackbytes-status` uses `buildRoutingSummary()` to display the full routing table including category, cost, use-when, and avoid-when details. Both helpers live in `src/sub-agents/routing.ts`, consume runtime `SubAgentMeta[]` (not builtin declarations directly), sort alphabetically for deterministic output, and produce placeholder entries for YAML agents without routing.
 
 
 ## Sub-agent progress display
@@ -400,9 +445,9 @@ The final delegate result remains a concise text block returned after the nested
 ## Delegation model
 
 - **Explore** locates files, symbols, and call sites in the local repository. In Tour Mode, it traces execution flows and returns numbered `[file#L-L](file://…)` steps with `what · why` annotations — use it when you need to understand *how* a flow works, not just where files live. Accepts an optional `context` parameter to scope the search.
-- **Oracle** handles hard architectural reasoning and elevated debugging.
+- **Oracle** handles hard architectural reasoning and elevated debugging. Includes long-context handling guardrails (anchoring claims to specific files when input is large) and a high-risk self-check (re-scanning for unstated assumptions before finalising architecture/security/performance answers). When the configured nested model is a GPT-family model, a GPT-optimized prompt variant with prose-first output and an explicit opener blacklist is used.
 - **Librarian** researches external APIs, official docs, and public code examples.
-- **General** executes large, well-defined implementation tasks with the session's enabled tool set.
+- **General** executes large, well-defined implementation tasks with the session's enabled tool set. The prompt defers to the runtime safety overlay for the authoritative tool list. When the configured nested model is a GPT-family model, a GPT-optimized prompt variant is used.
 - **Reviewer** reviews changed code—diffs, patches, and PR descriptions—and produces severity-classified findings (High/Medium/Low) with a Verdict. The caller must supply the diff or file list; the Reviewer cannot run git itself.
 
 Nested delegation is limited to one level. Delegate sessions do not receive the `delegate_*` tools again, so recursion is blocked at runtime rather than by prompt text alone.

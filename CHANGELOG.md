@@ -1,5 +1,59 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- **Typed routing metadata** — `SubAgentRoutingMetadata` interface with `category`,
+  `cost`, `useWhen`, `avoidWhen`, and optional `keyTrigger` fields on
+  `SubAgentDeclaration`. All five builtin sub-agents carry routing metadata.
+- **`systemPromptByFamily`** declaration field — optional per-model-family prompt
+  overrides resolved via `resolveSystemPromptBody()` in `prompt-builder.ts`.
+  Variant selection is driven solely by the configured nested model (never the
+  parent's cached model family).
+- **Oracle GPT prompt variant** — prose-first output, explicit opener blacklist,
+  and effort tags (`Quick`, `Short`, `Medium`, `Large`). Selected when the
+  configured nested model is a GPT-family model (`gpt-*`, `o1-*`, `o3-*`, `o4-*`).
+- **General GPT prompt variant** — streamlined executor prompt with opener
+  blacklist and overlay-deferring tool access. Selected under the same
+  GPT-family conditions as Oracle.
+- **Oracle guardrails** — `## Long-Context Handling` (anchor claims to file
+  paths, label inferred items, flag contradictions) and `## High-Risk Self-Check`
+  (re-scan for unstated assumptions, verify no new failure modes) sections in
+  the default Oracle prompt.
+- **Routing summary helpers** — `buildRoutingSummary()` and
+  `buildOverlayRoutingMatrix()` in `src/sub-agents/routing.ts`. Both consume
+  runtime `SubAgentMeta[]`, sort alphabetically, and produce placeholder entries
+  for YAML agents without routing.
+- **Sub-Agent Routing section** in `/blackbytes-status` — displays category,
+  cost, use-when/avoid-when, and key trigger for each enabled sub-agent.
+- **YAML `routing` field** — optional typed routing metadata in YAML sub-agent
+  declarations with validation (category/cost enums, capped arrays, strict
+  schema). Invalid routing skips the file with diagnostics.
+- **Description length enforcement** — test assertions verify all builtin
+  delegate descriptions are ≤ 400 chars and preserve required gate phrases.
+
+### Changed
+
+- **Bytes overlay routing matrix** is metadata-driven — `buildConditionalWorkflowsBody()`
+  uses `buildOverlayRoutingMatrix()` from registered `SubAgentMeta` instead of
+  per-agent hardcoded `if` checks.
+- **General's Tool Access prompt section** defers to the runtime safety overlay
+  for the authoritative tool list instead of maintaining a static `TOOL_NAMES.*`
+  interpolated list. The `TOOL_NAMES` import is removed from `general.ts`.
+- **Delegate tool descriptions** are shortened to ≤ 400 chars each. Positive
+  routing prose is removed (replaced by typed routing metadata in the overlay);
+  strict delegation gates and cost signals (`ALL of these hold`, `file paths +
+  intended changes`, `5–10×`) are preserved.
+- **`SubAgentMeta`** gains an optional `routing` field, populated by
+  `declarationToMeta()` from the declaration.
+- **`BytesPromptRenderContext`** gains an optional `registeredSubAgentMetas`
+  field, populated by `createBytesPromptRenderContext()` from the runtime
+  sub-agent metadata registry.
+- `/blackbytes-status` section picker has 10 sections (was 10 before compact
+  tools removal; Sub-Agent Routing replaces the removed Compact Tool Output
+  section).
+
 ## 2.6.2 (2026-05-17)
 
 ### Fixed
@@ -62,7 +116,7 @@ a shared module.
 
 The `handoff` tool spawned a fresh nested Pi session when context was "near
 capacity." In practice, the trigger relied entirely on LLM self-diagnosis of
-context exhaustion — a condition models cannot reliably detect — and the
+context exhaustion - a condition models cannot reliably detect - and the
 auto-distilled 4 KB summary rarely preserved enough context for meaningful
 continuation. `delegate_general` covers the concrete-implementation use case
 with stronger safety overlays, delegation logging, and fallback chains;
@@ -104,7 +158,7 @@ for everything else, starting a new conversation is simpler and more reliable.
 Removes the extension's bundled `grep` tool. Pi's built-in `grep` (available
 since Pi 0.67) provides equivalent ripgrep-backed content search with regex,
 glob filtering, context lines, and result limits. Sub-agents continue to
-receive `grep` in their tool allowlists — it resolves to Pi's built-in
+receive `grep` in their tool allowlists - it resolves to Pi's built-in
 implementation via `PI_BUILTIN_TOOLS`.
 
 ### Removed
@@ -152,7 +206,7 @@ and adds session-scoped delegation ROI tracking.
   walk-throughs directly. The system prompt includes a **Tour Mode**
   section; when the question asks how a flow works (entry → handler →
   side-effect), the agent responds with a one-line summary + numbered
-  `[relpath#L-L](file:///abs/path#L-L) — what · why` steps.
+  `[relpath#L-L](file:///abs/path#L-L) - what · why` steps.
 - **Explore `context` parameter**: optional `context` string scopes the
   search or tour (specific files, modules, constraints).
 
@@ -190,7 +244,7 @@ and adds session-scoped delegation ROI tracking.
 ### Tests
 
 - New `src/sub-agents/__tests__/delegation-log.test.ts` (10 tests).
-- Librarian gating fixture checks updated: L1–L4 and L6 now check
+- Librarian gating fixture checks updated: L1-L4 and L6 now check
   declaration description only (guidance moved to descriptions).
 - Overlay tests updated for streamlined routing matrix and removed
   sections.
@@ -199,11 +253,11 @@ and adds session-scoped delegation ROI tracking.
 
 ---
 
-## 2.1.0 (2026-05-02) — Bytes v2 Phase 4
+## 2.1.0 (2026-05-02) - Bytes v2 Phase 4
 
 This is a **minor, additive** release on top of v2.0.0. It ships three of
-the four "Phase 4 — New capabilities" items that were deferred from
-v2.0.0 — `handoff`, `code-tour`, and `look_at`. The fourth item
+the four "Phase 4 - New capabilities" items that were deferred from
+v2.0.0 - `handoff`, `code-tour`, and `look_at`. The fourth item
 (`bytes_todo`) was implemented and then removed before release; see
 **Removed** below for the rationale. Nothing from v2.0.0 changes;
 capabilities are gated behind feature flags and only appear in the Bytes
@@ -224,23 +278,23 @@ overlay when the backing tool / sub-agent is enabled.
   abort signal is forwarded so cancelling the parent kills the nested
   Pi. Default timeout 30 minutes. New Bytes overlay section
   `handoff_protocol` (~600 chars) gated behind the `handoffEnabled`
-  feature flag — disabling the tool removes the section.
+  feature flag - disabling the tool removes the section.
 - **`code-tour` sub-agent** (`src/sub-agents/code-tour.ts`): read-only
   guided walk-through agent. Allowed tools: `read`, `grep`, `glob`,
   `ast_search`. Returns a one-line summary plus a numbered list of
-  `[relpath#L-L](file:///abs#L-L) — what · why` steps using fluent
+  `[relpath#L-L](file:///abs#L-L) - what · why` steps using fluent
   `file://` links. Output spec, scope discipline, and method match the
   Amp finder reference style. Icon `🧭`, `delegate_code_tour` tool,
   `medium` reasoning effort, 10-minute timeout. New
   `delegate_code_tour` bullet in the conditional-workflows section gated
   on `enabledSubAgents.has("code-tour")`.
-- **`look_at` tool** (`src/tools/look-at/`): real multimodal tool —
+- **`look_at` tool** (`src/tools/look-at/`): real multimodal tool -
   pre-check confirmed `AgentToolResult.content` accepts
   `(TextContent | ImageContent)[]` in `@mariozechner/pi-coding-agent`
   v0.69. Loads a primary image plus up to 3 reference images (PNG, JPEG,
   GIF, WebP, BMP, SVG; 10 MB max each), embeds them as base64
   `ImageContent` blocks, and prepends a text block with the analysis
-  objective and resolved paths. No prompt overlay change — model already
+  objective and resolved paths. No prompt overlay change - model already
   knows how to consume image content blocks.
 ### Removed
 
@@ -250,7 +304,7 @@ overlay when the backing tool / sub-agent is enabled.
   models (Claude extended thinking, GPT-5 reasoning, Gemini thinking)
   plan internally without an external scratchpad; (b) project users
   rely on richer external task systems (`beads`, Jira, Linear) that
-  persist, support dependency graphs, and survive process restarts —
+  persist, support dependency graphs, and survive process restarts -
   `bytes_todo`'s module-level state was reset on every extension
   reload; (c) the tool added ~480 tokens of permanent overhead (schema
   + overlay section + capability bullet) per session whether or not it
@@ -275,7 +329,7 @@ overlay when the backing tool / sub-agent is enabled.
   surfaces** with **direct HTTP tools**") was ambiguous about whether
   the wire protocol was also being replaced. Reality: `web_search` /
   `web_fetch` (Exa, Tavily) and `docs_resolve` / `docs_query`
-  (Context7) are pure REST clients — no MCP involved. `gh_search` is
+  (Context7) are pure REST clients - no MCP involved. `gh_search` is
   also locally-managed (no Pi MCP plugin needed) but the upstream
   `mcp.grep.app` service still speaks MCP-over-HTTP, so the extension
   ships an in-process `McpHttpClient` for that one tool. New wording
@@ -289,7 +343,7 @@ overlay when the backing tool / sub-agent is enabled.
   (coding-agent workflows mostly care about currently-edited files);
   (b) when it is *not* what you want (stable lexical enumeration); and
   (c) the recommended alternative (`find` / `ls` Pi built-ins, or
-  `grep --files-with-matches`). No behavior change — just clearer
+  `grep --files-with-matches`). No behavior change - just clearer
   contract for the calling LLM.
 
 ### Fixed
@@ -311,7 +365,7 @@ overlay when the backing tool / sub-agent is enabled.
   but a **policy-correctness and architectural-consistency bug**:
   config-level intent should propagate uniformly across all nested
   execution paths. Fix: `handoff/tool.ts` now derives its nested
-  allowlist using the same pattern as `general.ts` — parent's enabled
+  allowlist using the same pattern as `general.ts` - parent's enabled
   extension tools (minus `delegate_*`) plus `PI_BUILTIN_TOOLS`, run
   through `finalizeNestedTools` with `full-access` mutability so the
   global `disabled_tools` denylist propagates and `delegate_*` names
@@ -384,12 +438,12 @@ This is `2.1.0` (semver minor, additive). No breaking changes from v2.0.0:
 - Disabling any of the three new tools/agents removes them and their prompt
   bullets cleanly.
 - Existing config files keep working unchanged. Configs that disabled
-  `bytes_todo` via `disabled_tools` will continue to load — `disabled_tools`
+  `bytes_todo` via `disabled_tools` will continue to load - `disabled_tools`
   silently ignores unknown names.
 - Tool names follow snake_case (`handoff`, `look_at`) and are registered
   in `TOOL_NAMES` in `src/config/resource-metadata.ts`.
 
-## 2.0.0 (2026-05-02) — Bytes v2
+## 2.0.0 (2026-05-02) - Bytes v2
 
 This is a **major** release that overhauls Bytes system prompts and sub-agent
 behaviour to bring them closer to AmpCode-grade quality, and **fixes the main
@@ -406,13 +460,13 @@ pain point**: Librarian was previously over-eager to fire on phrases like
    ```text
    <one- to two-sentence summary>
 
-   - [src/auth/login.ts#L42-L80](file:///abs/repo/src/auth/login.ts#L42-L80) — short reason
-   - …
+   - [src/auth/login.ts#L42-L80](file:///abs/repo/src/auth/login.ts#L42-L80) - short reason
+   - ...
 
    <optional 1-line next step>
    ```
 
-2. **Bytes overlay grew** from ~4.3 KB to ~10–11 KB rendered (still under the
+2. **Bytes overlay grew** from ~4.3 KB to ~10-11 KB rendered (still under the
    12 KB budget). Sections added:
    - `identity`
    - `autonomy_and_persistence`
@@ -437,12 +491,12 @@ pain point**: Librarian was previously over-eager to fire on phrases like
    or local-codebase questions are now explicitly listed as anti-patterns in
    both the tool description and the Bytes overlay. See "Phase 1.6" below.
 
-### Phase 0 — Baseline
+### Phase 0 - Baseline
 
 - Added `scripts/snapshot-prompts.ts`: dumps per-agent character count,
   section count, and top headings for every builtin sub-agent + every Bytes
   overlay variant. Used as the v1 → v2 baseline.
-- Added 6 librarian-gating fixtures (L1–L6) in
+- Added 6 librarian-gating fixtures (L1-L6) in
   `src/sub-agents/__tests__/librarian-gating.test.ts`. Each fixture exercises
   a representative request and asserts the rendered guidance + tool
   description correctly classify it as `delegate` or `direct`. All 6
@@ -452,7 +506,7 @@ pain point**: Librarian was previously over-eager to fire on phrases like
   - Post-rework: claude/other 10111, gpt 10430, gemini 10636, kimi 9853.
   - Gzip package size: 107 KB (well under 500 KB budget).
 
-### Phase 1.6 — Librarian gating hardening (PRIORITY pain-point fix)
+### Phase 1.6 - Librarian gating hardening (PRIORITY pain-point fix)
 
 - **`librarianDeclaration.description`** rewritten with the strict template:
   - ALL of (a) external information not in repo, (b) MULTIPLE independent
@@ -460,23 +514,23 @@ pain point**: Librarian was previously over-eager to fire on phrases like
   - Explicit `DO NOT use for` denylist (≥5 cases): single URL fetch, single
     library docs lookup, single GitHub search, local-codebase questions,
     trivial facts.
-  - Cost signal: ~5–10× more tokens and latency than a direct tool call.
+  - Cost signal: ~5-10× more tokens and latency than a direct tool call.
 - **Bytes overlay**: removed the loose keyword-trigger block that previously
   let phrases like `"research" / "tìm hiểu" / "tra cứu" / "investigate"`
   fire `librarian` on their own. Replaced with the same strict (a)+(b)+(c)
   gate plus an explicit "keyword triggers are NOT sufficient by themselves"
   reminder.
 - **Cost signal in Session Capabilities**: every `delegate_*` call now
-  carries an explicit "~5–10× more tokens and latency than a direct tool
-  call — prefer direct tools when 1–2 calls suffice" warning when delegation
+  carries an explicit "~5-10× more tokens and latency than a direct tool
+  call - prefer direct tools when 1-2 calls suffice" warning when delegation
   is enabled.
 
-### Phase 1.1–1.4 — Bytes overlay upgrade
+### Phase 1.1-1.4 - Bytes overlay upgrade
 
 - Added `identity`, `autonomy_and_persistence`, `investigate_before_acting`,
   `tool_use_protocol`, `verification_contract`,
   `executing_actions_with_care`, `markdown_format`, `file_references`,
-  `final_status_spec` sections — each adapted from the Amp Smart QT4
+  `final_status_spec` sections - each adapted from the Amp Smart QT4
   reference and trimmed for compactness.
 - `verification_contract` introduces a typecheck → lint → test → build gate
   order, faithful-reporting rule, and explicit "do not hard-code expected
@@ -486,9 +540,9 @@ pain point**: Librarian was previously over-eager to fire on phrases like
   name in user prose" rule.
 - `file_references` documents the fluent `file://` link form with
   URL-encoding rules.
-- `final_status_spec` gives a 2–10 line completion report shape.
+- `final_status_spec` gives a 2-10 line completion report shape.
 
-### Phase 1.5 — 4 provider variants
+### Phase 1.5 - 4 provider variants
 
 - `default.ts` (Claude) now wraps each section in semantic XML tags
   (`<identity>`, `<precedence>`, `<verification>`, `<engineering>`,
@@ -497,22 +551,22 @@ pain point**: Librarian was previously over-eager to fire on phrases like
   3. Tests, 4. Build) and a **Parallel Execution Policy** footer.
 - `gemini.ts` appends 4 worked examples (file-reference style, parallel
   tool calls, verification reporting, destructive-action gating).
-- **NEW** `kimi.ts` for Kimi/Moonshot models — terse markdown,
+- **NEW** `kimi.ts` for Kimi/Moonshot models - terse markdown,
   instruction-dense, no worked examples.
 - `loader.ts` routing now covers all 5 families: `claude`, `gpt`, `gemini`,
   `kimi`, `other` (defaults to claude renderer).
 
-### Phase 2 — Sub-agent polish
+### Phase 2 - Sub-agent polish
 
 - **Explore (BREAKING)**: legacy XML output (`<results>/<files>/<answer>/
   <next_steps>`) replaced with Markdown + fluent `file://` links. New
   guidance: ≥6 parallel tool calls per turn when scope is wide, complete
   within 3 turns, prefer source code over docs, scope globs aggressively
   (`core/**/*x*` not `**/*x*`).
-- **Oracle**: prepended an "IMPORTANT — Self-contained final message"
+- **Oracle**: prepended an "IMPORTANT - Self-contained final message"
   preamble (only the last message returns to the caller). Added fluent
   `file://` link rule. Effort estimate template (Quick/Short/Medium/Large)
-  preserved unchanged — that's still a strength.
+  preserved unchanged - that's still a strength.
 - **Reviewer**: caller MUST pre-fetch with
   `git diff --merge-base origin/HEAD HEAD` and pass the diff in `context`
   (Reviewer remains read-only, no `bash`/`git` in allowlist). Added abort
@@ -520,19 +574,19 @@ pain point**: Librarian was previously over-eager to fire on phrases like
   (over-/under-abstraction), and a runtime `console.warn` when
   `delegate_reviewer` is invoked with empty/short `context`.
 - **General**: added a `### Hard Rules` line: "Verification gate order:
-  typecheck → lint → test → build — use AGENTS.md commands; report counts
+  typecheck → lint → test → build - use AGENTS.md commands; report counts
   honestly".
 - **Librarian**: added Local File References section with the fluent
   `file://` link form for repo files (external citations remain on the
   GitHub permalink / official docs URL form).
 
-### Phase 3 — UX & communication (folded into Phase 1)
+### Phase 3 - UX & communication (folded into Phase 1)
 
 - Channel separation, Markdown strict rules, and final-status spec all live
   in the Bytes overlay sections (`final_status_spec`, `markdown_format`,
   `work_defaults`).
 
-### Phase 4 — New capabilities (shipped in v2.1.0)
+### Phase 4 - New capabilities (shipped in v2.1.0)
 
 The following items were scoped under v2.0.0 but explicitly deferred to a
 follow-up minor release. Three of the four are shipped in v2.1.0 (see the
@@ -541,8 +595,8 @@ removed before the v2.1.0 cut:
 
 - `handoff` tool (spawn nested `pi -p` with fresh context).
 - `code-tour` sub-agent (read-only numbered file:line walkthrough).
-- `look_at` tool (multimodal — Pi platform multimodal verified supported).
-- ~~`bytes_todo` lightweight in-memory TODO list~~ — **removed before
+- `look_at` tool (multimodal - Pi platform multimodal verified supported).
+- ~~`bytes_todo` lightweight in-memory TODO list~~ - **removed before
   v2.1.0**. Modern reasoning models plan internally; users with serious
   task-tracking needs use external systems (`beads`, Jira, Linear). See
   the v2.1.0 **Removed** section for details.
@@ -550,7 +604,7 @@ removed before the v2.1.0 cut:
 ### Tests
 
 - 13 new tests in `src/sub-agents/__tests__/librarian-gating.test.ts`
-  (description gate + overlay gate + 6 fixtures L1–L6).
+  (description gate + overlay gate + 6 fixtures L1-L6).
 - Existing `delegates.test.ts` librarian assertions updated to the new
   (a)(b)(c) + denylist contract.
 - Existing `bytes-overlay.test.ts` librarian-trigger assertions updated for
@@ -605,7 +659,7 @@ removed before the v2.1.0 cut:
 ### Added
 
 - **Per-agent setup flow**: `/setup-models` wizard configures model and thinking level together for each agent before advancing to the next, replacing the previous two-loop flow (all models, then all thinking levels).
-- **Grouped provider picker**: when more than 10 models are available, model selection uses a two-step flow — select a provider (e.g., `anthropic (8 models)`), then pick a model within that provider. Cancel at the model step returns to the provider list.
+- **Grouped provider picker**: when more than 10 models are available, model selection uses a two-step flow - select a provider (e.g., `anthropic (8 models)`), then pick a model within that provider. Cancel at the model step returns to the provider list.
 - **Batch shortcuts**: after the first agent, the wizard offers "⬆ Apply `<model>` to all remaining agents", "⬆ Apply `<level>` to all remaining agents", and "⏭ Skip thinking for all remaining agents" to reduce repetitive selections.
 - **Summary confirmation**: a formatted summary table (agent → model → thinking) is displayed and confirmed before writing to `settings.json`.
 - **Smart model ordering**: models selected earlier in the wizard session sort first in subsequent agent selections.
@@ -661,8 +715,8 @@ removed before the v2.1.0 cut:
 ### Improved
 
 - **Librarian sub-agent activation**: strengthened tool description and prompt overlay so the primary agent delegates external-library/docs/API research to `delegate_librarian` more readily when users request research, investigation, or lookup (including Vietnamese phrases like "tìm hiểu", "tra cứu").
-- **External Content Safety**: added a safety section to the librarian system prompt treating web pages, docs, GitHub files, and fetched URLs as untrusted data — the sub-agent will not follow instructions found in external content.
-- **Prompt overlay**: session capabilities and conditional workflows now include librarian-specific guidance ("Prefer `librarian` for explicit, non-trivial research requests…") that only renders when the librarian sub-agent is enabled.
+- **External Content Safety**: added a safety section to the librarian system prompt treating web pages, docs, GitHub files, and fetched URLs as untrusted data - the sub-agent will not follow instructions found in external content.
+- **Prompt overlay**: session capabilities and conditional workflows now include librarian-specific guidance ("Prefer `librarian` for explicit, non-trivial research requests...") that only renders when the librarian sub-agent is enabled.
 - **Scoped wording**: tool description uses "non-trivial external research" with explicit escape hatches (purely local, trivial, or user opts out) to avoid over-delegation.
 
 ### Changed
@@ -721,7 +775,7 @@ removed before the v2.1.0 cut:
 
 ### Removed
 
-- Bundled skills (`blackbytes-overview`, `hashline-workflow`, `delegation`) — replaced by enhanced sub-agent prompts and runtime overlays.
+- Bundled skills (`blackbytes-overview`, `hashline-workflow`, `delegation`) - replaced by enhanced sub-agent prompts and runtime overlays.
 
 
 ### Added
@@ -749,20 +803,20 @@ All five Phase 2 beads are resolved:
 
 The following items were investigated in Phase 2 and deferred. They should not be re-opened without the stated precondition:
 
-- **Parallel fanout / background task lifecycle** — requires a Pi API for concurrent tool execution or a stable background task surface.
-- **Worktree isolation** — requires Pi to expose per-delegate working-directory control.
-- **Persistent agent memory** — requires a stable, bounded Pi session-state API.
-- **Streaming progress** — becomes supportable when Pi exposes a structured progress surface (typed status events, not raw stdout) with a chunk-level redaction utility available.
-- **Append prompt mode** — becomes supportable when Pi exposes a `parentContext` / `inheritedInstructions` field on the tool execute callback, bounded in size and scoped to the parent's static system prompt only.
+- **Parallel fanout / background task lifecycle** - requires a Pi API for concurrent tool execution or a stable background task surface.
+- **Worktree isolation** - requires Pi to expose per-delegate working-directory control.
+- **Persistent agent memory** - requires a stable, bounded Pi session-state API.
+- **Streaming progress** - becomes supportable when Pi exposes a structured progress surface (typed status events, not raw stdout) with a chunk-level redaction utility available.
+- **Append prompt mode** - becomes supportable when Pi exposes a `parentContext` / `inheritedInstructions` field on the tool execute callback, bounded in size and scoped to the parent's static system prompt only.
 
 
 
-**Decision: deferred** — no builtin (`oracle`, `general`, `explore`, `librarian`) is opted into `promptMode: "append"`.
+**Decision: deferred** - no builtin (`oracle`, `general`, `explore`, `librarian`) is opted into `promptMode: "append"`.
 All four builtins continue to use the implicit static default. `buildSystemPrompt()` still throws fail-loud on `"append"`.
 
 **Why deferred:** the prompt-builder bead (pib-vyj.2.2) confirmed Pi exposes no safe inherited-context source.
 `AgentSession.systemPrompt` exists on the class but is unreachable from the registered tool's `execute` closure
-(signature `(toolCallId, params, signal, onUpdate, ctx?)` — no parent-session reference). Without a stable,
+(signature `(toolCallId, params, signal, onUpdate, ctx?)` - no parent-session reference). Without a stable,
 bounded API surfacing the parent's static system prompt, enabling append mode would require either reading
 arbitrary files (out of scope, unsafe) or scraping transcripts (forbidden by 2.2 source-contract rule).
 
@@ -784,38 +838,38 @@ YAML-defined read-only agents). When a `provider_or_model_unavailable` failure i
 `executeWithFallback` retries with each model in the chain within a shared timeout budget.
 
 **New / changed files:**
-- `src/sub-agents/fallback.ts` — `executeWithFallback` + `formatAttempts` (pure, injectable).
-- `src/config/schema.ts` — `fallbackModels` per-agent field (max 5 non-empty strings, no dupes).
-- `src/sub-agents/loader.ts` — `fallback_models` in YAML schema; folded into `staticOverrides`.
-- `src/sub-agents/declaration.ts` — `fallbackModels` added to `ModelOverrides`.
-- `src/sub-agents/snapshot.ts` — `fallbackModels` + `fallbackEligible` fields on `AgentSnapshot`.
-- `src/sub-agents/register.ts` — replaces single `runNestedPi` call with `executeWithFallback`.
-- `src/commands/blackbytes-status.ts` — shows fallback chain and eligibility in snapshot section.
-- `src/sub-agents/__tests__/fallback.test.ts` — new test file.
+- `src/sub-agents/fallback.ts` - `executeWithFallback` + `formatAttempts` (pure, injectable).
+- `src/config/schema.ts` - `fallbackModels` per-agent field (max 5 non-empty strings, no dupes).
+- `src/sub-agents/loader.ts` - `fallback_models` in YAML schema; folded into `staticOverrides`.
+- `src/sub-agents/declaration.ts` - `fallbackModels` added to `ModelOverrides`.
+- `src/sub-agents/snapshot.ts` - `fallbackModels` + `fallbackEligible` fields on `AgentSnapshot`.
+- `src/sub-agents/register.ts` - replaces single `runNestedPi` call with `executeWithFallback`.
+- `src/commands/blackbytes-status.ts` - shows fallback chain and eligibility in snapshot section.
+- `src/sub-agents/__tests__/fallback.test.ts` - new test file.
 
 ### Phase 2 progress/streaming spike (pib-vyj.2.5)
 
-**Decision: unsupported** — live streaming of nested sub-agent output into the parent session is intentionally not wired.
+**Decision: unsupported** - live streaming of nested sub-agent output into the parent session is intentionally not wired.
 
 **Investigation findings** (all citations from `node_modules/@mariozechner/pi-coding-agent`):
 
 - `AgentToolUpdateCallback<T>` (`pi-agent-core/dist/types.d.ts:255`):
-  `(partialResult: AgentToolResult<T>) => void` — a structured callback that sends partial
+  `(partialResult: AgentToolResult<T>) => void` - a structured callback that sends partial
   `{ content, details }` objects to the host runtime during tool execution.
 - `ToolDefinition.execute` signature (`core/extensions/types.d.ts:307`): receives
   `onUpdate: AgentToolUpdateCallback<TDetails> | undefined` as a 4th parameter.
-- Bash tool (`core/tools/bash.js:201–244`): proves `onUpdate` is a **pure UI streaming surface**.
+- Bash tool (`core/tools/bash.js:201-244`): proves `onUpdate` is a **pure UI streaming surface**.
   Intermediate `onUpdate` calls display partial output in the TUI; the final `execute()` return
   value is what enters the LLM context. Calling `onUpdate` does **not** append to the final
   tool result.
 - `RunNestedPiOptions.onUpdate` (`src/sub-agents/types.ts`): `(chunk: string) => void`. Already
-  wired internally — `runner.ts` calls `onUpdate?.(text)` on each stdout chunk (`runner.ts:238–239`).
-- `register.ts:45–46`: the `execute` callback receives `_onUpdate?: unknown` (unused, `_` prefix,
+  wired internally - `runner.ts` calls `onUpdate?.(text)` on each stdout chunk (`runner.ts:238-239`).
+- `register.ts:45-46`: the `execute` callback receives `_onUpdate?: unknown` (unused, `_` prefix,
   typed `unknown`). Never forwarded to `runNestedPi`.
 
 **Why streaming remains unsupported:**
 
-1. Nested-Pi stdout is the full agent conversation (reasoning, tool calls, results) — too verbose
+1. Nested-Pi stdout is the full agent conversation (reasoning, tool calls, results) - too verbose
    to surface in the parent TUI without filtering.
 2. No chunk-level secret redaction exists on the streaming path (`redactFailureText` only
    covers failure detail strings).
@@ -834,7 +888,7 @@ the decision. No behavioral change; `bun run lint && bun run build && bun run te
 
 - **`promptMode` field on `SubAgentDeclaration`** (`src/sub-agents/declaration.ts`): optional `"static" | "append"` discriminator. Default is `"static"`. Field is frozen with the declaration via `defineSubAgent()`.
 - **YAML `prompt_mode` field** (`src/sub-agents/loader.ts`): Zod enum validates `"static"` and `"append"`; any other value is rejected as a schema error and produces a diagnostic through the existing YAML pipeline (file skipped, reason surfaced in `/blackbytes-status`). Omitting the field defaults to `undefined` (static by default).
-- **`buildSystemPrompt()` function** (`src/sub-agents/prompt-builder.ts`): centralised system-prompt assembler. In `"static"` mode (default) returns `basePrompt` byte-for-byte unchanged — no trimming, no transformation. In `"append"` mode throws a clear `Error` immediately ("not yet supported") so the delegate tool call fails loudly. **Append mode is deferred to pib-vyj.2.3**: Pi's `ExtensionAPI` execute callback exposes only `(toolCallId, params, signal, onUpdate, ctx?)` — there is no stable, bounded API that returns the parent session's static system prompt from within a registered tool. `AgentSession.systemPrompt` exists on the class but is unreachable from the execute closure without unsafe global state. Until Pi surfaces a supported `parentContext` field, append mode stays deferred.
+- **`buildSystemPrompt()` function** (`src/sub-agents/prompt-builder.ts`): centralised system-prompt assembler. In `"static"` mode (default) returns `basePrompt` byte-for-byte unchanged - no trimming, no transformation. In `"append"` mode throws a clear `Error` immediately ("not yet supported") so the delegate tool call fails loudly. **Append mode is deferred to pib-vyj.2.3**: Pi's `ExtensionAPI` execute callback exposes only `(toolCallId, params, signal, onUpdate, ctx?)` - there is no stable, bounded API that returns the parent session's static system prompt from within a registered tool. `AgentSession.systemPrompt` exists on the class but is unreachable from the execute closure without unsafe global state. Until Pi surfaces a supported `parentContext` field, append mode stays deferred.
 - **`register.ts` wired to `buildSystemPrompt()`**: replaced inline `systemPrompt` variable with `baseSystemPrompt` → `buildSystemPrompt({ basePrompt, declaration })` → `builtPrompt`. Static mode output is byte-for-byte identical to previous behaviour.
 - **No builtin sets `promptMode`**: all four builtins (`explore`, `oracle`, `librarian`, `general`) continue to operate with the implicit static default.
 - **Tests** (`src/sub-agents/__tests__/prompt-builder.test.ts`, additions to `loader.test.ts`): snapshot tests confirm each builtin's system prompt is unchanged through the builder; append-mode tests verify the error message content and road-map citation; YAML schema tests confirm valid/invalid `prompt_mode` values are accepted/rejected; register.ts integration tests pass unmodified (zero behaviour change in static mode).

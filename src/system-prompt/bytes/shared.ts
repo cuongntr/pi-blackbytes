@@ -1,4 +1,7 @@
-import { derivePromptFeatureFlags } from "../../config/resource-metadata.js";
+import {
+  derivePromptFeatureFlags,
+  getRegisteredSubAgents,
+} from "../../config/resource-metadata.js";
 import type { ModelFamily } from "../../shared/model-capability.js";
 import { buildBytesPromptOverlay } from "./overlay.js";
 import type { BytesPromptRenderContext, PromptFeatureFlags, PromptSectionMap } from "./types.js";
@@ -28,6 +31,7 @@ export function createBytesPromptRenderContext(
     enabledTools,
     enabledSubAgents,
     features: derivePromptFeatureFlags(enabledTools, enabledSubAgents),
+    registeredSubAgentMetas: getRegisteredSubAgents(),
   };
 }
 

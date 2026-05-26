@@ -113,18 +113,11 @@ export const librarianDeclaration = defineSubAgent<{ question: string }>({
   toolName: "delegate_librarian",
   description:
     "Delegate to the Librarian ONLY when ALL of these hold: " +
-    "(a) the question requires EXTERNAL information not in the local repo; AND " +
-    "(b) it needs MULTIPLE independent sources (official docs + version-aware changelog + " +
-    "real-world public examples) or an authoritative current-year answer that may have " +
-    "changed; AND (c) direct tools (`docs_resolve`/`docs_query`/`web_search`/`web_fetch`/" +
-    "`gh_search`) would each be insufficient on their own. " +
-    "DO NOT use for: a single URL fetch (use `web_fetch`); a single library docs lookup " +
-    "(`docs_resolve` → `docs_query`); a single GitHub code search (`gh_search`); " +
-    "local-codebase questions (use `delegate_explore` or `grep`/`glob`/`ast_search`); " +
-    "trivial facts or restating known information. " +
-    "Cost signal: ~5–10× more tokens and latency than a direct tool call — prefer " +
-    "direct tools when 1–2 calls would suffice. " +
-    "The sub-agent has web search, Context7 docs, and GitHub code search capabilities.",
+    "(a) needs EXTERNAL info; " +
+    "(b) needs MULTIPLE sources or current-year authoritative answer; (c) direct tools " +
+    "would each be insufficient alone. DO NOT use for single URL fetch, single docs " +
+    "lookup, single GitHub search, or local-codebase questions. " +
+    "Cost signal: ~5–10× more tokens and latency.",
   parameters: Type.Object({
     question: Type.String({
       description:
@@ -149,6 +142,21 @@ export const librarianDeclaration = defineSubAgent<{ question: string }>({
   mutability: "read-only",
   finalizeMode: "strict",
   source: "builtin",
+  routing: {
+    category: "research",
+    cost: "high",
+    useWhen: [
+      "Needs 3+ external sources to answer confidently",
+      "Official docs + changelog + real-world examples needed",
+      "Current-year authoritative answer that may have changed",
+    ],
+    avoidWhen: [
+      "Single URL fetch or single docs lookup suffices",
+      "Local-codebase questions",
+      "Trivial facts or restating known information",
+    ],
+    keyTrigger: "Multi-source external research requiring triangulation",
+  },
   staticOverrides: { timeoutMs: 900_000 },
   buildUserPrompt: (p) => p.question,
   prependSystemPrompt: ({ cwd, finalizedTools }) =>

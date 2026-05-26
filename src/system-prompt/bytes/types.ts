@@ -1,3 +1,4 @@
+import type { SubAgentMeta } from "../../config/resource-metadata.js";
 import type { ModelFamily } from "../../shared/model-capability.js";
 
 export type PromptSectionKey =
@@ -39,6 +40,7 @@ export interface BytesPromptRenderContext {
   readonly enabledTools: ReadonlySet<string>;
   readonly enabledSubAgents: ReadonlySet<string>;
   readonly features: PromptFeatureFlags;
+  readonly registeredSubAgentMetas?: readonly SubAgentMeta[];
 }
 
 export interface PromptVariantRenderContext {

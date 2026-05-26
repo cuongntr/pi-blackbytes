@@ -1,10 +1,12 @@
 import assert from "node:assert/strict";
 import { beforeEach, describe, it } from "node:test";
-import {
-  SUB_AGENTS,
-  _resetSubAgentRegistry,
-  registerSubAgentMeta,
-} from "../../config/resource-metadata.js";
+import { _resetSubAgentRegistry, registerSubAgentMeta } from "../../config/resource-metadata.js";
+import { declarationToMeta } from "../../sub-agents/declaration.js";
+import { exploreDeclaration } from "../../sub-agents/explore.js";
+import { generalDeclaration } from "../../sub-agents/general.js";
+import { librarianDeclaration } from "../../sub-agents/librarian.js";
+import { oracleDeclaration } from "../../sub-agents/oracle.js";
+import { reviewerDeclaration } from "../../sub-agents/reviewer.js";
 import { createBytesPromptRenderContext } from "../bytes/shared.js";
 import { renderBytesPrompt } from "../loader.js";
 
@@ -20,7 +22,15 @@ function renderPrompt(
 
 beforeEach(() => {
   _resetSubAgentRegistry();
-  for (const agent of SUB_AGENTS) registerSubAgentMeta(agent);
+  for (const decl of [
+    exploreDeclaration,
+    oracleDeclaration,
+    librarianDeclaration,
+    generalDeclaration,
+    reviewerDeclaration,
+  ]) {
+    registerSubAgentMeta(declarationToMeta(decl));
+  }
 });
 
 describe("bytes overlay rendering", () => {
@@ -52,7 +62,7 @@ describe("bytes overlay rendering", () => {
       withLibrarian.includes("Consider `librarian` only for non-trivial external research"),
     );
     assert.ok(withLibrarian.includes("`librarian`"));
-    assert.ok(withLibrarian.includes("3+ external sources"));
+    assert.ok(withLibrarian.includes("Multi-source external research"));
 
     const withoutLibrarian = renderPrompt(
       "claude",

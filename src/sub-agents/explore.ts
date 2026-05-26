@@ -83,11 +83,9 @@ export const exploreDeclaration = defineSubAgent<{ question: string; context?: s
   name: "explore",
   toolName: "delegate_explore",
   description:
-    "Delegate a codebase exploration or flow walk-through to a specialized Explore sub-agent. " +
-    "Use when you need deep contextual grep across multiple files, want to answer " +
-    "'Where is X?', 'Which file has Y?', 'Find the code that does Z', or " +
-    "'How does this flow work (entry → handler → side-effect)?'. " +
-    "The sub-agent has read/search access only (no writes, no bash).",
+    "Delegate a codebase exploration or flow walk-through to a specialized " +
+    "Explore sub-agent. The sub-agent has read/search access only " +
+    "(no writes, no bash).",
   parameters: Type.Object({
     question: Type.String({
       description:
@@ -107,6 +105,17 @@ export const exploreDeclaration = defineSubAgent<{ question: string; context?: s
   mutability: "read-only",
   finalizeMode: "strict",
   source: "builtin",
+  routing: {
+    category: "exploration",
+    cost: "medium",
+    useWhen: [
+      "Broad or unfamiliar codebase search",
+      "Cross-file discovery or tracing a flow",
+      "Answering 'Where is X?' or 'How does Y work?'",
+    ],
+    avoidWhen: ["Simple grep or single-file lookup", "Tasks that need writes or bash execution"],
+    keyTrigger: "Deep contextual grep across multiple files",
+  },
   staticOverrides: { timeoutMs: 600_000 },
   buildUserPrompt: (p) =>
     p.context ? `${p.question}\n\n---\n\nAdditional context:\n${p.context}` : p.question,

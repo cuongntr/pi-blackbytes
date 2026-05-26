@@ -123,11 +123,9 @@ export const reviewerDeclaration = defineSubAgent<{
   name: "reviewer",
   toolName: "delegate_reviewer",
   description:
-    "Delegate a code review to the Reviewer sub-agent — a read-only code reviewer that " +
-    "produces severity-classified findings (High/Medium/Low) and a verdict. Use after " +
-    "significant implementation, before commits/PRs, or when the user asks for fresh eyes. " +
-    "The sub-agent has read-only access (no bash/git): the caller MUST include the diff, " +
-    "patch, or changed-file list in `context`.",
+    "Delegate a code review to a read-only Reviewer that produces " +
+    "severity-classified findings (High/Medium/Low) and a verdict. " +
+    "Caller MUST include diff, patch, or changed-file list in `context`.",
   parameters: Type.Object({
     request: Type.String({
       description:
@@ -149,6 +147,17 @@ export const reviewerDeclaration = defineSubAgent<{
   mutability: "read-only",
   finalizeMode: "strict",
   source: "builtin",
+  routing: {
+    category: "review",
+    cost: "medium",
+    useWhen: [
+      "After significant implementation, before commits/PRs",
+      "When user asks for fresh eyes on changes",
+      "Pre-merge code quality and correctness check",
+    ],
+    avoidWhen: ["Trivial or single-line changes", "When no diff or change context is available"],
+    keyTrigger: "Severity-classified code review with verdict",
+  },
   staticOverrides: { timeoutMs: 900_000 },
   buildUserPrompt: (p) => {
     // Diagnostic: warn the host when reviewer is invoked without a meaningful

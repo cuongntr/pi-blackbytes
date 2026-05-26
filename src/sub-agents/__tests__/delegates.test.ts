@@ -11,6 +11,7 @@ import { generalDeclaration } from "../general.js";
 import { librarianDeclaration } from "../librarian.js";
 import { oracleDeclaration } from "../oracle.js";
 import { registerSubAgent } from "../register.js";
+import { reviewerDeclaration } from "../reviewer.js";
 import type { SpawnFn } from "../runner.js";
 
 // ---------------------------------------------------------------------------
@@ -304,16 +305,16 @@ describe("delegate_librarian", () => {
   it("documents strict (a)(b)(c) gating, anti-pattern denylist, and external-content safety", () => {
     // Gating contract — ALL of (a)(b)(c) must hold.
     assert.match(librarianDeclaration.description, /ONLY when ALL of these hold/);
-    assert.match(librarianDeclaration.description, /\(a\) the question requires EXTERNAL/);
-    assert.match(librarianDeclaration.description, /\(b\) it needs MULTIPLE independent sources/);
+    assert.match(librarianDeclaration.description, /\(a\).*EXTERNAL/);
+    assert.match(librarianDeclaration.description, /\(b\).*MULTIPLE/);
     assert.match(librarianDeclaration.description, /\(c\) direct tools/);
     // Anti-pattern denylist.
     assert.match(librarianDeclaration.description, /DO NOT use/);
     assert.match(librarianDeclaration.description, /single URL fetch/);
-    assert.match(librarianDeclaration.description, /single library docs lookup/);
+    assert.match(librarianDeclaration.description, /single docs lookup/);
     assert.match(librarianDeclaration.description, /local-codebase questions/);
     // Cost signal.
-    assert.match(librarianDeclaration.description, /5–10×|5-10×|5–10x|5-10x/);
+    assert.match(librarianDeclaration.description, /5\u201310\u00d7|5-10\u00d7|5\u201310x|5-10x/);
 
     const systemPrompt = librarianDeclaration.systemPrompt ?? "";
     assert.ok(systemPrompt.includes("## External Content Safety"));
@@ -432,5 +433,44 @@ describe("delegate_general", () => {
     const pIdx = capturedArgs.indexOf("-p");
     const userPromptArg = pIdx !== -1 ? capturedArgs[pIdx + 1] : "";
     assert.ok(userPromptArg?.includes("src/foo.ts"), "context should appear in the -p argument");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// T-007: description length enforcement — all builtins ≤ 400 chars
+// ---------------------------------------------------------------------------
+
+describe("builtin description length (T-007)", () => {
+  const allBuiltins: SubAgentDeclaration[] = [
+    exploreDeclaration,
+    oracleDeclaration,
+    librarianDeclaration,
+    generalDeclaration,
+    reviewerDeclaration,
+  ];
+
+  for (const decl of allBuiltins) {
+    it(`${decl.name}: description ≤ 400 chars (actual: ${decl.description.length})`, () => {
+      assert.ok(
+        decl.description.length <= 400,
+        `${decl.name} description is ${decl.description.length} chars, exceeds 400-char budget`,
+      );
+    });
+  }
+
+  it("general preserves 'file paths + intended changes' gate phrase", () => {
+    assert.match(generalDeclaration.description, /file paths \+ intended changes/);
+  });
+
+  it("general preserves 5–10× cost signal", () => {
+    assert.match(generalDeclaration.description, /5\u201310\u00d7|5-10\u00d7|5\u201310x|5-10x/);
+  });
+
+  it("librarian preserves 'ALL of these hold' gate phrase", () => {
+    assert.match(librarianDeclaration.description, /ALL of these hold/);
+  });
+
+  it("librarian preserves 5–10× cost signal", () => {
+    assert.match(librarianDeclaration.description, /5\u201310\u00d7|5-10\u00d7|5\u201310x|5-10x/);
   });
 });

@@ -1,11 +1,13 @@
 import { type EnabledSet, getEnabledSet } from "../config/enabled-set.js";
 import { loadBlackbytesConfig } from "../config/loader.js";
+import { getRegisteredSubAgents } from "../config/resource-metadata.js";
 import {
   getSystemPromptLogConfig,
   resolveSystemPromptLogPath,
 } from "../shared/system-prompt-log.js";
 import { getDelegationSummary } from "../sub-agents/delegation-log.js";
 import { type YamlDiagnostics, getYamlDiagnostics } from "../sub-agents/diagnostics.js";
+import { buildRoutingSummary } from "../sub-agents/routing.js";
 import { getAgentSnapshot } from "../sub-agents/snapshot.js";
 import type { AgentSnapshot } from "../sub-agents/snapshot.js";
 
@@ -173,6 +175,7 @@ interface StatusSections {
   overview: string[];
   enabledTools: string[];
   enabledSubAgents: string[];
+  routing: string[];
   enabledSkills: string[];
   delegationRoi: string[];
   systemPromptLog: string[];
@@ -241,6 +244,18 @@ async function buildStatusSections(): Promise<StatusSections> {
     `Tools: **${toolCount}** enabled | Agents: **${agentCount}** enabled | Skills: **${skillCount}** enabled`,
   ];
 
+  const routingLines: string[] = ["### Sub-Agent Routing"];
+  if (enabledSet) {
+    const routingSummary = buildRoutingSummary(getRegisteredSubAgents(), enabledSet.subAgents);
+    if (routingSummary) {
+      routingLines.push(routingSummary);
+    } else {
+      routingLines.push("_No sub-agents enabled._");
+    }
+  } else {
+    routingLines.push("_Not initialized._");
+  }
+
   return {
     overview: overviewLines,
     enabledTools: [
@@ -251,6 +266,7 @@ async function buildStatusSections(): Promise<StatusSections> {
       "### Enabled Sub-Agents",
       ...(enabledSet ? [...enabledSet.subAgents].map((a) => `- ${a}`) : ["_Not initialized._"]),
     ],
+    routing: routingLines,
     enabledSkills: [
       "### Enabled Skills",
       ...(enabledSet ? [...enabledSet.skills].map((s) => `- ${s}`) : ["_Not initialized._"]),
@@ -271,6 +287,8 @@ function buildFullOutput(sections: StatusSections): string {
     ...sections.enabledTools,
     "",
     ...sections.enabledSubAgents,
+    "",
+    ...sections.routing,
     "",
     ...sections.enabledSkills,
     "",
@@ -295,6 +313,7 @@ function buildFullOutput(sections: StatusSections): string {
 const SECTION_MENU: Array<{ label: string; key: keyof StatusSections }> = [
   { label: "Enabled Tools", key: "enabledTools" },
   { label: "Enabled Sub-Agents", key: "enabledSubAgents" },
+  { label: "Sub-Agent Routing", key: "routing" },
   { label: "Enabled Skills", key: "enabledSkills" },
   { label: "Delegation ROI", key: "delegationRoi" },
   { label: "Sub-Agent Snapshot", key: "snapshot" },

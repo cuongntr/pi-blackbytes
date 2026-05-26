@@ -1,3 +1,4 @@
+import { buildOverlayRoutingMatrix } from "../../sub-agents/routing.js";
 import type { BytesPromptRenderContext, PromptSection, PromptSectionKey } from "./types.js";
 
 function section(title: string, key: PromptSectionKey, body: string): PromptSection {
@@ -68,34 +69,10 @@ function buildConditionalWorkflowsBody(context: BytesPromptRenderContext): strin
       "- **Default: work directly.** Delegate only when one of these high-value patterns clearly applies:",
     );
 
-    // Build positive routing matrix based on enabled agents
-    const routes: string[] = [];
-
-    if (context.enabledSubAgents.has("explore")) {
-      routes.push(
-        "`explore` — broad/unfamiliar codebase search, cross-file discovery, tracing a flow, or guided walk-through of how an existing flow works (entry → handler → side-effect)",
-      );
-    }
-    if (context.enabledSubAgents.has("oracle")) {
-      routes.push(
-        "`oracle` — hard architecture/debugging decision, security/perf trade-off, or after 2 failed attempts",
-      );
-    }
-    if (context.enabledSubAgents.has("general")) {
-      routes.push(
-        "`general` — concrete plan with known file paths + intended changes + verifiable outcome (5+ file edits)",
-      );
-    }
-    if (context.enabledSubAgents.has("reviewer")) {
-      routes.push(
-        "`reviewer` — after significant implementation; pre-fetch diff with `git diff` and pass as `context`",
-      );
-    }
-    if (context.enabledSubAgents.has("librarian")) {
-      routes.push(
-        "`librarian` — needs 3+ external sources (docs + changelog + examples) to answer confidently",
-      );
-    }
+    // Build positive routing matrix from registered metadata
+    const routes = context.registeredSubAgentMetas
+      ? buildOverlayRoutingMatrix(context.registeredSubAgentMetas, context.enabledSubAgents)
+      : [];
 
     if (routes.length > 0) {
       for (const route of routes) {

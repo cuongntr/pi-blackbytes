@@ -1,17 +1,26 @@
 import assert from "node:assert/strict";
 import { beforeEach, describe, it } from "node:test";
-import {
-  SUB_AGENTS,
-  _resetSubAgentRegistry,
-  registerSubAgentMeta,
-} from "../../config/resource-metadata.js";
+import { _resetSubAgentRegistry, registerSubAgentMeta } from "../../config/resource-metadata.js";
 import { createBytesPromptRenderContext } from "../../system-prompt/bytes/shared.js";
 import { renderBytesPrompt } from "../../system-prompt/loader.js";
+import { declarationToMeta } from "../declaration.js";
+import { exploreDeclaration } from "../explore.js";
+import { generalDeclaration } from "../general.js";
 import { librarianDeclaration } from "../librarian.js";
+import { oracleDeclaration } from "../oracle.js";
+import { reviewerDeclaration } from "../reviewer.js";
 
 beforeEach(() => {
   _resetSubAgentRegistry();
-  for (const agent of SUB_AGENTS) registerSubAgentMeta(agent);
+  for (const decl of [
+    exploreDeclaration,
+    oracleDeclaration,
+    librarianDeclaration,
+    generalDeclaration,
+    reviewerDeclaration,
+  ]) {
+    registerSubAgentMeta(declarationToMeta(decl));
+  }
 });
 
 describe("librarian gating — declaration description", () => {
@@ -23,17 +32,16 @@ describe("librarian gating — declaration description", () => {
     assert.match(desc, /\(b\)/);
     assert.match(desc, /\(c\)/);
     assert.match(desc, /EXTERNAL/);
-    assert.match(desc, /MULTIPLE independent sources/);
+    assert.match(desc, /MULTIPLE sources/);
   });
 
-  it("includes a DO NOT use anti-pattern denylist (≥5 cases)", () => {
+  it("includes a DO NOT use anti-pattern denylist", () => {
     assert.match(desc, /DO NOT use/);
     // anti-patterns
     assert.match(desc, /single URL fetch/i);
-    assert.match(desc, /single library docs lookup/i);
-    assert.match(desc, /single GitHub code search/i);
+    assert.match(desc, /single docs lookup/i);
+    assert.match(desc, /single GitHub search/i);
     assert.match(desc, /local-codebase questions/i);
-    assert.match(desc, /trivial facts/i);
   });
 
   it("includes a 5–10× cost signal", () => {
@@ -49,7 +57,7 @@ describe("librarian gating — Bytes overlay", () => {
   it("does NOT contain verbose keyword trigger rules in overlay (moved to declaration)", () => {
     const prompt = renderWith(["librarian"]);
     // Old verbose gating removed from overlay; routing matrix uses concise positive framing
-    assert.ok(prompt.includes("3+ external sources"));
+    assert.ok(prompt.includes("Multi-source external research"));
     // Detailed anti-patterns now live only in declaration description
     assert.doesNotMatch(prompt, /NOT sufficient by themselves/);
   });
@@ -57,7 +65,7 @@ describe("librarian gating — Bytes overlay", () => {
   it("contains concise positive routing hint when librarian enabled", () => {
     const prompt = renderWith(["librarian"]);
     assert.ok(prompt.includes("`librarian`"));
-    assert.ok(prompt.includes("3+ external sources"));
+    assert.ok(prompt.includes("Multi-source external research"));
   });
 
   it("includes the 5–10× delegate cost signal in the workflow section", () => {
@@ -99,39 +107,38 @@ const fixtures: LibrarianFixture[] = [
     id: "L1",
     request: "Fetch this single URL https://example.com/changelog and summarise it.",
     expected: "direct",
-    check: (_g, d) => /single URL fetch.*web_fetch/i.test(d),
+    check: (_g, d) => /single URL fetch/i.test(d),
   },
   {
     id: "L2",
     request: "Look up the docs for fast-glob's `globby` API.",
     expected: "direct",
-    check: (_g, d) => /single library docs lookup/i.test(d) && /docs_resolve/i.test(d),
+    check: (_g, d) => /single docs lookup/i.test(d),
   },
   {
     id: "L3",
     request: "Find usages of `useSyncExternalStore` across public GitHub repos.",
     expected: "direct",
-    check: (_g, d) => /single GitHub code search/i.test(d) && /gh_search/i.test(d),
+    check: (_g, d) => /single GitHub search/i.test(d),
   },
   {
     id: "L4",
     request: "Where is the auth middleware defined in this repo?",
     expected: "direct",
-    check: (_g, d) =>
-      /local-codebase questions/i.test(d) && /delegate_explore|grep|glob|ast_search/i.test(d),
+    check: (_g, d) => /local-codebase questions/i.test(d),
   },
   {
     id: "L5",
     request:
       "Which of TanStack Query / SWR / RTK-Query is best for our app — give me a current comparison from official docs, recent changelogs, and real production usage examples.",
     expected: "delegate",
-    check: (_g, d) => /MULTIPLE independent sources/i.test(d) && /ALL of these hold/i.test(d),
+    check: (_g, d) => /MULTIPLE sources/i.test(d) && /ALL of these hold/i.test(d),
   },
   {
     id: "L6",
     request: "Tìm hiểu nhanh xem thư viện này dùng thế nào.",
     expected: "direct",
-    check: (_g, d) => /trivial facts/i.test(d),
+    check: (_g, d) => /single docs lookup/i.test(d),
   },
 ];
 describe("librarian gating — fixtures L1..L6", () => {

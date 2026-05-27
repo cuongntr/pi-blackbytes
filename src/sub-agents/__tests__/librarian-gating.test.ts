@@ -68,10 +68,9 @@ describe("librarian gating — Bytes overlay", () => {
     assert.ok(prompt.includes("Multi-source external research"));
   });
 
-  it("includes the 5–10× delegate cost signal in the workflow section", () => {
+  it("includes the delegate cost awareness signal in the workflow section", () => {
     const prompt = renderWith(["librarian", "explore", "oracle"]);
-    assert.match(prompt, /Cost signal/);
-    assert.match(prompt, /5–10×|5-10×|5-10x|5–10x/);
+    assert.match(prompt, /Cost awareness/);
   });
 
   it("omits all librarian gating when librarian is disabled", () => {

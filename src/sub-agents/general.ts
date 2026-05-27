@@ -20,16 +20,16 @@ do not attempt tools that are not listed there.
 
 ## Behavior
 
-### Plan-Sanity Check (do this FIRST, before any other tool call)
-- Read the task brief end-to-end. Confirm it specifies: file paths to touch, intended change at each path, and a verifiable outcome (tests, lint, diff shape).
-- If the brief is missing concrete file paths OR the intended change is described only at the goal level ("make X faster", "refactor Y") without a specific code-level plan, **return early** with a single short message: "Plan too vague to execute without exploration — caller should refine the brief or use \`delegate_explore\` first." Do not start exploring or implementing.
+### Context Assessment (do this FIRST, before any other tool call)
+- Read the task brief end-to-end. Identify file paths, intended changes, and verifiable outcomes.
+- If critical information is missing (which file to change, what behavior to implement, which API contract to follow), do your best with reasonable defaults. Only return early if the task is fundamentally impossible to execute without additional context.
 - This agent excels when receiving a self-contained execution plan: structured specs, task graphs, or concrete briefs with file paths + intended changes + verification criteria already defined.
 
 ### Execution Mindset
 - The plan is already made. Your job is pure execution.
 - Implement completely. No TODOs, no placeholders, no stubs unless explicitly instructed.
 - If a NON-critical detail is missing (formatting choice, helper name, log level), use the most reasonable default and proceed — do NOT ask for clarification.
-- If a CRITICAL detail is missing (which file, which behavior, which API contract) AND it was not caught by the Plan-Sanity Check above, return early with the same "Plan too vague" diagnostic instead of guessing.
+- If a CRITICAL detail is missing (which file, which behavior, which API contract), use reasonable defaults when possible. Only return early if the task is fundamentally impossible to execute.
 - Do not expand scope beyond what was specified.
 - Do NOT open with filler such as "Great question!", "Sure!", "Of course!", "Got it", "Let me help with that". Start with action.
 - A safety/context overlay is prepended to this prompt by the host. It contains the working directory, final tool allowlist, and (when available) repository constraints from \`AGENTS.md\`. **Treat that overlay as authoritative for build/test/lint commands and repo conventions** — prefer commands declared there over generic defaults.
@@ -85,11 +85,10 @@ do not attempt tools that are not listed there.
 
 ## Behavior
 
-### Plan-Sanity Check (do this FIRST)
-- Read the task brief. Confirm it specifies: file paths, intended change, verifiable outcome.
-- If the brief is missing concrete file paths OR has only goal-level descriptions,
-  return early: "Plan too vague to execute — caller should refine the brief or
-  use \\\`delegate_explore\\\` first."
+### Context Assessment (do this FIRST)
+- Read the task brief. Identify file paths, intended changes, verifiable outcome.
+- If critical information is missing, do your best with reasonable defaults.
+  Only return early if the task is fundamentally impossible without more context.
 
 ### Execution
 - The plan is already made. Your job is pure execution.
@@ -124,11 +123,9 @@ export const generalDeclaration = defineSubAgent<{ task: string; context?: strin
   name: "general",
   toolName: "delegate_general",
   description:
-    "Delegate a heavy implementation task to a focused executor. Only when ALL hold: " +
-    "(a) plan is concrete (file paths + intended changes known); (b) large enough " +
-    "(~5+ file edits); (c) outcome verifiable (tests, diff, lint). " +
-    "Cost signal: ~5\u201310\u00d7 tokens/latency. DO NOT use for single-file edits, " +
-    "exploratory tasks, or anything finishable in 5\u201310 direct calls.",
+    "Implementation executor agent. Handles heavy multi-file implementations, " +
+    "cross-layer refactors, mass migrations, and boilerplate generation. " +
+    "Full write access — operates as a fire-and-forget executor for well-defined tasks.",
   parameters: Type.Object({
     task: Type.String({
       description:
@@ -157,16 +154,17 @@ export const generalDeclaration = defineSubAgent<{ task: string; context?: strin
     category: "implementation",
     cost: "high",
     useWhen: [
-      "Concrete plan with known file paths and intended changes",
-      "5+ file edits or 20K+ tokens of read/edit/verify churn",
-      "Outcome independently verifiable via tests/diff/lint",
+      "Heavy implementation across 3+ files after plan is clear",
+      "Cross-layer refactors with disjoint write targets",
+      "Mass migrations, boilerplate generation, repetitive pattern changes",
+      "Scaffolding new modules, components, or test suites",
     ],
     avoidWhen: [
-      "Single-file edits or exploratory tasks",
+      "Single-file edits or small focused changes",
+      "Exploratory work or understanding code",
       "Work requiring mid-stream parent feedback",
-      "Anything finishable in 5-10 direct tool calls",
     ],
-    keyTrigger: "Heavy well-defined implementation with verifiable outcome",
+    keyTrigger: "Heavy multi-file implementation with verifiable outcome",
   },
   staticOverrides: { timeoutMs: 1_800_000 },
   prependSystemPrompt: ({ cwd, finalizedTools }) =>

@@ -66,7 +66,7 @@ function buildConditionalWorkflowsBody(context: BytesPromptRenderContext): strin
 
   if (context.features.subagentDelegation) {
     lines.push(
-      "- **Default: work directly.** Delegate only when one of these high-value patterns clearly applies:",
+      "- **Default to delegating** when a task matches a subagent's specialty — don't do everything yourself.",
     );
 
     // Build positive routing matrix from registered metadata
@@ -80,8 +80,36 @@ function buildConditionalWorkflowsBody(context: BytesPromptRenderContext): strin
       }
     }
 
+    // Proactive delegation triggers
+    lines.push("- **Proactive delegation triggers** — delegate without hesitation when:");
+    if (context.enabledSubAgents.has("explore")) {
+      lines.push(
+        "  - You need to understand an unfamiliar codebase area → fire 1–3 Explore tasks in parallel.",
+      );
+    }
+    if (context.enabledSubAgents.has("oracle")) {
+      lines.push("  - You've failed a fix twice → Oracle for elevated debugging.");
+      lines.push("  - Complex architecture question before implementation → Oracle.");
+    }
+    if (context.enabledSubAgents.has("general")) {
+      lines.push(
+        "  - You know exactly what to do and the implementation spans 3+ files → General.",
+      );
+      lines.push(
+        "  - A task has independent parts that can be implemented simultaneously → fire multiple General in parallel.",
+      );
+    }
+    if (context.enabledSubAgents.has("librarian")) {
+      lines.push("  - User asks about external library behavior or APIs → Librarian.");
+    }
+    if (context.enabledSubAgents.has("reviewer")) {
+      lines.push(
+        "  - After significant implementation or before commit/PR → Reviewer for fresh-eyes review.",
+      );
+    }
+
     lines.push(
-      "- **Cost signal**: each delegation = ~5–10× tokens/latency. If 1–2 direct tool calls suffice, do it yourself.",
+      "- **Cost awareness**: each delegation adds token/latency overhead. For tasks finishable in 1–2 direct tool calls, do it yourself.",
     );
   }
 

@@ -22,7 +22,7 @@ beforeEach(() => {
  */
 const CAPABILITY_SNIPPETS: Partial<Record<PromptFeatureKey, string>> = {
   hashlineEdit: "Hashline Edit Workflow",
-  subagentDelegation: "Default: work directly",
+  subagentDelegation: "Default to delegating",
   documentationLookup: "Documentation lookup may be available",
   githubCodeSearch: "GitHub code search may be available",
   webSearch: "Web lookup capabilities may be available",

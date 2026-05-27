@@ -458,12 +458,12 @@ describe("builtin description length (T-007)", () => {
     });
   }
 
-  it("general preserves 'file paths + intended changes' gate phrase", () => {
-    assert.match(generalDeclaration.description, /file paths \+ intended changes/);
+  it("general describes multi-file implementation capability", () => {
+    assert.match(generalDeclaration.description, /multi-file implementations/);
   });
 
-  it("general preserves 5–10× cost signal", () => {
-    assert.match(generalDeclaration.description, /5\u201310\u00d7|5-10\u00d7|5\u201310x|5-10x/);
+  it("general describes fire-and-forget executor pattern", () => {
+    assert.match(generalDeclaration.description, /fire-and-forget executor/);
   });
 
   it("librarian preserves 'ALL of these hold' gate phrase", () => {

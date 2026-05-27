@@ -45,7 +45,7 @@ describe("bytes overlay rendering", () => {
       assert.ok(prompt.includes("Precedence"));
       assert.ok(prompt.includes("Session Capabilities"));
       assert.ok(prompt.includes("Hashline Edit Workflow"));
-      assert.ok(prompt.includes("Default: work directly"));
+      assert.ok(prompt.includes("Default to delegating"));
       assert.ok(prompt.includes("Documentation lookup may be available"));
       assert.ok(prompt.includes("Web lookup capabilities may be available"));
       assert.ok(prompt.includes("GitHub code search may be available"));
@@ -97,7 +97,7 @@ describe("bytes overlay rendering", () => {
       [],
     );
 
-    assert.ok(!prompt.includes("Default: work directly"));
+    assert.ok(!prompt.includes("Default to delegating"));
     assert.ok(!prompt.includes("`explore`"));
     assert.ok(!prompt.includes("`oracle`"));
     assert.ok(!prompt.includes("`general`"));
@@ -113,7 +113,7 @@ describe("bytes overlay rendering", () => {
     );
 
     assert.ok(!prompt.includes("Hashline Edit Workflow"));
-    assert.ok(prompt.includes("Default: work directly"));
+    assert.ok(prompt.includes("Default to delegating"));
   });
 
   it("omits docs, web, and code-search guidance when backing capabilities are unavailable", () => {
@@ -132,7 +132,7 @@ describe("bytes overlay rendering", () => {
     assert.ok(prompt.includes("Hard Boundaries"));
     assert.ok(prompt.includes("Completion"));
     assert.ok(!prompt.includes("Hashline Edit Workflow"));
-    assert.ok(!prompt.includes("Default: work directly"));
+    assert.ok(!prompt.includes("Default to delegating"));
     assert.ok(!prompt.includes("Documentation lookup may be available"));
     assert.ok(!prompt.includes("Web lookup capabilities may be available"));
     assert.ok(!prompt.includes("GitHub code search may be available"));

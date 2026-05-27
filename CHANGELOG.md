@@ -1,5 +1,32 @@
 # Changelog
 
+## 2.10.0 (2026-05-27) — Align General Delegation with oc-blackbytes
+
+Align the General sub-agent delegation behaviour with `oc-blackbytes` to
+increase delegation frequency for multi-file implementation tasks.
+
+### Changed
+
+- **Delegation philosophy**: overlay now says "Default to delegating" instead of
+  "Default: work directly", matching the oc-blackbytes approach.
+- **General description**: replaced restrictive "Only when ALL hold" gate with
+  permissive oc-style description ("Implementation executor agent. Handles heavy
+  multi-file implementations, cross-layer refactors, mass migrations, and
+  boilerplate generation.").
+- **File threshold**: General routing lowered from 5+ to 3+ file edits.
+- **Plan-Sanity Check → Context Assessment**: General no longer rejects vague
+  tasks outright; it now uses reasonable defaults for missing non-critical details
+  (matching oc-blackbytes behaviour).
+- **Cost signal**: softened from "~5–10× tokens/latency" warning to balanced
+  "Cost awareness" guidance.
+
+### Added
+
+- **Proactive delegation triggers** section in Bytes overlay with per-agent
+  conditional rules (explore, oracle, general, librarian, reviewer).
+- General routing now includes cross-layer refactors, mass migrations, and
+  scaffolding as explicit trigger scenarios.
+
 ## 2.9.0 (2026-05-26) — Hashline Edit Hardening Phase 1 + 2
 
 Port hardening features from `pi-hashline-edit` and `pi-hashline-readmap` into

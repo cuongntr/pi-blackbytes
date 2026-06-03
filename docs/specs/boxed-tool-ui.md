@@ -13,7 +13,7 @@
 
 `pi-blackbytes` already improves extension-tool and sub-agent rendering, but tool calls still use a mix of simple one-line renderers and specialized result panels. The user explicitly likes `pi-droid-styling`'s boxed toolcall/output UX, especially for `bash` output, and wants the same visual language applied broadly.
 
-This feature adds a native Blackbytes boxed rendering layer: a shared renderer used by all Blackbytes tools by default, plus config-gated wrappers for selected Pi built-in tools.
+This feature adds a native Blackbytes boxed rendering layer used by all Blackbytes tools by default, plus an opt-in boxed `bash` wrapper and the always-on clean `read` renderer for built-in Pi tools.
 
 This is a UI/rendering feature only. Tool execution semantics, tool schemas, returned model-visible content, hashline anchor behavior, and sub-agent execution are not changed.
 
@@ -28,7 +28,7 @@ This is a UI/rendering feature only. Tool execution semantics, tool schemas, ret
 Measurable acceptance:
 
 - Blackbytes extension tools render boxed call/result panels in tests.
-- Built-in `bash/read/write/edit` wrappers do not register unless `boxed_builtin_tools` is enabled.
+- The built-in `bash` wrapper does not register unless `boxed_builtin_tools` is enabled; the built-in `read` renderer remains active and strips anchors from display.
 - `bash` collapsed result processes only tail-preview-sized output, not full split of large output.
 - `bun run lint && bun run build && bun run test` passes.
 - Package remains under the existing `<500KB` gzipped budget.
@@ -74,7 +74,7 @@ Acceptance criteria:
   - `boxed_max_preview_lines?: number` default `5`
   - `boxed_max_expanded_lines?: number` default `200`
   - `boxed_dim_output?: boolean` default `false`
-- Built-in wrappers are registered only when `boxed_builtin_tools` is true.
+- The built-in `bash` wrapper is registered only when `boxed_builtin_tools` is true.
 - If disabled, Pi built-in tool behavior is untouched except the existing hashline read-renderer behavior.
 - Schema remains passthrough for unknown keys.
 
@@ -91,16 +91,15 @@ Acceptance criteria:
 - Strips Pi truncation notice lines like `[Showing last ... Full output: ...]` from preview body while preserving useful summary/footer data.
 - Footer shows elapsed time when available, timeout, and approximate word count.
 
-### REQ-005 — Read/write/edit built-in wrappers
+### REQ-005 — Built-in read renderer
 
 Priority: P1
 
 Acceptance criteria:
 
-- `read` wrapper preserves hashline clean-read renderer compatibility.
+- `read` renderer preserves hashline clean-read compatibility.
 - `read` collapsed result summarizes file/path/line count; expanded result can show output with syntax highlighting only if Pi's existing helper is available and safe.
-- `write`/`edit` wrappers show path and compact success/error footer.
-- If Pi does not expose a stable create-tool factory for a built-in, that wrapper is skipped with no fatal error.
+- If Pi does not expose a stable create-tool factory for a built-in wrapper, that wrapper is skipped with no fatal error.
 
 ### REQ-006 — Diff UX upgrade for `hashline_edit`
 
@@ -133,7 +132,7 @@ This design owns:
 
 - Shared boxed render helpers for tool call/result components.
 - Migration of Blackbytes tool renderers to boxed style.
-- Optional built-in wrappers for selected Pi built-ins.
+- Optional boxed `bash` wrapper and built-in `read` renderer compatibility.
 - Config schema and tests for the UI options.
 
 This design does not own:
@@ -169,14 +168,16 @@ src/tools/_shared/shell-highlight.ts
 src/tools/<blackbytes tool>/...
   └─ renderCall/renderResult call boxed helpers
 
-src/tools/builtin-wrappers/{bash,read,write,edit}.ts
-  └─ opt-in register functions, guarded by config + available Pi factories
+src/tools/builtin-wrappers/bash.ts
+  └─ opt-in register function, guarded by config + available Pi factory
+src/tools/hashline-edit/read-renderer.ts
+  └─ clean read renderer that strips anchors from visible output
 
 src/handlers/index.ts
   └─ session_start registers wrappers after config/enabled-set is loaded
 ```
 
-Rendering stays inside Pi extension tool-definition surfaces (`renderCall`, `renderResult`) rather than patching global TUI layout. Built-in wrappers may re-register built-in tool definitions, but only behind `boxed_builtin_tools: true`.
+Rendering stays inside Pi extension tool-definition surfaces (`renderCall`, `renderResult`) rather than patching global TUI layout. The boxed `bash` wrapper registers only behind `boxed_builtin_tools: true`; the built-in `read` renderer remains always active.
 
 ### 6.3 Data Model / Schema
 
@@ -231,7 +232,7 @@ Existing `disabled_tools` still controls Blackbytes extension tools. Built-in wr
 ### 6.5 Integration & Events
 
 - `session_start`: load config, register existing Blackbytes tools using boxed renderers when `boxed_tool_calls !== false`.
-- `session_start`: register built-in wrappers only when `boxed_builtin_tools === true`.
+- `session_start`: register the built-in `bash` wrapper only when `boxed_builtin_tools === true`.
 - Existing `tool_result` handler remains unchanged for hashline read/write output processing.
 
 ### 6.6 Security
@@ -307,14 +308,14 @@ Session starts with boxed_builtin_tools=true
       expanded: capped full output + footer
 ```
 
-#### Flow C — Wrapper unavailable
+#### Flow C — Bash wrapper unavailable
 
 ```text
 Session starts with boxed_builtin_tools=true
-  → registerReadWrapper() attempts to locate stable Pi read factory
+  → registerBashWrapper() attempts to locate stable Pi bash factory
   → factory unavailable / incompatible
   → wrapper skipped
-  → Pi core read tool remains active
+  → Pi core bash tool remains active
   → no fatal session failure
 ```
 
@@ -339,7 +340,7 @@ Tests:
 - Config tests in `src/config/__tests__/schema.test.ts` / loader tests.
 - Built-in wrapper tests:
   - disabled by default
-  - enabled registers expected wrappers when factories are provided
+  - enabled registers the bash wrapper when a factory is provided
   - unavailable factory skips safely
 - Existing tool renderer tests updated for boxed output.
 
@@ -357,7 +358,7 @@ In Phase 1 MVP:
 
 Deferred to Phase 2:
 
-- REQ-005 `read/write/edit` wrappers if factory stability needs more investigation.
+- No additional built-in wrappers beyond the boxed `bash` wrapper; the clean `read` renderer stays in place.
 - Optional `grep/find/ls` wrappers.
 - More advanced diff meter or syntax highlighting.
 

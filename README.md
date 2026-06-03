@@ -172,6 +172,13 @@ Blackbytes reads the top-level `blackbytes` object from the Pi settings file.
     "context7": {
       "api_key": "YOUR_CONTEXT7_KEY"
     },
+    "ui": {
+      "boxed_tool_calls": true,
+      "boxed_builtin_tools": false,
+      "boxed_max_preview_lines": 5,
+      "boxed_max_expanded_lines": 200,
+      "boxed_dim_output": false
+    },
     "system_prompt_log": {
       "enabled": false,
       "path": "~/.pi/logs/pi-blackbytes-system-prompts.jsonl",
@@ -208,6 +215,7 @@ Blackbytes reads the top-level `blackbytes` object from the Pi settings file.
 | `websearch.exa_api_key` | `string` | Exa credential. Overrides `EXA_API_KEY` when set. |
 | `websearch.tavily_api_key` | `string` | Tavily credential. Overrides `TAVILY_API_KEY` when set. |
 | `context7.api_key` | `string` | Context7 credential |
+| `ui` | `{ boxed_tool_calls?: boolean; boxed_builtin_tools?: boolean; boxed_max_preview_lines?: number; boxed_max_expanded_lines?: number; boxed_dim_output?: boolean }` | Controls boxed rendering for Blackbytes tools and the optional built-in `bash` wrapper. Defaults: `boxed_tool_calls=true`, `boxed_builtin_tools=false`, `boxed_max_preview_lines=5`, `boxed_max_expanded_lines=200`, `boxed_dim_output=false`. |
 | `system_prompt_log.enabled` | `boolean` | Opt-in full system-prompt capture to a JSONL file. Defaults to `false` because prompts may contain project context or secrets. |
 | `system_prompt_log.path` | `string` | Optional log file path. Defaults to `~/.pi/logs/pi-blackbytes-system-prompts.jsonl`; relative paths resolve against the current working directory. |
 | `system_prompt_log.capture_agent_start` | `boolean` | Capture Pi's final effective system prompt at `agent_start` (after `before_agent_start` chaining). Defaults to `true`. |
@@ -218,6 +226,7 @@ Blackbytes reads the top-level `blackbytes` object from the Pi settings file.
 | `sub_agents.<name>.reasoningEffort` | `string` | Per-agent reasoning override passed to nested sessions |
 | `sub_agents.<name>.timeoutMs` | `integer` (1..3600000) | Per-agent execution timeout in milliseconds. Builtin defaults: explore=600000, librarian=900000, oracle=1200000, general=1800000, reviewer=900000. YAML equivalent: `timeout_ms`. |
 | `sub_agents.<name>.fallbackModels` | `string[]` (max 5) | Ordered list of fallback models tried on `provider_or_model_unavailable` failures. Read-only agents only (`general` and mutating YAML agents are ineligible). YAML equivalent: `fallback_models`. |
+| `sub_agents.<name>.executionMode` | `"sequential" \| "parallel"` | Per-agent tool execution mode override. `"sequential"` serializes tool calls within a batch; omitted uses Pi's default parallel behavior. YAML equivalent: `execution_mode`. |
 | `sub_agents.<name>.promptMode` | `"static" \| "append"` | **RESERVED / PARTIALLY IMPLEMENTED** - `"static"` (default) is the only safe value. `"append"` is accepted by the schema but throws at runtime ("not yet supported"). YAML equivalent: `prompt_mode`. |
 | `sub_agents.<name>.temperature` | `number` | **RESERVED / UNSUPPORTED** - accepted by schema for forward-compatibility but NOT passed to the nested Pi CLI (Pi does not accept `--temperature`). Visible under "Reserved / Unsupported Settings" in `/blackbytes-status`. |
 
@@ -230,6 +239,9 @@ Blackbytes reads the top-level `blackbytes` object from the Pi settings file.
 - `disabled_sub_agents` uses agent names, not tool names: `explore`, `oracle`, `librarian`, `general`, `reviewer`.
 - `system_prompt_log` is intentionally opt-in. The `agent_start` capture is the canonical Pi-effective prompt; provider capture is only for verifying serialization and extracts system-like fields instead of dumping the full provider payload.
 - `temperature` is accepted by the schema for forward-compatibility but is NOT applied. See `/blackbytes-status` → "Reserved / Unsupported Settings" for details.
+- `ui.boxed_tool_calls` defaults to `true`; `ui.boxed_builtin_tools` defaults to `false`. The boxed `bash` wrapper is opt-in, while the built-in `read` renderer keeps displayed content anchor-free and preserves `LINE#ID|` anchors in conversation history.
+- `ui.boxed_max_preview_lines` and `ui.boxed_max_expanded_lines` bound the collapsed and expanded output previews; `ui.boxed_dim_output` keeps preview text in muted `toolOutput` colour instead of regular text.
+- `sub_agents.<name>.executionMode` serializes or parallelizes tool calls within a batch. Use `sequential` when ordering matters; omit it to keep Pi's default parallel execution.
 
 ## Tool surface
 
@@ -253,6 +265,10 @@ Every Blackbytes tool provides structured, scannable result rendering with three
 | `ast_replace` | ✏️ | AST-aware structural rewrite with dry-run default |
 | `hashline_edit` | ✎ | LINE#ID-anchored file editing with snapshot semantics |
 | `look_at` | 👁️ | Multimodal image inspector (PNG/JPG/GIF/WebP/BMP/SVG, up to 3 reference images) |
+
+### Built-in Pi tools
+
+When `blackbytes.ui.boxed_builtin_tools` is true, Pi's built-in `bash` tool renders through a boxed wrapper with shell highlighting, tail previews, capped expanded output, and footer metadata. The built-in `read` tool keeps the clean anchor-stripping renderer so `LINE#ID|` markers stay out of visible output while remaining in conversation history.
 
 ### HTTP-backed tools
 

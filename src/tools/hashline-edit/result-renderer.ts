@@ -1,6 +1,7 @@
 import { type Theme, keyText } from "@earendil-works/pi-coding-agent";
 import { Text } from "@earendil-works/pi-tui";
-
+import { isBoxedToolCallsEnabled } from "../_shared/boxed-config.js";
+import { renderBoxedToolResult } from "../_shared/boxed-render.js";
 import type { DiffData } from "./diff-preview.js";
 
 interface RenderableResult {
@@ -26,27 +27,19 @@ interface DetailsShape {
 
 const PARTIAL_LABEL = "Editing...";
 
-/**
- * Renderer for `hashline_edit` tool results.
- *
- * - Partial (running): muted `Editing...` (preserves the legacy
- *   `buildStatsRenderResult({ partial: "Editing..." })` behaviour).
- * - Collapsed (success): `✓ <summary> · ctrl+o to expand`.
- * - Collapsed (error): `✗ <summary> · ctrl+o to expand`.
- * - Expanded (success with diffData): header + blank line + inline diff
- *   rendered with `▌- ` / `▌+ ` gutter markers in error / success colours.
- *   Falls back to plain `fullText` when no `diffData` is present (e.g.
- *   delete, rename-only, or a no-op edit).
- * - Expanded (error): plain `fullText` in the standard error colour.
- */
 export function renderHashlineEditResult(
   result: RenderableResult,
   options: RenderOptions,
   theme: Theme,
   context?: RenderContext,
-): Text {
+) {
   if (options.isPartial) {
-    return new Text(theme.fg("muted", PARTIAL_LABEL), 0, 0);
+    const text = new Text(theme.fg("muted", PARTIAL_LABEL), 0, 0);
+    return isBoxedToolCallsEnabled()
+      ? renderBoxedToolResult(theme, text, {
+          isPartial: true,
+        })
+      : text;
   }
 
   const details = (result.details as DetailsShape | undefined) ?? undefined;
@@ -55,25 +48,23 @@ export function renderHashlineEditResult(
   const isError = context?.isError ?? false;
 
   if (!options.expanded) {
-    return renderCollapsed(summary, isError, theme);
+    const text = renderCollapsed(summary, isError, theme);
+    return isBoxedToolCallsEnabled() ? renderBoxedToolResult(theme, text, { isError }) : text;
   }
 
-  // Expanded path
   if (isError) {
-    return new Text(theme.fg("error", fullText), 0, 0);
+    const text = new Text(theme.fg("error", fullText), 0, 0);
+    return isBoxedToolCallsEnabled() ? renderBoxedToolResult(theme, text, { isError }) : text;
   }
 
   if (!details?.diffData || details.diffData.ranges.length === 0) {
-    // No structured diff — show full text as-is.
-    return new Text(theme.fg("toolOutput", fullText), 0, 0);
+    const text = new Text(theme.fg("toolOutput", fullText), 0, 0);
+    return isBoxedToolCallsEnabled() ? renderBoxedToolResult(theme, text) : text;
   }
 
-  return renderExpandedDiff(summary, details.diffData, options.width, theme);
+  const text = renderExpandedDiff(summary, details.diffData, options.width, theme);
+  return isBoxedToolCallsEnabled() ? renderBoxedToolResult(theme, text) : text;
 }
-
-// ---------------------------------------------------------------------------
-// internals
-// ---------------------------------------------------------------------------
 
 function renderCollapsed(summary: string, isError: boolean, theme: Theme): Text {
   const icon = isError ? theme.fg("error", "✗") : theme.fg("success", "✓");
@@ -109,13 +100,6 @@ function renderExpandedDiff(
   return new Text(lines.join("\n"), 0, 0);
 }
 
-/**
- * Truncate a line so it fits within `width` columns, accounting for the
- * 3-character `▌- ` / `▌+ ` gutter prefix. No wrap, no ANSI awareness in v1.
- *
- * Local helper (10 lines) because `clampLinesToWidth` is NOT exported from
- * `src/sub-agents/format.ts` (verified during spec polish).
- */
 export function clampToWidth(line: string, width: number | undefined): string {
   const GUTTER = 3;
   if (!width || width <= GUTTER + 1) return line;

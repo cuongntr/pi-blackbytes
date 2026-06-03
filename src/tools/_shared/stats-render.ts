@@ -1,5 +1,8 @@
-import { type Theme, keyText } from "@earendil-works/pi-coding-agent";
+import type { Theme } from "@earendil-works/pi-coding-agent";
 import { Text } from "@earendil-works/pi-tui";
+import { isBoxedToolCallsEnabled } from "./boxed-config.js";
+import { boxedExpandHint, renderBoxedToolResult } from "./boxed-render.js";
+import { getTextOutput } from "./tool-output.js";
 
 export interface ToolResultStats {
   readonly summary: string;
@@ -11,22 +14,9 @@ interface RenderableResult {
   readonly details?: unknown;
 }
 
-interface RenderOptions {
-  readonly expanded: boolean;
-}
-
-function getContentText(result: RenderableResult): string {
-  return result.content
-    .filter(
-      (p): p is { type: string; text: string } => p.type === "text" && typeof p.text === "string",
-    )
-    .map((p) => p.text)
-    .join("");
-}
-
 /**
  * Build an enhanced renderResult function for extension tools.
- * Adds ✓/✗ status icon and partial (running) state support.
+ * Adds boxed ✓/✗ status, partial state support, and expandable full output.
  */
 export function buildStatsRenderResult(opts: { readonly partial: string }) {
   return (
@@ -34,51 +24,92 @@ export function buildStatsRenderResult(opts: { readonly partial: string }) {
     options: { readonly expanded: boolean; readonly isPartial?: boolean },
     theme: Theme,
     context?: { readonly isError?: boolean },
-  ): Text => {
-    if (options.expanded) {
-      const fullText =
-        (result.details as ToolResultStats | undefined)?.fullText || getContentText(result);
-      return new Text(theme.fg("toolOutput", fullText), 0, 0);
+  ) => {
+    if (!isBoxedToolCallsEnabled()) {
+      return renderUnboxedStatsResult(result, options, theme, context, opts.partial);
     }
 
     if (options.isPartial) {
-      return new Text(theme.fg("muted", opts.partial), 0, 0);
+      return renderBoxedToolResult(theme, new Text(theme.fg("muted", opts.partial), 0, 0), {
+        isPartial: true,
+      });
     }
 
-    // Collapsed: "✓ summary · ctrl+o to expand" or "✗ summary · ctrl+o to expand"
     const stats = result.details as ToolResultStats | undefined;
+    const fullText = stats?.fullText || getTextOutput(result);
     const summary = stats?.summary || "";
     const isError = context?.isError ?? false;
-    const icon = isError ? theme.fg("error", "✗") : theme.fg("success", "✓");
 
+    if (options.expanded) {
+      return renderBoxedToolResult(
+        theme,
+        new Text(theme.fg(isError ? "error" : "toolOutput", fullText), 0, 0),
+        {
+          isError,
+        },
+      );
+    }
+
+    const icon = isError ? theme.fg("error", "✗") : theme.fg("success", "✓");
     const parts: string[] = [icon];
     if (summary) parts.push(theme.fg(isError ? "error" : "muted", summary));
-
-    const key = keyText("app.tools.expand") || "ctrl+o";
-    parts.push(theme.fg("accent", `${key} to expand`));
-
-    return new Text(parts.join(theme.fg("muted", " · ")), 0, 0);
+    parts.push(boxedExpandHint(theme));
+    return renderBoxedToolResult(theme, new Text(parts.join(theme.fg("muted", " · ")), 0, 0), {
+      isError,
+    });
   };
 }
 
 export function renderStatsResult(
   result: RenderableResult,
-  options: RenderOptions,
+  options: { expanded: boolean },
   theme: Theme,
-): Text {
-  if (options.expanded) {
-    const fullText =
-      (result.details as ToolResultStats | undefined)?.fullText || getContentText(result);
-    return new Text(theme.fg("toolOutput", fullText), 0, 0);
+) {
+  if (!isBoxedToolCallsEnabled()) {
+    return renderUnboxedStatsResult(result, options, theme);
   }
 
   const stats = result.details as ToolResultStats | undefined;
+  const fullText = stats?.fullText || getTextOutput(result);
   const summary = stats?.summary || "";
-  const parts: string[] = [];
-  if (summary) parts.push(theme.fg("muted", summary));
+  if (options.expanded) {
+    return renderBoxedToolResult(theme, new Text(theme.fg("toolOutput", fullText), 0, 0));
+  }
+  return renderBoxedToolResult(
+    theme,
+    new Text(
+      [summary ? theme.fg("muted", summary) : "", boxedExpandHint(theme)]
+        .filter(Boolean)
+        .join(theme.fg("muted", " · ")),
+      0,
+      0,
+    ),
+  );
+}
 
-  const key = keyText("app.tools.expand") || "ctrl+o";
-  parts.push(theme.fg("accent", `${key} to expand`));
+function renderUnboxedStatsResult(
+  result: RenderableResult,
+  options: { readonly expanded: boolean; readonly isPartial?: boolean },
+  theme: Theme,
+  context?: { readonly isError?: boolean },
+  partialLabel?: string,
+) {
+  if (options.isPartial) {
+    return new Text(theme.fg("muted", partialLabel ?? "Working..."), 0, 0);
+  }
 
+  const stats = result.details as ToolResultStats | undefined;
+  const fullText = stats?.fullText || getTextOutput(result);
+  const summary = stats?.summary || "";
+  const isError = context?.isError ?? false;
+
+  if (options.expanded) {
+    return new Text(theme.fg(isError ? "error" : "toolOutput", fullText), 0, 0);
+  }
+
+  const icon = isError ? theme.fg("error", "✗") : theme.fg("success", "✓");
+  const parts: string[] = [icon];
+  if (summary) parts.push(theme.fg(isError ? "error" : "muted", summary));
+  parts.push(boxedExpandHint(theme));
   return new Text(parts.join(theme.fg("muted", " · ")), 0, 0);
 }

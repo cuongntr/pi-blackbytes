@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { BlackbytesConfigSchema, parseBlackbytesConfig } from "../schema.js";
+import { BlackbytesConfigSchema, getBoxedUiConfig, parseBlackbytesConfig } from "../schema.js";
 
 describe("BlackbytesConfigSchema", () => {
   it("empty object validates with all defaults applied", () => {
@@ -116,5 +116,25 @@ describe("BlackbytesConfigSchema", () => {
     if (result.ok) {
       assert.equal(result.value.sub_agents?.myAgent?.temperature, 0.42);
     }
+  });
+
+  it("applies boxed UI defaults and overrides", () => {
+    const parsed = BlackbytesConfigSchema.parse({
+      ui: {
+        boxed_tool_calls: false,
+        boxed_builtin_tools: true,
+        boxed_max_preview_lines: 8,
+        boxed_max_expanded_lines: 120,
+        boxed_dim_output: true,
+      },
+    });
+
+    assert.deepEqual(getBoxedUiConfig(parsed), {
+      boxed_tool_calls: false,
+      boxed_builtin_tools: true,
+      boxed_max_preview_lines: 8,
+      boxed_max_expanded_lines: 120,
+      boxed_dim_output: true,
+    });
   });
 });

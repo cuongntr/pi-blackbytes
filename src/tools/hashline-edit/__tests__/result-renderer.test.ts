@@ -81,7 +81,7 @@ describe("renderHashlineEditResult — collapsed", () => {
 describe("renderHashlineEditResult — partial", () => {
   it("renders muted 'Editing...' label while the call is in flight", () => {
     const out = render({ isPartial: true });
-    assert.ok(out.startsWith("«muted:Editing...»"));
+    assert.ok(out.includes("«muted:Editing...»"), `expected boxed partial label; got: ${out}`);
   });
 });
 
@@ -134,7 +134,10 @@ describe("renderHashlineEditResult — expanded with diff", () => {
         fullText: "[E_HASH_MISMATCH] anchor stale\nNearby current lines:\n...",
       },
     });
-    assert.ok(out.startsWith("«error:[E_HASH_MISMATCH]"));
+    assert.ok(
+      out.includes("«error:[E_HASH_MISMATCH]"),
+      `expected boxed error fullText; got: ${out}`,
+    );
   });
 });
 

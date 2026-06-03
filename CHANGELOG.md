@@ -1,5 +1,43 @@
 # Changelog
 
+## 2.11.0 (2026-06-03) — Blackbytes Boxed Tool UI
+
+Native boxed rendering for all Blackbytes extension tools, plus config-gated
+built-in wrappers (bash with shell highlighting, tail/expanded previews,
+and metadata footers).
+
+Spec: `docs/specs/boxed-tool-ui.md`.
+
+### Added
+
+- **Boxed render pipeline** — `renderBoxedToolCall`, `renderCompactBoxedToolCall`,
+  `renderBoxedToolResult` with top/bottom borders, side padding, ANSI-safe
+  content wrapping, error/pending/partial states, and expandable full output.
+- **Shell highlighter** — dependency-free lexical tokenizer/styler for shell
+  commands (commands, flags, paths, variables, operators, comments) with
+  unterminated-quote fallback.
+- **Tool output helpers** — `tailPreview` (backwards-scan, no full split),
+  `expandedPreview` (front-cap with elision hint), `clampLine`, `countLines`,
+  `countWords`, `stripTrailingNoticeLines`.
+- **Built-in bash wrapper** — opt-in (`boxed_builtin_tools: true`) wrapper that
+  shows multi-line highlighted commands with `$` / `>` prompt markers, tail
+  preview collapsed output, expanded capped output, and a footer with timeout
+  and approximate word count. Fails closed if the Pi factory is unavailable.
+- **`hashline_edit` boxed diff** — collapsed view stays compact with status icon
+  and summary; expanded view shows `▌-` / `▌+` addition/removal lines with
+  theme colors and per-file grouping.
+- **Config schema** — new `ui` object under `blackbytes` with `boxed_tool_calls`,
+  `boxed_builtin_tools`, `boxed_max_preview_lines`, `boxed_max_expanded_lines`,
+  `boxed_dim_output`.
+
+### Changed
+
+- **All Blackbytes tools** now use boxed renderers by default (`boxed_tool_calls`
+  defaults `true`). Legacy unboxed rendering available via
+  `boxed_tool_calls: false`.
+- **Session reset** clears the boxed enablement flag so subsequent sessions
+  start from config defaults.
+
 ## 2.10.0 (2026-05-27) — Align General Delegation with oc-blackbytes
 
 Align the General sub-agent delegation behaviour with `oc-blackbytes` to

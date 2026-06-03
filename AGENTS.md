@@ -82,6 +82,9 @@ Core settings:
 - `hashline_edit` (boolean shorthand or object: `{ enabled?: boolean, strict_patch?: boolean }`)
   - `hashline_edit.strict_patch` (default `true`) — reject `lines` payloads that include accidental `LINE#ID|` prefixes with `[E_INVALID_PATCH]`. Set to `false` to restore the legacy silent-strip behaviour.
 - `copilot_initiator_header`
+- `ui.boxed_tool_calls` (default `true`) — boxed rendering for Blackbytes tool calls/results; set `false` for a rollback to the legacy unboxed renderer.
+- `ui.boxed_builtin_tools` (default `false`) — opt-in boxed wrappers for Pi builtin tools such as `bash` when the host Pi version exposes a compatible factory.
+- `ui.boxed_max_preview_lines` / `ui.boxed_max_expanded_lines` / `ui.boxed_dim_output` — boxed builtin output preview limits and colour mode.
 - `websearch.provider`, `websearch.exa_api_key`, `websearch.tavily_api_key`
 - `context7.api_key`
 - `system_prompt_log.enabled`, `.path`, `.capture_agent_start`, `.capture_provider_system`, `.include_nested`, `.dedupe` (opt-in JSONL capture of full system prompts; provider capture extracts only system-like fields)
@@ -91,6 +94,8 @@ Core settings:
 - `sub_agents.<name>.fallbackModels` (read-only agents only; string[], max 5, unique, non-empty; YAML uses `fallback_models`. `general` and mutating YAML agents are ineligible)
 - `sub_agents.<name>.promptMode` (RESERVED — `"static"` is the only safe value; `"append"` throws at runtime ("not yet supported"); YAML uses `prompt_mode`)
 - `sub_agents.<name>.temperature` (RESERVED — accepted by schema for forward-compat but NOT passed to the nested Pi CLI; see `/blackbytes-status`)
+
+Rollback snippet: set `blackbytes.ui.boxed_tool_calls=false` to restore unboxed Blackbytes tool renderers, and keep or set `blackbytes.ui.boxed_builtin_tools=false` to leave Pi built-ins untouched.
 
 The schema is `.passthrough()`, so wizard-managed extra keys in the `blackbytes` object are preserved.
 

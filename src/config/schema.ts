@@ -28,6 +28,26 @@ export const BlackbytesConfigSchema = z
         api_key: z.string().optional(),
       })
       .optional(),
+    ui: z
+      .object({
+        boxed_tool_calls: z.boolean().optional(),
+        boxed_builtin_tools: z.boolean().optional(),
+        boxed_max_preview_lines: z
+          .number()
+          .int("boxed_max_preview_lines must be an integer")
+          .min(0, "boxed_max_preview_lines must be non-negative")
+          .max(1000, "boxed_max_preview_lines must not exceed 1000")
+          .optional(),
+        boxed_max_expanded_lines: z
+          .number()
+          .int("boxed_max_expanded_lines must be an integer")
+          .min(0, "boxed_max_expanded_lines must be non-negative")
+          .max(5000, "boxed_max_expanded_lines must not exceed 5000")
+          .optional(),
+        boxed_dim_output: z.boolean().optional(),
+      })
+      .passthrough()
+      .optional(),
     system_prompt_log: z
       .object({
         enabled: z.boolean().default(false),
@@ -115,5 +135,24 @@ export function getHashlineEditConfig(config: BlackbytesConfig): {
   return {
     enabled: raw.enabled ?? true,
     strict_patch: raw.strict_patch ?? true,
+  };
+}
+
+export interface BoxedUiConfig {
+  boxed_tool_calls: boolean;
+  boxed_builtin_tools: boolean;
+  boxed_max_preview_lines: number;
+  boxed_max_expanded_lines: number;
+  boxed_dim_output: boolean;
+}
+
+export function getBoxedUiConfig(config: BlackbytesConfig): BoxedUiConfig {
+  const raw = config.ui;
+  return {
+    boxed_tool_calls: raw?.boxed_tool_calls ?? true,
+    boxed_builtin_tools: raw?.boxed_builtin_tools ?? false,
+    boxed_max_preview_lines: raw?.boxed_max_preview_lines ?? 5,
+    boxed_max_expanded_lines: raw?.boxed_max_expanded_lines ?? 200,
+    boxed_dim_output: raw?.boxed_dim_output ?? false,
   };
 }

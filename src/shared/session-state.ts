@@ -16,6 +16,7 @@ import { _resetSubAgentRegistry } from "../config/resource-metadata.js";
 import { resetDelegationLog } from "../sub-agents/delegation-log.js";
 import { _resetYamlDiagnostics } from "../sub-agents/diagnostics.js";
 import { _resetAgentSnapshot } from "../sub-agents/snapshot.js";
+import { _resetBoxedToolCallsEnabled } from "../tools/_shared/boxed-config.js";
 import { _resetModelFamily } from "./model-capability.js";
 
 /**
@@ -40,4 +41,5 @@ export function resetSessionRuntimeState(): void {
   _resetModelFamily();
   _resetYamlDiagnostics();
   resetDelegationLog();
+  _resetBoxedToolCallsEnabled();
 }

@@ -1,5 +1,7 @@
 import type { Theme } from "@earendil-works/pi-coding-agent";
 import { Text } from "@earendil-works/pi-tui";
+import { isBoxedToolCallsEnabled } from "./boxed-config.js";
+import { renderCompactBoxedToolCall } from "./boxed-render.js";
 
 /** Safely extract a string from unknown args */
 export function str(v: unknown): string | null {
@@ -12,8 +14,12 @@ export function truncate(s: string, max: number): string {
   return s.length > max ? `${s.slice(0, max - 1)}…` : s;
 }
 
+function titleFromIconName(icon: string, name: string): string {
+  return `${icon} ${name}`.trim();
+}
+
 /**
- * Build a renderCall function with an icon prefix.
+ * Build a renderCall function with a boxed prefix.
  * Returns a function matching Pi's renderCall(args, theme, context) signature.
  */
 export function makeRenderCall(
@@ -21,33 +27,33 @@ export function makeRenderCall(
   name: string,
   formatArgs: (args: Record<string, unknown>, theme: Theme) => string,
 ) {
-  return (
-    args: Record<string, unknown> | null | undefined,
-    theme: Theme,
-    context: { lastComponent?: unknown },
-  ) => {
-    const text = context.lastComponent instanceof Text ? context.lastComponent : new Text("", 0, 0);
-    const header = theme.fg("toolTitle", theme.bold(`${icon} ${name}`));
+  return (args: Record<string, unknown> | null | undefined, theme: Theme) => {
     const safeArgs = args && typeof args === "object" ? (args as Record<string, unknown>) : {};
     const detail = formatArgs(safeArgs, theme);
-    text.setText(detail ? `${header} ${detail}` : header);
-    return text;
+    if (isBoxedToolCallsEnabled()) {
+      return renderCompactBoxedToolCall(theme, titleFromIconName(icon, name), detail);
+    }
+    return new Text(
+      [theme.fg("toolTitle", titleFromIconName(icon, name)), detail].filter(Boolean).join(" "),
+      0,
+      0,
+    );
   };
 }
 
 /** Build a renderCall for sub-agent tools. */
 export function makeSubAgentRenderCall(icon: string, name: string, primaryKey: string) {
-  return (
-    args: Record<string, unknown> | null | undefined,
-    theme: Theme,
-    context: { lastComponent?: unknown },
-  ) => {
-    const text = context.lastComponent instanceof Text ? context.lastComponent : new Text("", 0, 0);
-    const header = theme.fg("toolTitle", theme.bold(`${icon} ${name}`));
+  return (args: Record<string, unknown> | null | undefined, theme: Theme) => {
     const safeArgs = args && typeof args === "object" ? (args as Record<string, unknown>) : {};
     const val = str(safeArgs[primaryKey]);
     const detail = val ? theme.fg("accent", `"${truncate(val, 60)}"`) : "";
-    text.setText(detail ? `${header} ${detail}` : header);
-    return text;
+    if (isBoxedToolCallsEnabled()) {
+      return renderCompactBoxedToolCall(theme, titleFromIconName(icon, name), detail);
+    }
+    return new Text(
+      [theme.fg("toolTitle", titleFromIconName(icon, name)), detail].filter(Boolean).join(" "),
+      0,
+      0,
+    );
   };
 }

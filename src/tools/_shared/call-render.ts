@@ -14,6 +14,12 @@ export function truncate(s: string, max: number): string {
   return s.length > max ? `${s.slice(0, max - 1)}…` : s;
 }
 
+interface RenderCallContext {
+  readonly isError?: boolean;
+  readonly isPartial?: boolean;
+  readonly hasResult?: boolean;
+}
+
 function titleFromIconName(icon: string, name: string): string {
   return `${icon} ${name}`.trim();
 }
@@ -27,11 +33,21 @@ export function makeRenderCall(
   name: string,
   formatArgs: (args: Record<string, unknown>, theme: Theme) => string,
 ) {
-  return (args: Record<string, unknown> | null | undefined, theme: Theme) => {
+  return (
+    args: Record<string, unknown> | null | undefined,
+    theme: Theme,
+    context?: RenderCallContext,
+  ) => {
     const safeArgs = args && typeof args === "object" ? (args as Record<string, unknown>) : {};
     const detail = formatArgs(safeArgs, theme);
     if (isBoxedToolCallsEnabled()) {
-      return renderCompactBoxedToolCall(theme, titleFromIconName(icon, name), detail);
+      // Pending-tinted background, uniform with the seam-top result box below.
+      return renderCompactBoxedToolCall(theme, titleFromIconName(icon, name), detail, {
+        isError: context?.isError,
+        isPartial: context?.isPartial,
+        closeBottom: Boolean(context?.isPartial && !context.hasResult),
+        bgToken: "toolPendingBg",
+      });
     }
     return new Text(
       [theme.fg("toolTitle", titleFromIconName(icon, name)), detail].filter(Boolean).join(" "),
@@ -43,12 +59,23 @@ export function makeRenderCall(
 
 /** Build a renderCall for sub-agent tools. */
 export function makeSubAgentRenderCall(icon: string, name: string, primaryKey: string) {
-  return (args: Record<string, unknown> | null | undefined, theme: Theme) => {
+  return (
+    args: Record<string, unknown> | null | undefined,
+    theme: Theme,
+    context?: RenderCallContext,
+  ) => {
     const safeArgs = args && typeof args === "object" ? (args as Record<string, unknown>) : {};
     const val = str(safeArgs[primaryKey]);
     const detail = val ? theme.fg("accent", `"${truncate(val, 60)}"`) : "";
     if (isBoxedToolCallsEnabled()) {
-      return renderCompactBoxedToolCall(theme, titleFromIconName(icon, name), detail);
+      // Open-bottom call box with a pending-tinted background; the seam-top live
+      // result box below continues the same frame and background.
+      return renderCompactBoxedToolCall(theme, titleFromIconName(icon, name), detail, {
+        isError: context?.isError,
+        isPartial: context?.isPartial,
+        closeBottom: Boolean(context?.isPartial && !context.hasResult),
+        bgToken: "toolPendingBg",
+      });
     }
     return new Text(
       [theme.fg("toolTitle", titleFromIconName(icon, name)), detail].filter(Boolean).join(" "),

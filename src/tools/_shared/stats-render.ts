@@ -32,6 +32,8 @@ export function buildStatsRenderResult(opts: { readonly partial: string }) {
     if (options.isPartial) {
       return renderBoxedToolResult(theme, new Text(theme.fg("muted", opts.partial), 0, 0), {
         isPartial: true,
+        seamTop: true,
+        bgToken: "toolPendingBg",
       });
     }
 
@@ -46,6 +48,8 @@ export function buildStatsRenderResult(opts: { readonly partial: string }) {
         new Text(theme.fg(isError ? "error" : "toolOutput", fullText), 0, 0),
         {
           isError,
+          seamTop: true,
+          bgToken: "toolPendingBg",
         },
       );
     }
@@ -56,6 +60,8 @@ export function buildStatsRenderResult(opts: { readonly partial: string }) {
     parts.push(boxedExpandHint(theme));
     return renderBoxedToolResult(theme, new Text(parts.join(theme.fg("muted", " · ")), 0, 0), {
       isError,
+      seamTop: true,
+      bgToken: "toolPendingBg",
     });
   };
 }

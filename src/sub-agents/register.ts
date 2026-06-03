@@ -2,6 +2,7 @@ import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { getEnabledSet } from "../config/enabled-set.js";
 import { getLogger } from "../shared/logger.js";
 import { redactSecrets } from "../shared/redact.js";
+import { isBoxedToolCallsEnabled } from "../tools/_shared/boxed-config.js";
 import { makeSubAgentRenderCall } from "../tools/_shared/call-render.js";
 import type { SubAgentDeclaration } from "./declaration.js";
 import { finalizeNestedTools } from "./delegable-tools.js";
@@ -65,7 +66,7 @@ export function registerSubAgent(
     description: declaration.description,
     parameters: declaration.parameters,
     executionMode: getAgentSnapshotFor(declaration.name)?.executionMode,
-    renderShell: "default",
+    ...(isBoxedToolCallsEnabled() ? { renderShell: "self" } : {}),
     renderCall: makeSubAgentRenderCall(
       getAgentIcon(declaration.name),
       declaration.name,

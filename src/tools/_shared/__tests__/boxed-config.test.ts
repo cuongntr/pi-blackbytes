@@ -8,6 +8,7 @@ import { makeRenderCall } from "../call-render.js";
 function theme(): Theme {
   return {
     fg: (token: string, text: string) => `«${token}:${text}»`,
+    bg: (token: string, text: string) => `«bg:${token}:${text}»`,
     bold: (text: string) => `«bold:${text}»`,
   } as unknown as Theme;
 }
@@ -36,6 +37,22 @@ describe("boxed tool call config", () => {
     assert.match(out, /┌/);
     assert.match(out, /➔ ⌕ glob/);
     assert.match(out, /\*\*\/\*\.ts/);
+  });
+
+  it("reflects partial and error status from render context", () => {
+    setBoxedToolCallsEnabled(true);
+    const renderCall = makeRenderCall("⌕", "glob", (args, t) =>
+      t.fg("accent", String(args.pattern)),
+    );
+
+    const partial = render(
+      renderCall({ pattern: "**/*.ts" }, theme(), { isPartial: true, hasResult: false }),
+    );
+    const failed = render(renderCall({ pattern: "**/*.ts" }, theme(), { isError: true }));
+
+    assert.match(partial, /«accent:…»/);
+    assert.match(partial, /└/);
+    assert.match(failed, /«error:✗»/);
   });
 
   it("renders legacy unboxed calls when disabled", () => {

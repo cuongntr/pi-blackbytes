@@ -29,6 +29,7 @@ interface RenderableText {
 
 interface StubTheme {
   readonly fg: (token: string, text: string) => string;
+  readonly bg: (token: string, text: string) => string;
   readonly bold: (text: string) => string;
 }
 
@@ -57,6 +58,7 @@ function piCapturingTool(capture: (tool: RegisteredTool) => void): ExtensionAPI 
 function theme(): StubTheme {
   return {
     fg: (token: string, text: string) => `«${token}:${text}»`,
+    bg: (token: string, text: string) => `«bg:${token}:${text}»`,
     bold: (text: string) => `«bold:${text}»`,
   };
 }
@@ -176,7 +178,18 @@ describe("registerBashWrapper", () => {
     assert.match(out, /> /);
     assert.match(out, /«syntaxFunction:bun»/);
     assert.match(out, /«syntaxKeyword:--watch»/);
-    assert.match(out, /Waiting for output/);
+    // Before Pi has a result slot, the call box closes itself temporarily rather
+    // than leaving a dangling open frame; it no longer prints a "Waiting for output" line.
+    assert.match(out, /└/);
+    assert.doesNotMatch(out, /Waiting for output/);
+
+    const withResult = render(
+      tool.renderCall({ command: "bun run test\n--watch" }, theme(), {
+        isPartial: true,
+        hasResult: true,
+      }),
+    );
+    assert.doesNotMatch(withResult, /└/);
   });
 
   it("renders collapsed tail preview, error color, and footer", () => {
@@ -200,6 +213,24 @@ describe("registerBashWrapper", () => {
     assert.match(out, /earlier lines hidden/);
     assert.match(out, /⏹ 12s/);
     assert.match(out, /~4 words/);
+  });
+
+  it("omits the timeout footer when no explicit timeout is passed", () => {
+    const tool = registerEnabledTool(ui);
+    assertRenderableTool(tool);
+
+    const out = render(
+      tool.renderResult(
+        { content: [{ type: "text", text: "hello" }] },
+        { expanded: false },
+        theme(),
+        { args: {} },
+      ),
+    );
+
+    // Default timeout used to always print "⏹ 300s"; now it is hidden as noise.
+    assert.doesNotMatch(out, /⏹/);
+    assert.match(out, /~1 words/);
   });
 
   it("renders expanded output caps and partial state", () => {

@@ -1,5 +1,7 @@
 import { type Theme, keyText } from "@earendil-works/pi-coding-agent";
 import { Container, Text } from "@earendil-works/pi-tui";
+import { isBoxedToolCallsEnabled } from "../tools/_shared/boxed-config.js";
+import { renderBoxedToolResult } from "../tools/_shared/boxed-render.js";
 import { SPINNER_TICK_MS, formatCost, formatDuration, getSpinnerFrame } from "./format.js";
 import { getAgentIcon } from "./icons.js";
 import type { ToolHistoryEntry } from "./progress-reporter.js";
@@ -46,6 +48,9 @@ interface RenderState {
   startedAt: number | undefined;
   endedAt: number | undefined;
   interval: NodeJS.Timeout | undefined;
+  // Live inner component, kept stable across redraws independently of
+  // context.lastComponent (which becomes the outer box once we wrap it).
+  component?: SubAgentResultComponent;
 }
 
 function statusColor(
@@ -309,27 +314,39 @@ export function buildSubAgentRenderResult() {
     },
   ) => {
     const state = context.state;
+    const isLive =
+      options.isPartial ||
+      result.details?.status === "starting" ||
+      result.details?.status === "running";
     if (state.startedAt === undefined) {
       state.startedAt = Date.now();
     }
-    if (options.isPartial && !state.interval) {
+    if (isLive && !state.interval) {
       // 100 ms tick drives the braille spinner animation. Same timer also keeps
       // the elapsed counter ticking between tool events.
       state.interval = setInterval(() => context.invalidate(), SPINNER_TICK_MS);
     }
-    if (!options.isPartial) {
+    if (!isLive) {
       state.endedAt ??= Date.now();
       if (state.interval) {
         clearInterval(state.interval);
         state.interval = undefined;
       }
     }
-    const component =
-      context.lastComponent instanceof SubAgentResultComponent
-        ? context.lastComponent
-        : new SubAgentResultComponent();
+    // Keep a stable inner component identity in state: once wrapped in a box,
+    // context.lastComponent is the box, not the SubAgentResultComponent.
+    const component = state.component ?? new SubAgentResultComponent();
+    state.component = component;
     rebuildSubAgentResultComponent(component, result, options, state, theme);
     component.invalidate();
-    return component;
+    if (!isBoxedToolCallsEnabled()) return component;
+    // Boxed: one continuous frame with the open-bottom call box above. Keep a
+    // uniform pending-tinted background across call + result (status is shown
+    // via the ✓/✗/⚠ foreground icon) so the seam never looks colour-split.
+    return renderBoxedToolResult(theme, component, {
+      seamTop: true,
+      live: isLive,
+      bgToken: "toolPendingBg",
+    });
   };
 }

@@ -26,6 +26,7 @@ interface DetailsShape {
 }
 
 const PARTIAL_LABEL = "Editing...";
+const BOXED_RESULT_BASE = { seamTop: true, bgToken: "toolPendingBg" } as const;
 
 export function renderHashlineEditResult(
   result: RenderableResult,
@@ -37,6 +38,7 @@ export function renderHashlineEditResult(
     const text = new Text(theme.fg("muted", PARTIAL_LABEL), 0, 0);
     return isBoxedToolCallsEnabled()
       ? renderBoxedToolResult(theme, text, {
+          ...BOXED_RESULT_BASE,
           isPartial: true,
         })
       : text;
@@ -49,21 +51,25 @@ export function renderHashlineEditResult(
 
   if (!options.expanded) {
     const text = renderCollapsed(summary, isError, theme);
-    return isBoxedToolCallsEnabled() ? renderBoxedToolResult(theme, text, { isError }) : text;
+    return isBoxedToolCallsEnabled()
+      ? renderBoxedToolResult(theme, text, { ...BOXED_RESULT_BASE, isError })
+      : text;
   }
 
   if (isError) {
     const text = new Text(theme.fg("error", fullText), 0, 0);
-    return isBoxedToolCallsEnabled() ? renderBoxedToolResult(theme, text, { isError }) : text;
+    return isBoxedToolCallsEnabled()
+      ? renderBoxedToolResult(theme, text, { ...BOXED_RESULT_BASE, isError })
+      : text;
   }
 
   if (!details?.diffData || details.diffData.ranges.length === 0) {
     const text = new Text(theme.fg("toolOutput", fullText), 0, 0);
-    return isBoxedToolCallsEnabled() ? renderBoxedToolResult(theme, text) : text;
+    return isBoxedToolCallsEnabled() ? renderBoxedToolResult(theme, text, BOXED_RESULT_BASE) : text;
   }
 
   const text = renderExpandedDiff(summary, details.diffData, options.width, theme);
-  return isBoxedToolCallsEnabled() ? renderBoxedToolResult(theme, text) : text;
+  return isBoxedToolCallsEnabled() ? renderBoxedToolResult(theme, text, BOXED_RESULT_BASE) : text;
 }
 
 function renderCollapsed(summary: string, isError: boolean, theme: Theme): Text {

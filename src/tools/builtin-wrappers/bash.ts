@@ -47,6 +47,10 @@ export function registerBashWrapper(
 
   pi.registerTool({
     ...base,
+    // Our renderers draw a complete box (borders, padding, seam). Use the
+    // self shell so Pi does not wrap that box in its default Box shell, which
+    // adds an outer background band and extra padding around our frame.
+    renderShell: "self",
     execute: async (
       toolCallId: string,
       params: unknown,
@@ -72,7 +76,8 @@ export function registerBashWrapper(
       return renderBoxedToolCall(theme, "bash", shown, {
         isError: context?.isError,
         isPartial: context?.isPartial,
-        isPending: Boolean(context?.isPartial && !context?.hasResult),
+        closeBottom: Boolean(context?.isPartial && !context.hasResult),
+        bgToken: "toolPendingBg",
       });
     },
     renderResult(
@@ -87,6 +92,8 @@ export function registerBashWrapper(
           new Text(theme.fg("muted", "Running command..."), 0, 0),
           {
             isPartial: true,
+            seamTop: true,
+            bgToken: "toolPendingBg",
           },
         );
       }
@@ -106,12 +113,19 @@ export function registerBashWrapper(
           : `… ${preview.omittedLines} earlier lines hidden`;
         lines.push(theme.fg("muted", label));
       }
-      const timeout = context?.args?.timeout ?? 300;
-      const footer = formatBoxedFooter(theme, text, [theme.fg("muted", `⏹ ${timeout}s`)]);
+      // Only surface the timeout when the call set one explicitly. Falling back
+      // to a fixed default made every result show the same "300s", which is
+      // noise rather than the command's actual run time.
+      const explicitTimeout = context?.args?.timeout;
+      const extraFooter =
+        typeof explicitTimeout === "number" ? [theme.fg("muted", `⏹ ${explicitTimeout}s`)] : [];
+      const footer = formatBoxedFooter(theme, text, extraFooter);
       return renderBoxedToolResult(theme, new Text(lines.join("\n"), 0, 0), {
         isError,
         footerLines: [footer],
         emptyText: "(no output)",
+        seamTop: true,
+        bgToken: "toolPendingBg",
       });
     },
   } as never);

@@ -6,6 +6,7 @@ import { getAgentIcon } from "../icons.js";
 import {
   type SubAgentRenderDetails,
   SubAgentResultComponent,
+  buildSubAgentRenderResult,
   rebuildSubAgentResultComponent,
 } from "../render.js";
 
@@ -406,5 +407,38 @@ describe("rebuildSubAgentResultComponent — expanded footer aggregate", () => {
       expanded: false,
     });
     assert.ok(out.includes("$0.399"), "cost must remain in collapsed header");
+  });
+});
+
+describe("buildSubAgentRenderResult — boxed frame", () => {
+  function render(isPartial: boolean): string {
+    const renderResult = buildSubAgentRenderResult();
+    const state = { startedAt: undefined, endedAt: undefined, interval: undefined };
+    const component = renderResult(
+      {
+        content: [{ type: "text", text: "done" }],
+        details: { agent: "explore", status: isPartial ? "running" : "completed" },
+      },
+      { expanded: false, isPartial },
+      makeStubTheme(),
+      { state, lastComponent: undefined, invalidate: () => {} },
+    ) as { render(width: number): string[] };
+    if (state.interval) clearInterval(state.interval);
+    return component.render(80).join("\n");
+  }
+
+  it("wraps the live result in a seam-top, pending-tinted box when boxed", () => {
+    const out = render(true);
+    // Seam-top: no top border ┌, but a closing border └ and a pending background.
+    assert.doesNotMatch(out, /┌/);
+    assert.match(out, /└/);
+    assert.match(out, /«bg:toolPendingBg:/);
+    assert.match(out, /explore/);
+  });
+
+  it("keeps the pending background after completion so the seam stays uniform", () => {
+    const out = render(false);
+    assert.match(out, /«bg:toolPendingBg:/);
+    assert.match(out, /└/);
   });
 });

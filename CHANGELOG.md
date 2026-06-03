@@ -1,5 +1,25 @@
 # Changelog
 
+## 2.13.0 (2026-06-04) — Boxed Tool UI Spec Finalization & README Refresh
+
+Finalize the boxed tool UI specification with tightened acceptance criteria
+for built-in wrappers and document the full `ui` config surface, including
+`executionMode` overrides, in the README.
+
+### Changed
+
+- **`docs/specs/boxed-tool-ui.md`** — aligned REQ-005 to a single built-in
+  concern by deprecating the write/edit wrapper scope; clarified the `bash`
+  wrapper registration gate and the always-on `read` renderer compatibility
+  path; tightened acceptance criteria, sequence diagrams, and implementation
+  footprint.
+- **`README.md`** — added `ui` config block (`boxed_tool_calls`,
+  `boxed_builtin_tools`, `boxed_max_preview_lines`, `boxed_max_expanded_lines`,
+  `boxed_dim_output`) with defaults; added `sub_agents.<name>.executionMode`
+  (`sequential` / `parallel`) to the settings table and notes; documented the
+  optional boxed `bash` wrapper and always-on `read` renderer behaviour in the
+  tool-surface section.
+
 ## 2.11.0 (2026-06-03) — Blackbytes Boxed Tool UI
 
 Native boxed rendering for all Blackbytes extension tools, plus config-gated

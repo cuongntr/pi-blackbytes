@@ -1,5 +1,28 @@
 # Changelog
 
+## 2.15.0 (2026-06-04) — Bounded Delegate Output
+
+Cap successful sub-agent output before it re-enters the parent context, with a
+structured completion block kept intact.
+
+### Added
+
+- **Bounded delegate return** — `boundReturnContent()` in
+  `src/sub-agents/runner.ts` caps successful nested-Pi output at
+  `MAX_RETURN_CHARS` (24,576 chars) before returning it to the parent. The cap
+  is tail-preserving and middle-eliding (keeps head + tail, inserts a
+  `[... truncated ...]` marker), guarded against caps smaller than the marker
+  so output is never grown.
+- **`general` completion block** — the General worker closes its output with a
+  fixed `=== TASK COMPLETE ===` block (Outcome / Changed Files / Verification /
+  Failures) placed last so the tail-preserving cap retains it.
+- **Worker-unaware-of-limits guideline** — `AGENTS.md` documents that worker
+  sub-agents must never be told about token/context limits; resource pressure
+  is handled structurally via isolation plus the output cap.
+- **`boundReturnContent` tests** — coverage for under-cap pass-through,
+  exact-cap boundary, middle-clip with head/tail retention, and the
+  cap-smaller-than-marker guard.
+
 ## 2.14.1 (2026-06-04) — Compact Read & Sub-Agent Render Fixes
 
 Patch release for the compact read renderer and sub-agent expanded timeline.

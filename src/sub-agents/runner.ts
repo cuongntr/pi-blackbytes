@@ -24,6 +24,12 @@ const SAFE_ENV_VARS = [
 
 const MAX_STREAM_CHARS = 8_192;
 const MAX_DISPLAY_DETAIL_CHARS = 6_144;
+// Soft cap for the text returned to the parent agent. Large enough to pass
+// through normal structured summaries untouched; only clips genuine outliers
+// (e.g. a worker dumping a whole file) so a delegation cannot bloat the
+// orchestrator's context. Tail-preserving so a trailing completion block
+// survives.
+const MAX_RETURN_CHARS = 24_576;
 const DEFAULT_KILL_GRACE_MS = 100;
 const TRUNCATION_MARKER = "\n[... truncated ...]\n";
 
@@ -48,6 +54,17 @@ function truncateMiddle(text: string, maxChars = MAX_DISPLAY_DETAIL_CHARS): stri
 
 export function redactDelegateText(text: string): string {
   return redactSecrets(text);
+}
+
+// Bound successful delegate output before it re-enters the parent context.
+// Keeps the head (task framing) and tail (completion summary) and elides the
+// middle, matching the truncateMiddle marker convention. Guards against a
+// maxChars too small to hold the marker, where truncateMiddle's negative
+// slice bounds would otherwise grow the string instead of shrinking it.
+export function boundReturnContent(text: string, maxChars = MAX_RETURN_CHARS): string {
+  if (text.length <= maxChars) return text;
+  if (maxChars <= TRUNCATION_MARKER.length) return text.slice(0, maxChars);
+  return truncateMiddle(text, maxChars);
 }
 
 function classifyFailure(
@@ -307,7 +324,7 @@ export async function runNestedPi(
       }
 
       if (_code === 0) {
-        finish({ success: true, content: finalAssistantText || stdout });
+        finish({ success: true, content: boundReturnContent(finalAssistantText || stdout) });
       } else {
         finish({
           success: false,

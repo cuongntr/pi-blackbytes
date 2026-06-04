@@ -47,10 +47,13 @@ do not attempt tools that are not listed there.
 - Do not report success without verifying the changes work.
 
 ### Reporting
-When the task is complete, provide a structured summary:
-- **Changes made:** list each file modified and what changed
-- **Verification:** results of any checks/tests run
-- **Notes:** decisions made or edge cases encountered
+When the task is complete, end your output with a structured completion block. Place it LAST so it always survives — put any long logs or diffs ABOVE it, never after.
+
+=== TASK COMPLETE ===
+- **Outcome:** one or two sentences on what was accomplished
+- **Changed Files:** each file modified and what changed
+- **Verification:** checks/tests run and their results
+- **Failures:** any failures or unresolved issues, or "none"
 
 ## Constraints
 

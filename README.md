@@ -464,6 +464,10 @@ Raw nested-Pi stdout is not forwarded to the parent TUI. It contains the full ne
 
 The final delegate result remains a concise text block returned after the nested session completes. Progress updates are UI-only: they do **not** append intermediate nested output to the final tool result or to the parent model context.
 
+Successful delegate output is bounded by `boundReturnContent()` in `src/sub-agents/runner.ts` (`MAX_RETURN_CHARS`, 24,576 chars) before it re-enters the parent context. The cap is tail-preserving and middle-eliding: it keeps the head and tail and inserts a `[... truncated ...]` marker in between, so a worker's trailing completion summary survives even when an outlier output (for example a worker dumping a whole file) would otherwise bloat the orchestrator's context. The threshold is large enough that normal structured summaries pass through untouched. Worker sub-agents are deliberately kept unaware of any token or context limit — resource pressure is handled structurally (isolation plus this output cap), never by signalling scarcity to the nested agent, since doing so degrades thoroughness.
+
+The `general` worker closes its output with a fixed completion block delimited by `=== TASK COMPLETE ===` (Outcome / Changed Files / Verification / Failures), placed last so the tail-preserving cap retains it.
+
 ## `hashline_edit`
 
 `hashline_edit` works alongside Pi's native `edit` tool. It is optimized for precise, low-ambiguity edits by anchoring each mutation to a tagged line reference from `read` output, with a substring fallback (`replace_text`) for the cases where anchors are not needed.

@@ -114,6 +114,8 @@ Each delegation is logged to an in-memory, session-scoped delegation log (`src/s
 
 Read-only sub-agents (explore, oracle, librarian, reviewer) each declare a `prependSystemPrompt` hook that builds a lightweight (~4 KB) runtime overlay via `src/sub-agents/runtime-overlay.ts`. The overlay carries current date, working directory, and final tool allowlist, and is bounded with `redactSecrets` to strip sensitive values. The General sub-agent uses the larger (~8 KB) safety overlay from `src/sub-agents/general-safety-overlay.ts` instead, which additionally includes AGENTS.md-derived constraints.
 
+**Worker sub-agents must stay unaware of token/context limits.** Do not inject token-budget, context-window-size, or "running low on space" awareness into any sub-agent prompt or overlay. Resource pressure is managed structurally — isolation (worker context never enters the parent) plus a tail-preserving cap on returned output (`boundReturnContent` / `MAX_RETURN_CHARS` in `src/sub-agents/runner.ts`) — not by telling the worker to ration itself. Signalling scarcity to an LLM degrades thoroughness (it rushes and skips exploration), so this is a deliberate design choice, not an oversight.
+
 ### Tool rendering
 
 Tool result rendering is split into two layers:

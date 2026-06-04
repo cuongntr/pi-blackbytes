@@ -119,8 +119,9 @@ function getTruncationSuffix(details: unknown): string {
   return " (truncated)";
 }
 
-function numericArg(value: unknown): number | undefined {
-  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+function positiveIntegerArg(value: unknown): number | undefined {
+  if (typeof value !== "number" || !Number.isInteger(value) || value <= 0) return undefined;
+  return value;
 }
 
 function formatReadTarget(args: Record<string, unknown> | undefined, theme: Theme): string {
@@ -128,8 +129,8 @@ function formatReadTarget(args: Record<string, unknown> | undefined, theme: Them
   if (typeof rawPath !== "string" || rawPath.length === 0) return "";
 
   let target = theme.fg("accent", rawPath);
-  const offset = numericArg(args?.offset);
-  const limit = numericArg(args?.limit);
+  const offset = positiveIntegerArg(args?.offset);
+  const limit = positiveIntegerArg(args?.limit);
   if (offset !== undefined || limit !== undefined) {
     const start = offset ?? 1;
     const end = limit !== undefined ? start + limit - 1 : undefined;

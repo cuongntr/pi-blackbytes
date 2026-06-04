@@ -410,6 +410,42 @@ describe("rebuildSubAgentResultComponent — expanded footer aggregate", () => {
   });
 });
 
+describe("rebuildSubAgentResultComponent — expanded body cache", () => {
+  it("refreshes the timeline when an existing history entry closes in place", () => {
+    const component = new SubAgentResultComponent();
+    const state = {
+      startedAt: undefined as number | undefined,
+      endedAt: undefined as number | undefined,
+      interval: undefined as NodeJS.Timeout | undefined,
+    };
+    const history = [{ name: "read", summary: "src/index.ts", startMs: 100 }] as Array<{
+      name: string;
+      summary?: string;
+      startMs: number;
+      endMs?: number;
+    }>;
+    const details: SubAgentRenderDetails = {
+      agent: "explore",
+      status: "running",
+      toolHistory: history,
+      outputChars: 0,
+    };
+    const result = { content: [], details };
+    const options = { expanded: true, isPartial: true };
+    const theme = makeStubTheme();
+
+    rebuildSubAgentResultComponent(component, result, options, state, theme);
+    assert.match(component.render(200).join("\n"), /running…/);
+
+    history[0]!.endMs = 250;
+    rebuildSubAgentResultComponent(component, result, options, state, theme);
+
+    const out = component.render(200).join("\n");
+    assert.doesNotMatch(out, /running…/);
+    assert.match(out, /150ms/);
+  });
+});
+
 describe("buildSubAgentRenderResult — boxed frame", () => {
   function render(isPartial: boolean): string {
     const renderResult = buildSubAgentRenderResult();

@@ -99,6 +99,20 @@ describe("read renderer compact mode", () => {
     assert.doesNotMatch(out, /bg:/);
   });
 
+  it("does not render invalid non-positive ranges in the compact target", () => {
+    const out = render(
+      renderCompactReadResult(
+        { content: [{ type: "text", text: "hello" }] },
+        { expanded: false },
+        theme(),
+        { args: { path: "src/a.ts", offset: 0, limit: 0 } },
+      ),
+    );
+
+    assert.match(out, /src\/a\.ts/);
+    assert.doesNotMatch(out, /:0/);
+  });
+
   it("expanded result delegates to Pi's renderer after stripping anchors", () => {
     const tool = registerReadTool({
       display: "compact",

@@ -1,5 +1,16 @@
 # Changelog
 
+## 2.14.1 (2026-06-04) — Compact Read & Sub-Agent Render Fixes
+
+Patch release for the compact read renderer and sub-agent expanded timeline.
+
+### Fixed
+
+- **Sub-agent expanded timeline** — cache keys now include the rendered tool
+  history state, so in-place tool completion updates refresh `running…`
+  entries to completed durations immediately.
+- **Compact read ranges** — non-positive `offset` / `limit` arguments no longer
+  render misleading `:0` target ranges in collapsed read summaries.
 
 ## 2.14.0 (2026-06-04) — Compact Read Renderer & Boxed Seam Polish
 

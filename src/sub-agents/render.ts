@@ -58,6 +58,8 @@ interface RenderState {
   cachedExpandedLines?: string[];
 }
 
+const MAX_DISPLAY_HISTORY = 30;
+
 function statusColor(
   status: SubAgentRenderDetails["status"],
 ): "success" | "error" | "warning" | "muted" | "accent" {
@@ -156,7 +158,12 @@ export function rebuildSubAgentResultComponent(
 
   // === EXPANDED BODY (cached — only rebuilt when data changes) ===
   if (options.expanded) {
-    const expandedHash = `${details.toolHistory?.length}-${details.outputChars}-${details.status}-${details.outputPreview?.length}`;
+    const expandedHash = [
+      details.outputChars,
+      details.status,
+      details.outputPreview?.length,
+      toolHistoryRenderKey(details.toolHistory),
+    ].join("-");
     if (expandedHash !== state.lastExpandedHash) {
       state.lastExpandedHash = expandedHash;
       state.cachedExpandedLines = buildExpandedBody(result, details, options, theme);
@@ -238,7 +245,6 @@ function buildExpandedBody(
 
   // Tool Activity section
   if (details.toolHistory && details.toolHistory.length > 0) {
-    const MAX_DISPLAY_HISTORY = 30;
     const history = details.toolHistory;
     const displayEntries =
       history.length > MAX_DISPLAY_HISTORY ? history.slice(-MAX_DISPLAY_HISTORY) : history;
@@ -290,6 +296,15 @@ function buildExpandedBody(
   }
 
   return lines;
+}
+
+function toolHistoryRenderKey(history?: readonly ToolHistoryEntry[]): string {
+  if (!history || history.length === 0) return "0";
+  const displayEntries =
+    history.length > MAX_DISPLAY_HISTORY ? history.slice(-MAX_DISPLAY_HISTORY) : history;
+  return JSON.stringify(
+    displayEntries.map((entry) => [entry.name, entry.startMs, entry.endMs ?? null, entry.summary]),
+  );
 }
 
 /**

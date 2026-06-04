@@ -392,13 +392,19 @@ export function buildSubAgentRenderResult() {
     );
     component.invalidate();
     if (!isBoxedToolCallsEnabled()) return component;
-    // Boxed: one continuous frame with the open-bottom call box above. Keep a
-    // uniform pending-tinted background across call + result (status is shown
-    // via the ✓/✗/⚠ foreground icon) so the seam never looks colour-split.
+    // Boxed: one continuous frame with the open-bottom call box above.
+    // Background matches state: pending while running, success/error on completion.
+    const status = result.details?.status ?? (options.isPartial ? "running" : "completed");
+    const bgToken =
+      status === "completed"
+        ? "toolSuccessBg"
+        : status === "running" || status === "starting"
+          ? "toolPendingBg"
+          : "toolErrorBg";
     return renderBoxedToolResult(theme, component, {
       seamTop: true,
       live: isLive,
-      bgToken: "toolPendingBg",
+      bgToken,
     });
   };
 }

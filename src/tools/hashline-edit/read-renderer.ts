@@ -11,6 +11,8 @@ import {
 } from "@earendil-works/pi-coding-agent";
 import { type Component, Container, Text } from "@earendil-works/pi-tui";
 import type { BoxedUiConfig } from "../../config/schema.js";
+import { isBoxedToolCallsEnabled } from "../_shared/boxed-config.js";
+import { renderBoxedToolResult } from "../_shared/boxed-render.js";
 import { countLines, getTextOutput, stripTrailingNoticeLines } from "../_shared/tool-output.js";
 
 const ANCHOR_PATTERN = /^\d+#[A-Z]{2}\|/;
@@ -146,6 +148,39 @@ function compactReadPrefix(context: ReadRenderContext | undefined, theme: Theme)
   return `${lead}${theme.fg("toolTitle", theme.bold("read"))} ${target} `;
 }
 
+function buildExpandedHeader(
+  result: ReadRenderResult,
+  theme: Theme,
+  context: ReadRenderContext | undefined,
+): string {
+  const target = formatReadTarget(context?.args, theme);
+  const content = result.content ?? [];
+
+  if (content.some((block) => block.type === "image")) {
+    const parts = [
+      theme.fg("success", "✓"),
+      theme.fg("toolTitle", theme.bold("read")),
+      ...(target ? [target] : []),
+      theme.fg("muted", "·"),
+      theme.fg("muted", "Image loaded"),
+    ];
+    return parts.join(" ");
+  }
+
+  const text = stripTrailingNoticeLines(getTextOutput({ content }));
+  const lineCount = countLines(text);
+  const parts = [
+    theme.fg("success", "✓"),
+    theme.fg("toolTitle", theme.bold("read")),
+    ...(target ? [target] : []),
+    theme.fg("muted", "·"),
+    theme.fg("muted", formatLineCount(lineCount)),
+  ];
+  const truncation = getTruncationSuffix(result.details);
+  if (truncation) parts.push(theme.fg("warning", truncation));
+  return parts.join(" ");
+}
+
 export function renderCompactReadResult(
   result: ReadRenderResult,
   options: ReadRenderOptions,
@@ -216,7 +251,18 @@ export function registerCleanReadRenderer(
       if (display === "compact" && !options.expanded) {
         return renderCompactReadResult(cleanResult, options, theme, context as ReadRenderContext);
       }
-      return originalRenderResult(cleanResult, options, theme, context);
+      const inner = originalRenderResult(cleanResult, options, theme, context);
+      if (isBoxedToolCallsEnabled()) {
+        const header = buildExpandedHeader(cleanResult, theme, context as ReadRenderContext);
+        const body = new Container();
+        body.addChild(new Text(header, 0, 0));
+        body.addChild(inner);
+        return renderBoxedToolResult(theme, body, {
+          seamTop: true,
+          bgToken: "toolSuccessBg",
+        });
+      }
+      return inner;
     },
   };
 

@@ -10,8 +10,8 @@ export function str(v: unknown): string | null {
 
 /** Truncate a string for display */
 export function truncate(s: string, max: number): string {
-  if (max <= 1) return max === 1 ? "…" : "";
-  return s.length > max ? `${s.slice(0, max - 1)}…` : s;
+  if (max <= 1) return max === 1 ? "\u2026" : "";
+  return s.length > max ? `${s.slice(0, max - 1)}\u2026` : s;
 }
 
 interface RenderCallContext {
@@ -41,12 +41,12 @@ export function makeRenderCall(
     const safeArgs = args && typeof args === "object" ? (args as Record<string, unknown>) : {};
     const detail = formatArgs(safeArgs, theme);
     if (isBoxedToolCallsEnabled()) {
-      // Always leave bottom open: Pi only calls renderCall once and never
-      // re-renders when the result arrives. closeBottom=true would stale.
+      // Close bottom when no result yet (complete box); open once result arrives
+      // so the result box connects seamlessly via seam-top divider.
       return renderCompactBoxedToolCall(theme, titleFromIconName(icon, name), detail, {
         isError: context?.isError,
         isPartial: context?.isPartial,
-        closeBottom: false,
+        closeBottom: !context?.hasResult,
         bgToken: "toolPendingBg",
       });
     }
@@ -69,14 +69,12 @@ export function makeSubAgentRenderCall(icon: string, name: string, primaryKey: s
     const val = str(safeArgs[primaryKey]);
     const detail = val ? theme.fg("accent", `"${truncate(val, 60)}"`) : "";
     if (isBoxedToolCallsEnabled()) {
-      // Always leave bottom open: Pi only calls renderCall once at the start
-      // and never re-renders it when the result arrives. closeBottom=true would
-      // stale the └───┘ border, creating a visual gap between call and result.
-      // The brief open-bottom state before the result slot appears is acceptable.
+      // Close bottom when no result yet (complete box); open once result arrives
+      // so the result box connects seamlessly via seam-top divider.
       return renderCompactBoxedToolCall(theme, titleFromIconName(icon, name), detail, {
         isError: context?.isError,
         isPartial: context?.isPartial,
-        closeBottom: false,
+        closeBottom: !context?.hasResult,
         bgToken: "toolPendingBg",
       });
     }

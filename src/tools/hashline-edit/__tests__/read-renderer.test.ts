@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
+import { afterEach, describe, it } from "node:test";
 import type { ExtensionAPI, Theme } from "@earendil-works/pi-coding-agent";
 import { type Component, Text } from "@earendil-works/pi-tui";
+import { setBoxedToolCallsEnabled } from "../../_shared/boxed-config.js";
 import { registerCleanReadRenderer, renderCompactReadResult } from "../read-renderer.js";
 
 interface RegisteredReadTool {
@@ -71,6 +72,10 @@ function registerReadTool(input: {
   return registeredTool;
 }
 
+afterEach(() => {
+  setBoxedToolCallsEnabled(true);
+});
+
 describe("read renderer compact mode", () => {
   it("collapsed result renders as a single self-shell line without file contents", () => {
     const tool = registerReadTool({ display: "compact" });
@@ -124,6 +129,7 @@ describe("read renderer compact mode", () => {
         { content: [{ type: "text", text: "1#AB|hello\n2#CD|world" }] },
         { expanded: true },
         theme(),
+        { args: { path: "src/a.ts" } },
       ),
     );
 
@@ -131,6 +137,12 @@ describe("read renderer compact mode", () => {
     assert.match(out, /world/);
     assert.doesNotMatch(out, /1#AB/);
     assert.doesNotMatch(out, /2#CD/);
+    // Boxed when boxed mode is enabled
+    assert.match(out, /┌|└|│/);
+    // Header with file path and line count
+    assert.match(out, /read/);
+    assert.match(out, /src\/a\.ts/);
+    assert.match(out, /2 lines read/);
   });
 
   it("preview mode preserves the old collapsed renderer while still stripping anchors", () => {
@@ -149,6 +161,8 @@ describe("read renderer compact mode", () => {
 
     assert.match(out, /hello/);
     assert.doesNotMatch(out, /1#AB/);
+    // Boxed when boxed mode is enabled
+    assert.match(out, /┌|└|│/);
   });
 
   it("delegated renderer also receives anchor-stripped details", () => {
@@ -171,6 +185,28 @@ describe("read renderer compact mode", () => {
 
     assert.match(out, /from details/);
     assert.doesNotMatch(out, /1#AB/);
+    // Boxed when boxed mode is enabled
+    assert.match(out, /┌|└|│/);
+  });
+
+  it("expanded result is unboxed when boxed mode is disabled", () => {
+    setBoxedToolCallsEnabled(false);
+    const tool = registerReadTool({
+      display: "compact",
+      originalRenderResult: (result) => new Text(result.content?.[0]?.text ?? "", 0, 0),
+    });
+
+    const out = render(
+      tool.renderResult(
+        { content: [{ type: "text", text: "1#AB|hello" }] },
+        { expanded: true },
+        theme(),
+      ),
+    );
+
+    assert.match(out, /hello/);
+    assert.doesNotMatch(out, /1#AB/);
+    assert.doesNotMatch(out, /┌|└|│/);
   });
 
   it("compact summary reports truncation without rendering content", () => {

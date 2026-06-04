@@ -475,9 +475,9 @@ describe("buildSubAgentRenderResult — boxed frame", () => {
     assert.match(out, /ctrl\+o to expand/);
   });
 
-  it("keeps the pending background after completion so the seam stays uniform", () => {
+  it("uses success background after completion", () => {
     const out = render(false);
-    assert.match(out, /«bg:toolPendingBg:/);
+    assert.match(out, /«bg:toolSuccessBg:/);
     assert.match(out, /└/);
   });
 });

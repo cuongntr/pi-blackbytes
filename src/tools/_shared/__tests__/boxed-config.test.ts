@@ -51,8 +51,8 @@ describe("boxed tool call config", () => {
     const failed = render(renderCall({ pattern: "**/*.ts" }, theme(), { isError: true }));
 
     assert.match(partial, /«accent:…»/);
-    // closeBottom is always false — call box stays open for seamless seam with result.
-    assert.doesNotMatch(partial, /└/);
+    // closeBottom is true — call box renders as a complete box.
+    assert.match(partial, /└/);
     assert.match(failed, /«error:✗»/);
   });
 

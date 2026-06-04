@@ -164,7 +164,15 @@ export function renderBoxedToolCall(
     // result slot to render.
     return applyBg(theme, lines, opts.bgToken);
   };
-  return cachedComponent(compute);
+  // No width-keyed cache: closeBottom is dynamic (true when no result yet,
+  // false once a result slot exists). Caching by width alone would stale
+  // the bottom border and break the seam between call box and result box.
+  return {
+    invalidate() {},
+    render(width: number): string[] {
+      return compute(width);
+    },
+  };
 }
 
 export function renderCompactBoxedToolCall(

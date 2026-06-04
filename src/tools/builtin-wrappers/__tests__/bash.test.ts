@@ -179,8 +179,8 @@ describe("registerBashWrapper", () => {
     assert.match(out, /> /);
     assert.match(out, /«syntaxFunction:bun»/);
     assert.match(out, /«syntaxKeyword:--watch»/);
-    // closeBottom is always false — call box stays open for seamless seam with result.
-    assert.doesNotMatch(out, /└/);
+    // closeBottom is true when no result yet — call box renders complete.
+    // closeBottom is false when hasResult — bottom opens for seamless seam.
     assert.doesNotMatch(out, /Waiting for output/);
 
     const withResult = render(

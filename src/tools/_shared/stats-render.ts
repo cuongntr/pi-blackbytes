@@ -42,6 +42,8 @@ export function buildStatsRenderResult(opts: { readonly partial: string }) {
     const summary = stats?.summary || "";
     const isError = context?.isError ?? false;
 
+    const resultBg = isError ? "toolErrorBg" : "toolSuccessBg";
+
     if (options.expanded) {
       return renderBoxedToolResult(
         theme,
@@ -49,7 +51,7 @@ export function buildStatsRenderResult(opts: { readonly partial: string }) {
         {
           isError,
           seamTop: true,
-          bgToken: "toolPendingBg",
+          bgToken: resultBg,
         },
       );
     }
@@ -61,7 +63,7 @@ export function buildStatsRenderResult(opts: { readonly partial: string }) {
     return renderBoxedToolResult(theme, new Text(parts.join(theme.fg("muted", " · ")), 0, 0), {
       isError,
       seamTop: true,
-      bgToken: "toolPendingBg",
+      bgToken: resultBg,
     });
   };
 }

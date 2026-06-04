@@ -73,12 +73,12 @@ export function registerBashWrapper(
       if (commandLines.length > MAX_COMMAND_LINES) {
         shown.push(theme.fg("muted", `… ${commandLines.length - MAX_COMMAND_LINES} more lines`));
       }
-      // Always leave bottom open: same rationale as sub-agent call boxes —
-      // Pi only calls renderCall once and never re-renders when the result arrives.
+      // Close bottom when no result yet (complete box); open once result arrives
+      // so the result box connects seamlessly via seam-top divider.
       return renderBoxedToolCall(theme, "bash", shown, {
         isError: context?.isError,
         isPartial: context?.isPartial,
-        closeBottom: false,
+        closeBottom: !context?.hasResult,
         bgToken: "toolPendingBg",
       });
     },
@@ -127,7 +127,7 @@ export function registerBashWrapper(
         footerLines: [footer],
         emptyText: "(no output)",
         seamTop: true,
-        bgToken: "toolPendingBg",
+        bgToken: isError ? "toolErrorBg" : "toolSuccessBg",
       });
     },
   } as never);

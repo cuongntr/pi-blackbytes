@@ -107,7 +107,7 @@ export async function handleSessionStart(
 
   // Local tools
   registerHashlineEditTool(pi, { strictPatch: getHashlineEditConfig(config).strict_patch });
-  registerCleanReadRenderer(pi, _ctx.cwd ?? process.cwd());
+  registerCleanReadRenderer(pi, _ctx.cwd ?? process.cwd(), { ui: boxedUi });
   registerAstGrepSearchTool(pi);
   registerAstGrepReplaceTool(pi);
   registerGlobTool(pi);

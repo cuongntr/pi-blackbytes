@@ -11,6 +11,7 @@ const ui: BoxedUiConfig = {
   boxed_max_preview_lines: 5,
   boxed_max_expanded_lines: 200,
   boxed_dim_output: false,
+  read_tool_display: "compact",
 };
 
 interface RegisteredTool {
@@ -178,9 +179,8 @@ describe("registerBashWrapper", () => {
     assert.match(out, /> /);
     assert.match(out, /«syntaxFunction:bun»/);
     assert.match(out, /«syntaxKeyword:--watch»/);
-    // Before Pi has a result slot, the call box closes itself temporarily rather
-    // than leaving a dangling open frame; it no longer prints a "Waiting for output" line.
-    assert.match(out, /└/);
+    // closeBottom is always false — call box stays open for seamless seam with result.
+    assert.doesNotMatch(out, /└/);
     assert.doesNotMatch(out, /Waiting for output/);
 
     const withResult = render(

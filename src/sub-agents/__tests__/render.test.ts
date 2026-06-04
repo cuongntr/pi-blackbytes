@@ -433,7 +433,10 @@ describe("buildSubAgentRenderResult — boxed frame", () => {
     assert.doesNotMatch(out, /┌/);
     assert.match(out, /└/);
     assert.match(out, /«bg:toolPendingBg:/);
-    assert.match(out, /explore/);
+    // In seam context (boxed), agent identity is de-duplicated — the call
+    // box above already shows it. Only metrics appear in the result box.
+    assert.doesNotMatch(out, /explore/);
+    assert.match(out, /ctrl\+o to expand/);
   });
 
   it("keeps the pending background after completion so the seam stays uniform", () => {

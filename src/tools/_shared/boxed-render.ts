@@ -156,7 +156,7 @@ export function renderBoxedToolCall(
         lines.push(...wrapBoxed(theme, detail, renderedWidth));
       }
     }
-    lines.push(blankLine(theme, renderedWidth));
+    // lines.push(blankLine(theme, renderedWidth));
     if (opts.closeBottom) lines.push(border(theme, "└", "┘", renderedWidth));
     // Normally the call box leaves its bottom open: a result box renders directly
     // below and draws the seam divider plus the closing border, so the two slots
@@ -181,7 +181,7 @@ export function renderCompactBoxedToolCall(
     const lines = [
       border(theme, "┌", "┐", renderedWidth),
       line(theme, title, renderedWidth),
-      blankLine(theme, renderedWidth),
+      // blankLine(theme, renderedWidth),
     ];
     if (opts.closeBottom) lines.push(border(theme, "└", "┘", renderedWidth));
     // Normally leave the bottom open: a seam-top result box renders directly
@@ -189,7 +189,15 @@ export function renderCompactBoxedToolCall(
     // read as one continuous frame (same pattern as renderBoxedToolCall).
     return applyBg(theme, lines, opts.bgToken);
   };
-  return cachedComponent(compute);
+  // No width-keyed cache: closeBottom is dynamic (true during partial, false once
+  // a result slot exists). Caching by width alone would stale the bottom border
+  // and break the seam between call box and result box.
+  return {
+    invalidate() {},
+    render(width: number): string[] {
+      return compute(width);
+    },
+  };
 }
 
 export function renderBoxedToolResult(
@@ -227,7 +235,7 @@ export function renderBoxedToolResult(
       ];
       // Standalone boxes need their own top padding; seam boxes inherit it from
       // the call box's trailing blank line.
-      if (!opts.seamTop) lines.push(blankLine(theme, renderedWidth));
+      // if (!opts.seamTop) lines.push(blankLine(theme, renderedWidth));
       if (opts.isError)
         lines.push(...wrapBoxed(theme, theme.fg("error", "✗ Error"), renderedWidth));
       for (const bodyLine of contentLines) {
@@ -237,7 +245,7 @@ export function renderBoxedToolResult(
         lines.push(divider(theme, renderedWidth));
         for (const footer of opts.footerLines) lines.push(line(theme, footer, renderedWidth));
       }
-      lines.push(blankLine(theme, renderedWidth));
+
       lines.push(border(theme, "└", "┘", renderedWidth));
       const painted = applyBg(theme, lines, opts.bgToken);
       if (!opts.live) cache.set(width, painted);

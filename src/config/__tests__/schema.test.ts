@@ -126,6 +126,7 @@ describe("BlackbytesConfigSchema", () => {
         boxed_max_preview_lines: 8,
         boxed_max_expanded_lines: 120,
         boxed_dim_output: true,
+        read_tool_display: "preview",
       },
     });
 
@@ -135,6 +136,20 @@ describe("BlackbytesConfigSchema", () => {
       boxed_max_preview_lines: 8,
       boxed_max_expanded_lines: 120,
       boxed_dim_output: true,
+      read_tool_display: "preview",
     });
+  });
+
+  it("defaults read tool display to compact", () => {
+    const parsed = BlackbytesConfigSchema.parse({});
+    assert.equal(getBoxedUiConfig(parsed).read_tool_display, "compact");
+  });
+
+  it("rejects invalid read tool display values", () => {
+    const result = parseBlackbytesConfig({ ui: { read_tool_display: "verbose" } });
+    assert.ok(!result.ok);
+    if (!result.ok) {
+      assert.ok(result.errors.some((error) => error.includes("read_tool_display")));
+    }
   });
 });

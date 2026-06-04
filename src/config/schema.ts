@@ -45,6 +45,7 @@ export const BlackbytesConfigSchema = z
           .max(5000, "boxed_max_expanded_lines must not exceed 5000")
           .optional(),
         boxed_dim_output: z.boolean().optional(),
+        read_tool_display: z.enum(["compact", "preview"]).optional(),
       })
       .passthrough()
       .optional(),
@@ -144,6 +145,7 @@ export interface BoxedUiConfig {
   boxed_max_preview_lines: number;
   boxed_max_expanded_lines: number;
   boxed_dim_output: boolean;
+  read_tool_display: "compact" | "preview";
 }
 
 export function getBoxedUiConfig(config: BlackbytesConfig): BoxedUiConfig {
@@ -154,5 +156,6 @@ export function getBoxedUiConfig(config: BlackbytesConfig): BoxedUiConfig {
     boxed_max_preview_lines: raw?.boxed_max_preview_lines ?? 5,
     boxed_max_expanded_lines: raw?.boxed_max_expanded_lines ?? 200,
     boxed_dim_output: raw?.boxed_dim_output ?? false,
+    read_tool_display: raw?.read_tool_display ?? "compact",
   };
 }

@@ -1,5 +1,33 @@
 # Changelog
 
+
+## 2.14.0 (2026-06-04) — Compact Read Renderer & Boxed Seam Polish
+
+Reduce visual noise from built-in `read` output and tighten boxed tool seams.
+
+### Added
+
+- **`ui.read_tool_display`** — new config option (`"compact"` default, or
+  `"preview"`) controlling collapsed built-in `read` rendering while preserving
+  full anchor-bearing content in conversation history for `hashline_edit`.
+- **Read renderer tests** — coverage for compact summaries, preview-mode
+  fallback, anchor-stripped nested details, truncation summaries, and expanded
+  rendering.
+
+### Changed
+
+- **Built-in `read` renderer** — collapsed results now render as a single
+  unboxed summary line by default, including path/range and line count, with
+  anchors hidden from visible output.
+- **Boxed tool seams** — call renderers now always leave the bottom edge open
+  so Pi's non-rerendered call slot connects cleanly to result boxes; compact
+  boxed call rendering avoids stale width-only cache state.
+- **Sub-agent result UI** — split identity, metrics, and expanded sections;
+  boxed seam mode de-duplicates agent identity already shown in the call box
+  and adds clearer expanded Tool Activity / Output sections.
+- **Documentation** — README and AGENTS config notes now document
+  `ui.read_tool_display` and the compact read default.
+
 ## 2.13.0 (2026-06-04) — Boxed Tool UI Spec Finalization & README Refresh
 
 Finalize the boxed tool UI specification with tightened acceptance criteria

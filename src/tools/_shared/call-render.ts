@@ -41,11 +41,12 @@ export function makeRenderCall(
     const safeArgs = args && typeof args === "object" ? (args as Record<string, unknown>) : {};
     const detail = formatArgs(safeArgs, theme);
     if (isBoxedToolCallsEnabled()) {
-      // Pending-tinted background, uniform with the seam-top result box below.
+      // Always leave bottom open: Pi only calls renderCall once and never
+      // re-renders when the result arrives. closeBottom=true would stale.
       return renderCompactBoxedToolCall(theme, titleFromIconName(icon, name), detail, {
         isError: context?.isError,
         isPartial: context?.isPartial,
-        closeBottom: Boolean(context?.isPartial && !context.hasResult),
+        closeBottom: false,
         bgToken: "toolPendingBg",
       });
     }
@@ -68,12 +69,14 @@ export function makeSubAgentRenderCall(icon: string, name: string, primaryKey: s
     const val = str(safeArgs[primaryKey]);
     const detail = val ? theme.fg("accent", `"${truncate(val, 60)}"`) : "";
     if (isBoxedToolCallsEnabled()) {
-      // Open-bottom call box with a pending-tinted background; the seam-top live
-      // result box below continues the same frame and background.
+      // Always leave bottom open: Pi only calls renderCall once at the start
+      // and never re-renders it when the result arrives. closeBottom=true would
+      // stale the └───┘ border, creating a visual gap between call and result.
+      // The brief open-bottom state before the result slot appears is acceptable.
       return renderCompactBoxedToolCall(theme, titleFromIconName(icon, name), detail, {
         isError: context?.isError,
         isPartial: context?.isPartial,
-        closeBottom: Boolean(context?.isPartial && !context.hasResult),
+        closeBottom: false,
         bgToken: "toolPendingBg",
       });
     }

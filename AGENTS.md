@@ -85,6 +85,7 @@ Core settings:
 - `ui.boxed_tool_calls` (default `true`) — boxed rendering for Blackbytes tool calls/results; set `false` for a rollback to the legacy unboxed renderer.
 - `ui.boxed_builtin_tools` (default `false`) — opt-in boxed wrappers for Pi builtin tools such as `bash` when the host Pi version exposes a compatible factory.
 - `ui.boxed_max_preview_lines` / `ui.boxed_max_expanded_lines` / `ui.boxed_dim_output` — boxed builtin output preview limits and colour mode.
+- `ui.read_tool_display` (`"compact"` default, or `"preview"`) — collapsed built-in `read` output renders as one unboxed line by default while preserving full content for the model/hashline anchors.
 - `websearch.provider`, `websearch.exa_api_key`, `websearch.tavily_api_key`
 - `context7.api_key`
 - `system_prompt_log.enabled`, `.path`, `.capture_agent_start`, `.capture_provider_system`, `.include_nested`, `.dedupe` (opt-in JSONL capture of full system prompts; provider capture extracts only system-like fields)

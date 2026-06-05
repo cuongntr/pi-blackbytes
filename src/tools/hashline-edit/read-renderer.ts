@@ -2,6 +2,7 @@
  * Override the built-in read tool's renderResult so hashline anchors stay in
  * conversation history for the LLM, while the TUI remains compact and clean.
  */
+import path from "node:path";
 import {
   type ExtensionAPI,
   type ReadToolDetails,
@@ -126,11 +127,16 @@ function positiveIntegerArg(value: unknown): number | undefined {
   return value;
 }
 
-function formatReadTarget(args: Record<string, unknown> | undefined, theme: Theme): string {
+function formatReadTarget(
+  args: Record<string, unknown> | undefined,
+  theme: Theme,
+  cwd?: string,
+): string {
   const rawPath = args?.path;
   if (typeof rawPath !== "string" || rawPath.length === 0) return "";
 
-  let target = theme.fg("accent", rawPath);
+  const displayPath = shortenPath(rawPath, cwd);
+  let target = theme.fg("accent", displayPath);
   const offset = positiveIntegerArg(args?.offset);
   const limit = positiveIntegerArg(args?.limit);
   if (offset !== undefined || limit !== undefined) {
@@ -141,19 +147,40 @@ function formatReadTarget(args: Record<string, unknown> | undefined, theme: Them
   return target;
 }
 
-function compactReadPrefix(context: ReadRenderContext | undefined, theme: Theme): string {
-  const lead = `  ${theme.fg("muted", "➜")} `;
-  const target = formatReadTarget(context?.args, theme);
-  if (!target) return `${lead}${theme.fg("toolTitle", theme.bold("read"))} `;
-  return `${lead}${theme.fg("toolTitle", theme.bold("read"))} ${target} `;
+/** Shorten an absolute path for display when it's inside cwd. */
+function shortenPath(absPath: string, cwd: string | undefined): string {
+  if (!cwd || !path.isAbsolute(absPath)) return absPath;
+  const rel = path.relative(cwd, absPath);
+  if (rel === "") return ".";
+  // Keep relative only when it doesn't escape cwd (no leading ..)
+  if (rel.startsWith("..") || path.isAbsolute(rel)) return absPath;
+  return rel;
+}
+
+type ReadMarkerToken = "accent" | "success";
+
+function compactReadPrefix(
+  context: ReadRenderContext | undefined,
+  theme: Theme,
+  cwd?: string,
+  markerToken: ReadMarkerToken = "success",
+  phase: "call" | "result" = "result",
+): string {
+  const target = formatReadTarget(context?.args, theme, cwd);
+  const call = `${theme.fg(markerToken, "⏺")} ${theme.fg("toolTitle", theme.bold("read"))}${
+    target ? `(${target})` : ""
+  }`;
+  if (phase === "call") return call;
+  return `${call}\n${theme.fg("muted", "  ⎿  ")}`;
 }
 
 function buildExpandedHeader(
   result: ReadRenderResult,
   theme: Theme,
   context: ReadRenderContext | undefined,
+  cwd?: string,
 ): string {
-  const target = formatReadTarget(context?.args, theme);
+  const target = formatReadTarget(context?.args, theme, cwd);
   const content = result.content ?? [];
 
   if (content.some((block) => block.type === "image")) {
@@ -186,8 +213,9 @@ export function renderCompactReadResult(
   options: ReadRenderOptions,
   theme: Theme,
   context?: ReadRenderContext,
+  cwd?: string,
 ): Component {
-  const prefix = compactReadPrefix(context, theme);
+  const prefix = compactReadPrefix(context, theme, cwd, options.isPartial ? "accent" : "success");
   if (options.isPartial) return new Text(`${prefix}${theme.fg("muted", "Reading...")}`, 0, 0);
 
   const content = result.content ?? [];
@@ -249,11 +277,17 @@ export function registerCleanReadRenderer(
         details: stripAnchorStrings(result.details),
       };
       if (display === "compact" && !options.expanded) {
-        return renderCompactReadResult(cleanResult, options, theme, context as ReadRenderContext);
+        return renderCompactReadResult(
+          cleanResult,
+          options,
+          theme,
+          context as ReadRenderContext,
+          cwd,
+        );
       }
       const inner = originalRenderResult(cleanResult, options, theme, context);
       if (isBoxedToolCallsEnabled()) {
-        const header = buildExpandedHeader(cleanResult, theme, context as ReadRenderContext);
+        const header = buildExpandedHeader(cleanResult, theme, context as ReadRenderContext, cwd);
         const body = new Container();
         body.addChild(new Text(header, 0, 0));
         body.addChild(inner);

@@ -1,5 +1,52 @@
 # Changelog
 
+## 2.16.0 (2026-06-06) — Render Performance & Lightweight Tool UI
+
+Eliminate redundant per-tick work in the sub-agent live renderer, cache hot
+lookups, and finish the lightweight Claude-like tool call/result rendering.
+
+### Performance
+
+- **Identity-gated expanded body** — the sub-agent renderer
+  (`src/sub-agents/render.ts`) now keys its expanded-body cache on the identity
+  of the emitted `details` object instead of hashing the up-to-8KB output
+  preview and `JSON.stringify`-ing the tool history on every 100ms spinner
+  tick. Spinner-only ticks reuse the cached lines at zero cost; rebuilds happen
+  only when `progress-reporter` emits a new snapshot. The new gate also captures
+  footer fields (`model`, `usage.cost`) the old hash omitted, so it is strictly
+  more correct.
+- **Immutable progress snapshots** — `buildDetails()` in
+  `src/sub-agents/progress-reporter.ts` clones tool-history entries (not just
+  the array) so emitted snapshots cannot be mutated by the later in-place
+  `endMs` fill, making the identity cache contract sound.
+- **Throttled progress emits** — text/thinking deltas are coalesced to at most
+  one update per 300ms (`throttledEmit`), with a pending-emit flush on finish
+  and throttle cancellation on discrete state changes.
+- **Config cache** — `loadBlackbytesConfig()` (`src/config/loader.ts`) serves
+  parsed `settings.json` from a 5s TTL in-memory cache keyed by settings path,
+  avoiding re-read + re-parse on every tool result / provider request. Disabled
+  under `NODE_ENV=test`; `clearConfigCache()` exposed for tests.
+- **CID memoization** — `computeCID()` (`src/utils/cid.ts`) caches results for
+  identical `lineNum:content` keys (bounded to 10,000 entries with oldest-first
+  eviction), avoiding recomputation for repeated lines in large reads.
+
+### Changed
+
+- **Lightweight tool rendering** — tool call/result renderers
+  (`call-render.ts`, `register-tool.ts`, `boxed-render.ts`, `bash.ts`,
+  `read-renderer.ts`) drop the heavy boxed frame in favour of compact,
+  Claude-like call/result lines, with title-cased sub-agent names and the
+  `self` shell so Pi does not double-wrap them.
+- **Collapsed tool activity** — the collapsed running sub-agent view surfaces
+  the last few nested tool calls as lightweight activity lines instead of
+  duplicating the active tool inside the metrics row.
+
+### Robustness
+
+- **Bounded pending-arg queues** — `progress-reporter` caps pending tool-arg
+  queues (`MAX_PENDING_TOOL_ARG_QUEUES` = 50, `MAX_PENDING_TOOL_ARGS_PER_TOOL`
+  = 20) with oldest-first eviction to prevent unbounded growth.
+
 ## 2.15.0 (2026-06-04) — Bounded Delegate Output
 
 Cap successful sub-agent output before it re-enters the parent context, with a

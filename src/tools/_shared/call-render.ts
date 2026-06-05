@@ -20,12 +20,16 @@ interface RenderCallContext {
   readonly hasResult?: boolean;
 }
 
-function titleFromIconName(icon: string, name: string): string {
-  return `${icon} ${name}`.trim();
+function titleFromIconName(_icon: string, name: string): string {
+  return name;
+}
+
+function titleCaseName(name: string): string {
+  return name.length === 0 ? name : `${name[0]!.toUpperCase()}${name.slice(1)}`;
 }
 
 /**
- * Build a renderCall function with a boxed prefix.
+ * Build a lightweight Claude-like renderCall function.
  * Returns a function matching Pi's renderCall(args, theme, context) signature.
  */
 export function makeRenderCall(
@@ -41,8 +45,6 @@ export function makeRenderCall(
     const safeArgs = args && typeof args === "object" ? (args as Record<string, unknown>) : {};
     const detail = formatArgs(safeArgs, theme);
     if (isBoxedToolCallsEnabled()) {
-      // Close bottom when no result yet (complete box); open once result arrives
-      // so the result box connects seamlessly via seam-top divider.
       return renderCompactBoxedToolCall(theme, titleFromIconName(icon, name), detail, {
         isError: context?.isError,
         isPartial: context?.isPartial,
@@ -69,9 +71,7 @@ export function makeSubAgentRenderCall(icon: string, name: string, primaryKey: s
     const val = str(safeArgs[primaryKey]);
     const detail = val ? theme.fg("accent", `"${truncate(val, 60)}"`) : "";
     if (isBoxedToolCallsEnabled()) {
-      // Close bottom when no result yet (complete box); open once result arrives
-      // so the result box connects seamlessly via seam-top divider.
-      return renderCompactBoxedToolCall(theme, titleFromIconName(icon, name), detail, {
+      return renderCompactBoxedToolCall(theme, titleCaseName(name), detail, {
         isError: context?.isError,
         isPartial: context?.isPartial,
         closeBottom: !context?.hasResult,
@@ -79,7 +79,7 @@ export function makeSubAgentRenderCall(icon: string, name: string, primaryKey: s
       });
     }
     return new Text(
-      [theme.fg("toolTitle", titleFromIconName(icon, name)), detail].filter(Boolean).join(" "),
+      [theme.fg("toolTitle", titleCaseName(name)), detail].filter(Boolean).join(" "),
       0,
       0,
     );

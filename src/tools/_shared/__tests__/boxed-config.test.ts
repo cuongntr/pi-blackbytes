@@ -26,7 +26,7 @@ describe("boxed tool call config", () => {
     assert.equal(isBoxedToolCallsEnabled(), true);
   });
 
-  it("renders boxed calls while enabled", () => {
+  it("renders lightweight calls while enabled", () => {
     setBoxedToolCallsEnabled(true);
     const renderCall = makeRenderCall("⌕", "glob", (args, t) =>
       t.fg("accent", String(args.pattern)),
@@ -34,9 +34,10 @@ describe("boxed tool call config", () => {
 
     const out = render(renderCall({ pattern: "**/*.ts" }, theme()));
 
-    assert.match(out, /┌/);
-    assert.match(out, /➔ ⌕ glob/);
+    assert.match(out, /«success:⏺»/);
+    assert.match(out, /glob/);
     assert.match(out, /\*\*\/\*\.ts/);
+    assert.doesNotMatch(out, /┌|└|│/);
   });
 
   it("reflects partial and error status from render context", () => {
@@ -50,9 +51,10 @@ describe("boxed tool call config", () => {
     );
     const failed = render(renderCall({ pattern: "**/*.ts" }, theme(), { isError: true }));
 
+    assert.match(partial, /«accent:⏺»/);
     assert.match(partial, /«accent:…»/);
-    // closeBottom is true — call box renders as a complete box.
-    assert.match(partial, /└/);
+    assert.doesNotMatch(partial, /┌|└|│/);
+    assert.match(failed, /«error:⏺»/);
     assert.match(failed, /«error:✗»/);
   });
 
@@ -64,8 +66,8 @@ describe("boxed tool call config", () => {
 
     const out = render(renderCall({ pattern: "**/*.ts" }, theme()));
 
-    assert.doesNotMatch(out, /┌/);
-    assert.match(out, /⌕ glob/);
+    assert.doesNotMatch(out, /┌|└|│|⏺/);
+    assert.match(out, /glob/);
     assert.match(out, /\*\*\/\*\.ts/);
   });
 });

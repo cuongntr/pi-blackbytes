@@ -4,13 +4,11 @@ import { Text } from "@earendil-works/pi-tui";
 import type { BoxedUiConfig } from "../../config/schema.js";
 import {
   formatBoxedFooter,
-  renderBoxedToolCall,
   renderBoxedToolResult,
+  renderCompactBoxedToolCall,
 } from "../_shared/boxed-render.js";
 import { highlightShellLine } from "../_shared/shell-highlight.js";
 import { expandedPreview, getTextOutput, tailPreview } from "../_shared/tool-output.js";
-
-const MAX_COMMAND_LINES = 6;
 
 interface BashTool {
   readonly execute: (
@@ -47,9 +45,8 @@ export function registerBashWrapper(
 
   pi.registerTool({
     ...base,
-    // Our renderers draw a complete box (borders, padding, seam). Use the
-    // self shell so Pi does not wrap that box in its default Box shell, which
-    // adds an outer background band and extra padding around our frame.
+    // Use the self shell so Pi does not wrap the lightweight call/result lines
+    // in its default built-in tool wrapper.
     renderShell: "self",
     execute: async (
       toolCallId: string,
@@ -66,16 +63,13 @@ export function registerBashWrapper(
     ) {
       const command = String(args?.command ?? "");
       const commandLines = command.split("\n");
-      const shown = commandLines.slice(0, MAX_COMMAND_LINES).map((line, index) => {
-        const prompt = theme.fg("muted", index === 0 ? "$ " : "> ");
-        return `${prompt}${highlightShellLine(line, theme)}`;
-      });
-      if (commandLines.length > MAX_COMMAND_LINES) {
-        shown.push(theme.fg("muted", `… ${commandLines.length - MAX_COMMAND_LINES} more lines`));
+      const detailParts = [highlightShellLine(commandLines[0] ?? "", theme)];
+      if (commandLines.length > 1) {
+        const hiddenLineCount = commandLines.length - 1;
+        const noun = hiddenLineCount === 1 ? "line" : "lines";
+        detailParts.push(theme.fg("muted", `… ${hiddenLineCount} more ${noun}`));
       }
-      // Close bottom when no result yet (complete box); open once result arrives
-      // so the result box connects seamlessly via seam-top divider.
-      return renderBoxedToolCall(theme, "bash", shown, {
+      return renderCompactBoxedToolCall(theme, "Bash", detailParts.join(theme.fg("muted", " ")), {
         isError: context?.isError,
         isPartial: context?.isPartial,
         closeBottom: !context?.hasResult,

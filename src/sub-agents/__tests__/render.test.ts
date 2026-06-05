@@ -161,7 +161,7 @@ describe("rebuildSubAgentResultComponent — header", () => {
 });
 
 describe("rebuildSubAgentResultComponent — current/last tool display", () => {
-  it("shows active tool split-colored (icon accent / name toolTitle / arg muted)", () => {
+  it("shows active nested tool as lightweight activity lines", () => {
     const out = renderToText({
       details: {
         agent: "explore",
@@ -171,15 +171,16 @@ describe("rebuildSubAgentResultComponent — current/last tool display", () => {
       },
       isPartial: true,
     });
-    assert.ok(out.includes("«accent:🔧»"), `expected accent 🔧 icon, got: ${out}`);
     assert.ok(
       out.includes("«toolTitle:ast_search»"),
       `expected tool name in toolTitle, got: ${out}`,
     );
     assert.ok(out.includes("«muted:def $FUNC»"), `expected arg in muted, got: ${out}`);
+    assert.ok(out.includes("«muted:Running…»"), `expected running line, got: ${out}`);
+    assert.ok(!out.includes("🔧"), "must not show the old dense active-tool icon");
   });
 
-  it("shows last completed tool with ◷ prefix in muted color when running between calls", () => {
+  it("shows last completed tool as a lightweight activity line", () => {
     const out = renderToText({
       details: {
         agent: "explore",
@@ -189,8 +190,11 @@ describe("rebuildSubAgentResultComponent — current/last tool display", () => {
       },
       isPartial: true,
     });
-    assert.ok(out.includes("«muted:◷ read src/index.ts»"), `got: ${out}`);
+    assert.ok(out.includes("«toolTitle:Read»"), `got: ${out}`);
+    assert.ok(out.includes("«muted:src/index.ts»"), `got: ${out}`);
+    assert.ok(out.includes("«muted:100ms»"), `got: ${out}`);
     assert.ok(!out.includes("🔧"), "must not show 🔧 when currentTool is undefined");
+    assert.ok(!out.includes("◷"), "must not show the old between-calls glyph");
   });
 
   it("shows nothing for tool when currentTool undefined AND no history", () => {
@@ -411,23 +415,68 @@ describe("rebuildSubAgentResultComponent — expanded footer aggregate", () => {
 });
 
 describe("rebuildSubAgentResultComponent — expanded body cache", () => {
-  it("refreshes the timeline when an existing history entry closes in place", () => {
+  it("refreshes the timeline when a new details snapshot closes a history entry", () => {
+    // Mirrors production: progress-reporter emits a fresh, immutable details
+    // object (with cloned history entries) on each change. The renderer's
+    // expanded-body cache is keyed on details identity, so a closed entry must
+    // arrive as a NEW details object — never as an in-place mutation of the
+    // already-emitted snapshot.
     const component = new SubAgentResultComponent();
     const state = {
       startedAt: undefined as number | undefined,
       endedAt: undefined as number | undefined,
       interval: undefined as NodeJS.Timeout | undefined,
     };
-    const history = [{ name: "read", summary: "src/index.ts", startMs: 100 }] as Array<{
-      name: string;
-      summary?: string;
-      startMs: number;
-      endMs?: number;
-    }>;
+    const runningDetails: SubAgentRenderDetails = {
+      agent: "explore",
+      status: "running",
+      toolHistory: [{ name: "read", summary: "src/index.ts", startMs: 100 }],
+      outputChars: 0,
+    };
+    const options = { expanded: true, isPartial: true };
+    const theme = makeStubTheme();
+
+    rebuildSubAgentResultComponent(
+      component,
+      { content: [], details: runningDetails },
+      options,
+      state,
+      theme,
+    );
+    assert.match(component.render(200).join("\n"), /running…/);
+
+    const closedDetails: SubAgentRenderDetails = {
+      ...runningDetails,
+      toolHistory: [{ name: "read", summary: "src/index.ts", startMs: 100, endMs: 250 }],
+    };
+    rebuildSubAgentResultComponent(
+      component,
+      { content: [], details: closedDetails },
+      options,
+      state,
+      theme,
+    );
+
+    const out = component.render(200).join("\n");
+    assert.doesNotMatch(out, /running…/);
+    assert.match(out, /150ms/);
+  });
+
+  it("reuses the cached expanded body when the same details object re-renders (spinner tick)", () => {
+    // The 100ms spinner tick re-invokes the renderer with the SAME details
+    // reference. The expanded body must not be rebuilt: identity gating is what
+    // avoids re-hashing the 8KB preview + serializing tool history every tick.
+    const component = new SubAgentResultComponent();
+    const state = {
+      startedAt: undefined as number | undefined,
+      endedAt: undefined as number | undefined,
+      interval: undefined as NodeJS.Timeout | undefined,
+      cachedExpandedLines: undefined as string[] | undefined,
+    };
     const details: SubAgentRenderDetails = {
       agent: "explore",
       status: "running",
-      toolHistory: history,
+      toolHistory: [{ name: "read", summary: "src/index.ts", startMs: 100 }],
       outputChars: 0,
     };
     const result = { content: [], details };
@@ -435,18 +484,54 @@ describe("rebuildSubAgentResultComponent — expanded body cache", () => {
     const theme = makeStubTheme();
 
     rebuildSubAgentResultComponent(component, result, options, state, theme);
-    assert.match(component.render(200).join("\n"), /running…/);
+    const firstLines = state.cachedExpandedLines;
+    assert.ok(firstLines, "first render must populate the expanded cache");
 
-    history[0]!.endMs = 250;
+    // Re-render with the identical details reference (spinner tick).
     rebuildSubAgentResultComponent(component, result, options, state, theme);
+    assert.strictEqual(
+      state.cachedExpandedLines,
+      firstLines,
+      "same details reference must reuse the cached lines array (no rebuild)",
+    );
+  });
+
+  it("refreshes expanded output for small preview deltas", () => {
+    const component = new SubAgentResultComponent();
+    const state = {
+      startedAt: undefined as number | undefined,
+      endedAt: undefined as number | undefined,
+      interval: undefined as NodeJS.Timeout | undefined,
+    };
+    const details: SubAgentRenderDetails = {
+      agent: "explore",
+      status: "running",
+      outputChars: 0,
+      outputPreview: "",
+    };
+    const result = { content: [], details };
+    const options = { expanded: true, isPartial: true };
+    const theme = makeStubTheme();
+
+    rebuildSubAgentResultComponent(component, result, options, state, theme);
+    assert.match(component.render(200).join("\n"), /no output captured yet/);
+
+    const updated = { ...details, outputChars: 2, outputPreview: "ok" };
+    rebuildSubAgentResultComponent(
+      component,
+      { content: [], details: updated },
+      options,
+      state,
+      theme,
+    );
 
     const out = component.render(200).join("\n");
-    assert.doesNotMatch(out, /running…/);
-    assert.match(out, /150ms/);
+    assert.doesNotMatch(out, /no output captured yet/);
+    assert.match(out, /ok/);
   });
 });
 
-describe("buildSubAgentRenderResult — boxed frame", () => {
+describe("buildSubAgentRenderResult — lightweight result", () => {
   function render(isPartial: boolean): string {
     const renderResult = buildSubAgentRenderResult();
     const state = { startedAt: undefined, endedAt: undefined, interval: undefined };
@@ -463,21 +548,19 @@ describe("buildSubAgentRenderResult — boxed frame", () => {
     return component.render(80).join("\n");
   }
 
-  it("wraps the live result in a seam-top, pending-tinted box when boxed", () => {
+  it("wraps the live result in lightweight output-marker lines", () => {
     const out = render(true);
-    // Seam-top: no top border ┌, but a closing border └ and a pending background.
-    assert.doesNotMatch(out, /┌/);
-    assert.match(out, /└/);
-    assert.match(out, /«bg:toolPendingBg:/);
-    // In seam context (boxed), agent identity is de-duplicated — the call
-    // box above already shows it. Only metrics appear in the result box.
+    assert.match(out, /⎿/);
+    assert.doesNotMatch(out, /┌|└|│|bg:toolPendingBg/);
+    // In seam context, agent identity is de-duplicated — the call line above
+    // already shows it. Only metrics appear in the result lines.
     assert.doesNotMatch(out, /explore/);
     assert.match(out, /ctrl\+o to expand/);
   });
 
-  it("uses success background after completion", () => {
+  it("does not paint completion backgrounds", () => {
     const out = render(false);
-    assert.match(out, /«bg:toolSuccessBg:/);
-    assert.match(out, /└/);
+    assert.match(out, /⎿/);
+    assert.doesNotMatch(out, /┌|└|│|bg:toolSuccessBg/);
   });
 });

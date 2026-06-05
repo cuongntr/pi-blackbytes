@@ -49,6 +49,8 @@ type AgentToolUpdate = (update: {
 const MAX_PROGRESS_PREVIEW_CHARS = 8_192;
 const MAX_TOOL_HISTORY = 100;
 const MAX_TOOL_ARG_SUMMARY = 50;
+const MAX_PENDING_TOOL_ARG_QUEUES = 50;
+const MAX_PENDING_TOOL_ARGS_PER_TOOL = 20;
 const TRUNCATION_MARKER = "\n[... truncated ...]\n";
 
 function isAgentToolUpdate(value: unknown): value is AgentToolUpdate {
@@ -112,6 +114,11 @@ export function createProgressReporter(opts: ProgressReporterOptions): ProgressR
   let usage: SubAgentProgressUsage | undefined;
   let onUpdate: AgentToolUpdate | undefined = onUpdateRaw;
   let lastDetails: SubAgentProgressDetails | undefined;
+  // Throttle: avoid flooding the host UI with re-renders on every streaming token.
+  // Only emit at most once per THROTTLE_MS for text/thinking deltas.
+  const THROTTLE_MS = 300;
+  let lastEmitAt = 0;
+  let pendingEmitTimer: ReturnType<typeof setTimeout> | undefined;
 
   const safeUpdate = (payload: {
     content: Array<{ type: "text"; text: string }>;
@@ -147,7 +154,12 @@ export function createProgressReporter(opts: ProgressReporterOptions): ProgressR
       attemptedModels,
       currentTool,
       toolCallCount,
-      toolHistory: toolHistory.length > 0 ? [...toolHistory] : [],
+      // Clone entries (not just the array) so each emitted details snapshot is
+      // immutable: history entries are mutated in place later (endMs is filled
+      // on tool_execution_end), and the renderer now uses details-object
+      // identity as its expanded-body cache key. A shallow array spread would
+      // let those later mutations leak into an already-emitted snapshot.
+      toolHistory: toolHistory.length > 0 ? toolHistory.map((e) => ({ ...e })) : [],
       usage,
     };
   };
@@ -165,6 +177,42 @@ export function createProgressReporter(opts: ProgressReporterOptions): ProgressR
   const appendDelta = (delta: string) => {
     outputChars += delta.length;
     rawPreview = appendBoundedRaw(rawPreview, delta);
+  };
+
+  const throttledEmit = () => {
+    const now = Date.now();
+    const elapsed = now - lastEmitAt;
+    if (elapsed >= THROTTLE_MS) {
+      lastEmitAt = now;
+      emit("running");
+    } else if (!pendingEmitTimer) {
+      pendingEmitTimer = setTimeout(() => {
+        pendingEmitTimer = undefined;
+        lastEmitAt = Date.now();
+        emit("running");
+      }, THROTTLE_MS - elapsed);
+    }
+  };
+
+  const flushPendingEmit = () => {
+    if (pendingEmitTimer) {
+      clearTimeout(pendingEmitTimer);
+      pendingEmitTimer = undefined;
+      // Flush any pending delta emit that was throttled.
+      lastEmitAt = Date.now();
+      emit("running");
+    }
+  };
+
+  /** Cancel any pending throttled emit and sync lastEmitAt so the next
+   *  throttledEmit sees the direct emit. Called before non-delta emits
+   *  to prevent a stale timer from firing a redundant update. */
+  const cancelPendingThrottle = () => {
+    if (pendingEmitTimer) {
+      clearTimeout(pendingEmitTimer);
+      pendingEmitTimer = undefined;
+    }
+    lastEmitAt = Date.now();
   };
 
   const isStringRecord = (v: unknown): v is Record<string, unknown> => !!v && typeof v === "object";
@@ -216,12 +264,12 @@ export function createProgressReporter(opts: ProgressReporterOptions): ProgressR
           const ameType = ame.type;
           if (ameType === "text_delta" && typeof ame.delta === "string") {
             appendDelta(ame.delta);
-            changed = true;
+            throttledEmit();
           } else if (ameType === "thinking_delta" && typeof ame.delta === "string") {
             // Surface thinking deltas in the same preview so the UI shows
             // progress even before the assistant emits visible text.
             appendDelta(ame.delta);
-            changed = true;
+            throttledEmit();
           } else if (ameType === "toolcall_end" && isStringRecord(ame.toolCall)) {
             const tc = ame.toolCall as Record<string, unknown>;
             if (typeof tc.name === "string") {
@@ -232,7 +280,15 @@ export function createProgressReporter(opts: ProgressReporterOptions): ProgressR
                 const summary = summarizeToolArgs(args as Record<string, unknown>);
                 if (summary) {
                   const queue = pendingToolArgs.get(tc.name) ?? [];
+                  if (queue.length >= MAX_PENDING_TOOL_ARGS_PER_TOOL) queue.shift();
                   queue.push(summary);
+                  if (
+                    !pendingToolArgs.has(tc.name) &&
+                    pendingToolArgs.size >= MAX_PENDING_TOOL_ARG_QUEUES
+                  ) {
+                    const oldestToolName = pendingToolArgs.keys().next().value;
+                    if (oldestToolName !== undefined) pendingToolArgs.delete(oldestToolName);
+                  }
                   pendingToolArgs.set(tc.name, queue);
                 }
               }
@@ -309,7 +365,10 @@ export function createProgressReporter(opts: ProgressReporterOptions): ProgressR
         // tool_execution_update, extension_ui_request, etc. -> nothing to do.
         break;
     }
-    if (changed) emit("running");
+    if (changed) {
+      cancelPendingThrottle();
+      emit("running");
+    }
   };
 
   return {
@@ -321,8 +380,10 @@ export function createProgressReporter(opts: ProgressReporterOptions): ProgressR
     },
     handleEvent,
     finish(status: SubAgentProgressStatus, attemptedModels?: readonly string[]) {
+      flushPendingEmit();
       emit(status, attemptedModels);
     },
+
     getLastDetails(): SubAgentProgressDetails | undefined {
       return lastDetails;
     },

@@ -54,7 +54,13 @@ interface RenderState {
   // Caching: skip redundant rebuilds when only the spinner ticked
   lastDataHash?: string;
   cachedMetricsText?: string;
-  lastExpandedHash?: string;
+  // Expanded-body cache keyed on the *identity* of the emitted details object.
+  // progress-reporter.buildDetails() returns a fresh object only on real data
+  // change (throttled to 300ms); the 100ms spinner tick re-renders with the
+  // same reference, so a reference check is both cheaper and more correct than
+  // hashing the 8KB preview + JSON-stringifying the tool history every tick.
+  lastExpandedDetailsRef?: SubAgentRenderDetails;
+  lastExpandedIsPartial?: boolean;
   cachedExpandedLines?: string[];
 }
 
@@ -155,17 +161,26 @@ export function rebuildSubAgentResultComponent(
   if (state.cachedMetricsText) {
     component.addChild(new Text(state.cachedMetricsText, 0, 0));
   }
+  if (!options.expanded && status === "running") {
+    for (const line of buildCollapsedToolActivity(details, theme)) {
+      component.addChild(new Text(line, 0, 0));
+    }
+  }
 
-  // === EXPANDED BODY (cached — only rebuilt when data changes) ===
+  // === EXPANDED BODY (cached — only rebuilt when the emitted data changes) ===
+  // Gate on details object identity: the spinner tick re-renders with the same
+  // `details` reference, so we skip rebuilding (and skip the expensive preview
+  // hash + tool-history serialization) until progress-reporter emits a new
+  // snapshot. isPartial is folded in because it switches the body between the
+  // live preview and the final output text.
   if (options.expanded) {
-    const expandedHash = [
-      details.outputChars,
-      details.status,
-      details.outputPreview?.length,
-      toolHistoryRenderKey(details.toolHistory),
-    ].join("-");
-    if (expandedHash !== state.lastExpandedHash) {
-      state.lastExpandedHash = expandedHash;
+    const expandedDataChanged =
+      details !== state.lastExpandedDetailsRef ||
+      options.isPartial !== state.lastExpandedIsPartial ||
+      state.cachedExpandedLines === undefined;
+    if (expandedDataChanged) {
+      state.lastExpandedDetailsRef = details;
+      state.lastExpandedIsPartial = options.isPartial;
       state.cachedExpandedLines = buildExpandedBody(result, details, options, theme);
     }
     for (const line of state.cachedExpandedLines ?? []) {
@@ -190,28 +205,9 @@ function buildMetricsLine(
   if (typeof details.toolCallCount === "number" && details.toolCallCount > 0) {
     bits.push(theme.fg("muted", `${details.toolCallCount} calls`));
   }
-  if (status === "running" && !options.expanded) {
-    if (details.currentTool) {
-      const toolLabel = details.currentTool;
-      const currentEntry =
-        details.toolHistory && details.toolHistory.length > 0
-          ? details.toolHistory[details.toolHistory.length - 1]
-          : undefined;
-      const argHint =
-        currentEntry && currentEntry.endMs === undefined && currentEntry.summary
-          ? currentEntry.summary
-          : "";
-      const iconAndName = `${theme.fg("accent", "🔧")} ${theme.fg("toolTitle", toolLabel)}`;
-      const tail = argHint ? ` ${theme.fg("muted", argHint)}` : "";
-      bits.push(`${iconAndName}${tail}`);
-    } else if (details.toolHistory && details.toolHistory.length > 0) {
-      const last = details.toolHistory[details.toolHistory.length - 1];
-      if (last.endMs !== undefined) {
-        const hint = last.summary ? ` ${last.summary}` : "";
-        bits.push(theme.fg("muted", `◷ ${last.name}${hint}`));
-      }
-    }
-  }
+  // Collapsed running state renders recent nested tool calls in their own
+  // lightweight activity lines, so keep this metrics row focused on summary
+  // metadata instead of duplicating the active tool.
   if (typeof details.outputChars === "number" && details.outputChars > 0) {
     bits.push(theme.fg("muted", `${details.outputChars.toLocaleString("en-US")} chars`));
   }
@@ -232,6 +228,39 @@ function buildMetricsLine(
     bits.push(theme.fg("accent", `${key} to expand`));
   }
   return bits.length > 0 ? `  ${bits.join(theme.fg("muted", " · "))}` : "";
+}
+
+const COLLAPSED_ACTIVITY_LIMIT = 3;
+
+function displayNestedToolName(name: string): string {
+  if (name.includes("_") || name.length === 0) return name;
+  return `${name[0]!.toUpperCase()}${name.slice(1)}`;
+}
+
+function buildCollapsedToolActivity(details: SubAgentRenderDetails, theme: Theme): string[] {
+  const history = details.toolHistory ?? [];
+  if (history.length === 0) return [];
+
+  const displayEntries = history.slice(-COLLAPSED_ACTIVITY_LIMIT);
+  const skipped = history.length - displayEntries.length;
+  const lines: string[] = [];
+  for (const entry of displayEntries) {
+    const summary = entry.summary ? `(${theme.fg("muted", entry.summary)})` : "";
+    lines.push(`  ${theme.fg("toolTitle", displayNestedToolName(entry.name))}${summary}`);
+    lines.push(
+      entry.endMs === undefined
+        ? `  ${theme.fg("muted", "Running…")}`
+        : `  ${theme.fg("muted", formatDuration(entry.endMs - entry.startMs))}`,
+    );
+  }
+  if (skipped > 0) {
+    const key = keyText("app.tools.expand") || "ctrl+o";
+    const noun = skipped === 1 ? "tool use" : "tool uses";
+    lines.push(
+      `  ${theme.fg("muted", `… +${skipped} ${noun}`)} ${theme.fg("accent", `(${key} to expand)`)}`,
+    );
+  }
+  return lines;
 }
 
 /** Build expanded body sections: Tool Activity timeline + Output + Footer. */
@@ -296,15 +325,6 @@ function buildExpandedBody(
   }
 
   return lines;
-}
-
-function toolHistoryRenderKey(history?: readonly ToolHistoryEntry[]): string {
-  if (!history || history.length === 0) return "0";
-  const displayEntries =
-    history.length > MAX_DISPLAY_HISTORY ? history.slice(-MAX_DISPLAY_HISTORY) : history;
-  return JSON.stringify(
-    displayEntries.map((entry) => [entry.name, entry.startMs, entry.endMs ?? null, entry.summary]),
-  );
 }
 
 /**

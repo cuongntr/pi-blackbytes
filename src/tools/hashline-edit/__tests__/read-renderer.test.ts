@@ -77,7 +77,7 @@ afterEach(() => {
 });
 
 describe("read renderer compact mode", () => {
-  it("collapsed result renders as a single self-shell line without file contents", () => {
+  it("collapsed result renders as lightweight call/result lines without file contents", () => {
     const tool = registerReadTool({ display: "compact" });
     assert.equal(tool.renderShell, "self");
     assert.equal(render(tool.renderCall?.({ path: "src/a.ts" }, theme()) ?? ""), "");
@@ -91,8 +91,9 @@ describe("read renderer compact mode", () => {
       ),
     );
 
-    assert.equal(out.split("\n").length, 1);
-    assert.ok(out.startsWith("  «muted:➜» "));
+    assert.equal(out.split("\n").length, 2);
+    assert.ok(out.startsWith("«success:⏺» "));
+    assert.match(out, /⎿/);
     assert.match(out, /read/);
     assert.match(out, /src\/a\.ts/);
     assert.match(out, /1-2/);
@@ -118,6 +119,21 @@ describe("read renderer compact mode", () => {
     assert.doesNotMatch(out, /:0/);
   });
 
+  it("renders cwd itself as dot instead of an empty target", () => {
+    const out = render(
+      renderCompactReadResult(
+        { content: [{ type: "text", text: "hello" }] },
+        { expanded: false },
+        theme(),
+        { args: { path: "/tmp" } },
+        "/tmp",
+      ),
+    );
+
+    assert.match(out, /«accent:\.»/);
+    assert.doesNotMatch(out, /read\(«accent:»\)/);
+  });
+
   it("expanded result delegates to Pi's renderer after stripping anchors", () => {
     const tool = registerReadTool({
       display: "compact",
@@ -137,8 +153,9 @@ describe("read renderer compact mode", () => {
     assert.match(out, /world/);
     assert.doesNotMatch(out, /1#AB/);
     assert.doesNotMatch(out, /2#CD/);
-    // Boxed when boxed mode is enabled
-    assert.match(out, /┌|└|│/);
+    // Lightweight when custom rendering is enabled
+    assert.match(out, /⎿/);
+    assert.doesNotMatch(out, /┌|└|│/);
     // Header with file path and line count
     assert.match(out, /read/);
     assert.match(out, /src\/a\.ts/);
@@ -161,8 +178,9 @@ describe("read renderer compact mode", () => {
 
     assert.match(out, /hello/);
     assert.doesNotMatch(out, /1#AB/);
-    // Boxed when boxed mode is enabled
-    assert.match(out, /┌|└|│/);
+    // Lightweight when custom rendering is enabled
+    assert.match(out, /⎿/);
+    assert.doesNotMatch(out, /┌|└|│/);
   });
 
   it("delegated renderer also receives anchor-stripped details", () => {
@@ -185,8 +203,9 @@ describe("read renderer compact mode", () => {
 
     assert.match(out, /from details/);
     assert.doesNotMatch(out, /1#AB/);
-    // Boxed when boxed mode is enabled
-    assert.match(out, /┌|└|│/);
+    // Lightweight when custom rendering is enabled
+    assert.match(out, /⎿/);
+    assert.doesNotMatch(out, /┌|└|│/);
   });
 
   it("expanded result is unboxed when boxed mode is disabled", () => {

@@ -28,6 +28,7 @@ if (testFiles.length === 0) {
 const result = spawnSync(process.execPath, ["--import", "tsx", "--test", ...testFiles], {
   cwd: rootDir,
   stdio: "inherit",
+  env: { ...process.env, NODE_ENV: "test" },
 });
 
 if (result.error) {

@@ -14,11 +14,10 @@ export function registerTool(pi: ExtensionAPI, name: string, definition: any): v
     return;
   }
 
-  // When boxed rendering is on, our renderers draw a complete box (borders +
-  // padding). Use the self shell so Pi does not wrap that box in its default
-  // Box shell, which adds an outer background band and padding around our
-  // frame. Only applies to tools that provide custom rendering; in unboxed
-  // (rollback) mode the renderers return plain Text and need Pi's default shell.
+  // When lightweight custom rendering is on, use the self shell so Pi does not
+  // add its default tool wrapper around our Claude-like call/result lines.
+  // In unboxed rollback mode the renderers return plain Text and need Pi's
+  // default shell.
   const hasCustomRender =
     typeof definition.renderCall === "function" || typeof definition.renderResult === "function";
   const def =

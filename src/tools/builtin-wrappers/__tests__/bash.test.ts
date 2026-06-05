@@ -166,22 +166,21 @@ describe("registerBashWrapper", () => {
     assert.equal(factoryCalls, 1);
   });
 
-  it("renders highlighted multiline commands", () => {
+  it("renders highlighted commands in the shared lightweight style", () => {
     const tool = registerEnabledTool();
     assertRenderableTool(tool);
 
     const out = render(
       tool.renderCall({ command: "bun run test\n--watch" }, theme(), { isPartial: true }),
+      200,
     );
 
-    assert.match(out, /bash/);
-    assert.match(out, /\$ /);
-    assert.match(out, /> /);
+    assert.match(out, /«accent:⏺»/);
+    assert.match(out, /Bash/);
     assert.match(out, /«syntaxFunction:bun»/);
-    assert.match(out, /«syntaxKeyword:--watch»/);
-    // closeBottom is true when no result yet — call box renders complete.
-    // closeBottom is false when hasResult — bottom opens for seamless seam.
-    assert.doesNotMatch(out, /Waiting for output/);
+    assert.match(out, /more line/);
+    assert.match(out, /«accent:…»/);
+    assert.doesNotMatch(out, /┌|└|│|\$ | > /);
 
     const withResult = render(
       tool.renderCall({ command: "bun run test\n--watch" }, theme(), {
@@ -189,7 +188,7 @@ describe("registerBashWrapper", () => {
         hasResult: true,
       }),
     );
-    assert.doesNotMatch(withResult, /└/);
+    assert.doesNotMatch(withResult, /┌|└|│/);
   });
 
   it("renders collapsed tail preview, error color, and footer", () => {

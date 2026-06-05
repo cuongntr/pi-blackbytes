@@ -25,61 +25,61 @@ function plainTheme(): any {
   };
 }
 
-describe("boxed-render", () => {
-  it("renders a compact boxed call that opens a frame and leaves the bottom open", () => {
+describe("lightweight tool renderer", () => {
+  it("renders a compact Claude-like call without borders", () => {
     const out = renderCompactBoxedToolCall(theme(), "glob", "pattern **/*.ts")
       .render(80)
       .join("\n");
-    assert.match(out, /┌/);
-    assert.match(out, /➔ glob/);
+    assert.match(out, /«success:⏺»/);
+    assert.match(out, /glob/);
     assert.match(out, /pattern/);
-    // Bottom stays open: the seam-top result box draws the closing border.
-    assert.doesNotMatch(out, /└/);
+    assert.doesNotMatch(out, /┌|└|│/);
   });
 
-  it("renders multiline boxed calls and leaves the bottom open for the result box", () => {
+  it("renders multiline calls as a lead line plus indented details", () => {
     const out = renderBoxedToolCall(theme(), "bash", ["$ bun run test", "> --watch"], {
       isPartial: true,
     })
       .render(60)
       .join("\n");
+    assert.match(out, /«accent:⏺»/);
+    assert.match(out, /bash/);
     assert.match(out, /bun run test/);
     assert.match(out, /«accent:…»/);
-    // Call box no longer closes itself: the result box draws the seam + bottom.
-    assert.doesNotMatch(out, /└/);
+    assert.doesNotMatch(out, /┌|└|│/);
   });
 
-  it("renders a seam-top result that continues the call box without a top border", () => {
+  it("renders results with a Claude-like output marker", () => {
     const out = renderBoxedToolResult(theme(), "output", {
       seamTop: true,
       footerLines: ["footer"],
     })
       .render(50)
       .join("\n");
-    // Seam result opens with a divider row, not a ┌ top border, and closes with └.
-    assert.doesNotMatch(out, /┌/);
+    assert.match(out, /⎿/);
     assert.match(out, /output/);
-    assert.match(out, /└/);
+    assert.match(out, /footer/);
+    assert.doesNotMatch(out, /┌|└|│/);
   });
 
-  it("renders boxed results with footer and error marker", () => {
+  it("renders lightweight results with footer and error marker", () => {
     const out = renderBoxedToolResult(theme(), "boom", {
       isError: true,
       footerLines: ["footer"],
     })
       .render(50)
       .join("\n");
+    assert.match(out, /⎿/);
     assert.match(out, /✗ Error/);
     assert.match(out, /boom/);
     assert.match(out, /footer/);
-    assert.ok(out.startsWith("«"), "result box opens with a styled top border");
-    assert.match(out, /┌/);
-    assert.match(out, /└/);
+    assert.doesNotMatch(out, /┌|└|│/);
   });
 
-  it("wraps content at narrow widths", () => {
+  it("keeps narrow output within the granted width", () => {
     const out = renderBoxedToolResult(theme(), "alpha beta gamma delta epsilon").render(20);
-    assert.ok(out.length > 3);
+    assert.ok(out.length > 0);
+    for (const line of out) assert.ok(visibleWidth(line) <= 20);
   });
 
   it("formats footer and expand hint", () => {
@@ -96,6 +96,52 @@ describe("boxed-render", () => {
     assert.deepEqual(second, first);
     const call = renderBoxedToolCall(theme(), "bash", ["$ ls", "> -la"]);
     assert.deepEqual(call.render(40), call.render(40));
+  });
+
+  it("propagates invalidate() to component bodies", () => {
+    let invalidations = 0;
+    const body = {
+      invalidate() {
+        invalidations++;
+      },
+      render() {
+        return ["body"];
+      },
+    };
+
+    const comp = renderBoxedToolResult(plainTheme(), body);
+    comp.render(40);
+    const before = invalidations;
+
+    comp.invalidate?.();
+
+    assert.equal(invalidations, before + 1);
+  });
+
+  it("tracks live cache freshness independently per width", () => {
+    const originalNow = Date.now;
+    let now = 1_000;
+    let renders = 0;
+    Date.now = () => now;
+    try {
+      const body = {
+        invalidate() {},
+        render(width: number) {
+          renders++;
+          return [`${width}:${renders}`];
+        },
+      };
+      const comp = renderBoxedToolResult(plainTheme(), body, { live: true });
+
+      assert.match(comp.render(80).join("\n"), /75:1/);
+      now += 50;
+      assert.match(comp.render(120).join("\n"), /115:2/);
+      now += 51;
+
+      assert.match(comp.render(80).join("\n"), /75:3/);
+    } finally {
+      Date.now = originalNow;
+    }
   });
 
   it("recomputes after invalidate() and never exceeds the granted width at narrow widths", () => {

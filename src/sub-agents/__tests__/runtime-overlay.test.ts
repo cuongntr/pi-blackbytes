@@ -115,4 +115,27 @@ describe("buildSubAgentRuntimeOverlay", () => {
     assert.match(out, new RegExp(todayIso));
     assert.match(out, new RegExp(`Current year is \\*\\*${todayYear}\\*\\*`));
   });
+
+  // Several persona prompts (librarian "Date Awareness", general "Execution
+  // Mindset") reference the overlay's date/tool sections with phrases like
+  // "see the runtime overlay above". Those references become dangling if the
+  // section headings are renamed or dropped, so assert the literal headings
+  // the personas depend on are always rendered (and survive ahead of the
+  // truncation tail).
+  it("always renders the standard section headings personas reference", () => {
+    const out = buildSubAgentRuntimeOverlay({
+      agentName: "librarian",
+      cwd: "/repo/foo",
+      finalizedTools: ["read", "web_search"],
+      now: fixedNow,
+    });
+    assert.ok(out.includes("### Current Date"), "missing '### Current Date' heading");
+    assert.ok(out.includes("### Working Environment"), "missing '### Working Environment' heading");
+    // The date section must precede the working-environment section so a
+    // truncated overlay still keeps the most-referenced (date) context.
+    assert.ok(
+      out.indexOf("### Current Date") < out.indexOf("### Working Environment"),
+      "Current Date section must come before Working Environment",
+    );
+  });
 });

@@ -66,68 +66,6 @@ describe("integration: before_provider_request", () => {
     delete process.env.PI_AGENT_DIR;
   });
 
-  it("copilot header: session_start with copilot_initiator_header=true registers provider", async () => {
-    // Arrange
-    const subDir = await makeTempDir();
-    try {
-      const settings = {
-        blackbytes: {
-          copilot_initiator_header: true,
-        },
-      };
-      await writeSettings(subDir, JSON.stringify(settings));
-      process.env.PI_AGENT_DIR = subDir;
-
-      const mock = createMockPi();
-      bootstrap(mock);
-
-      // Act: session_start triggers registerCopilotHeader
-      mock.emit("session_start", {});
-      await waitForEnabledSet();
-      await settle();
-
-      // Assert: provider was registered
-      const providerCall = mock.calls.registerProvider.find((c) => c.name === "github-copilot");
-      assert.ok(providerCall, "github-copilot provider should be registered");
-      const opts = providerCall!.opts as { headers?: Record<string, string> };
-      assert.equal(opts?.headers?.["X-Initiator"], "agent", "X-Initiator header should be 'agent'");
-    } finally {
-      await fs.rm(subDir, { recursive: true, force: true });
-    }
-  });
-
-  it("non-copilot config: copilot_initiator_header=false does not register provider", async () => {
-    // Arrange
-    const subDir = await makeTempDir();
-    try {
-      const settings = {
-        blackbytes: {
-          copilot_initiator_header: false,
-        },
-      };
-      await writeSettings(subDir, JSON.stringify(settings));
-      process.env.PI_AGENT_DIR = subDir;
-
-      const mock = createMockPi();
-      bootstrap(mock);
-
-      // Act
-      mock.emit("session_start", {});
-      await waitForEnabledSet();
-      await settle();
-
-      // Assert: github-copilot provider should NOT be registered
-      const providerCall = mock.calls.registerProvider.find((c) => c.name === "github-copilot");
-      assert.equal(
-        providerCall,
-        undefined,
-        "github-copilot provider should NOT be registered when copilot_initiator_header=false",
-      );
-    } finally {
-      await fs.rm(subDir, { recursive: true, force: true });
-    }
-  });
-
   it("error resilience: payload forwarded unchanged when handler encounters error (no model selected)", async () => {
     // Arrange: bootstrap but fire before_provider_request WITHOUT model_select
     // → handler only does system-prompt capture; payload is not mutated

@@ -15,7 +15,6 @@ export const BlackbytesConfigSchema = z
           .passthrough(),
       ])
       .default(true),
-    copilot_initiator_header: z.boolean().default(true),
     websearch: z
       .object({
         provider: z.enum(["exa", "tavily"]).default("exa"),

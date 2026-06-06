@@ -150,7 +150,6 @@ describe("integration: config loading — loadBlackbytesConfig()", () => {
           disabled_tools: ["glob"],
           disabled_sub_agents: ["oracle"],
           hashline_edit: false,
-          copilot_initiator_header: false,
         },
       }),
     );
@@ -160,7 +159,6 @@ describe("integration: config loading — loadBlackbytesConfig()", () => {
     assert.deepEqual(cfg.disabled_tools, ["glob"]);
     assert.deepEqual(cfg.disabled_sub_agents, ["oracle"]);
     assert.equal(cfg.hashline_edit, false);
-    assert.equal(cfg.copilot_initiator_header, false);
   });
 
   it("2. settings.json with no blackbytes block returns defaults without error", async () => {
@@ -171,7 +169,6 @@ describe("integration: config loading — loadBlackbytesConfig()", () => {
     assert.deepEqual(cfg.disabled_tools, []);
     assert.deepEqual(cfg.disabled_sub_agents, []);
     assert.equal(cfg.hashline_edit, true);
-    assert.equal(cfg.copilot_initiator_header, true);
   });
 
   it("3. missing settings.json — defaults used, no throw", async () => {

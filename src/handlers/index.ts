@@ -45,7 +45,6 @@ import { registerLookAtTool } from "../tools/look-at/register.js";
 import { registerWebsearchFetchTool } from "../tools/websearch/fetch.js";
 import { registerWebsearchSearchTool } from "../tools/websearch/search.js";
 import { injectPromptAugmentation } from "./before-agent-start.js";
-import { registerCopilotHeader } from "./copilot-header.js";
 import { type ToolResultEvent as LocalToolResultEvent, processToolResult } from "./tool-result.js";
 /** Minimal shape of Pi's model_select event (not re-exported from the top-level package export). */
 interface ModelSelectEvent {
@@ -99,8 +98,6 @@ export async function handleSessionStart(
       names: yamlDeclarations.map((d) => d.name),
     });
   }
-
-  registerCopilotHeader(pi, config);
 
   const boxedUi = getBoxedUiConfig(config);
   setBoxedToolCallsEnabled(boxedUi.boxed_tool_calls);

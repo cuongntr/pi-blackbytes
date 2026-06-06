@@ -10,7 +10,6 @@ describe("BlackbytesConfigSchema", () => {
       assert.deepEqual(result.value.disabled_tools, []);
       assert.deepEqual(result.value.disabled_sub_agents, []);
       assert.equal(result.value.hashline_edit, true);
-      assert.equal(result.value.copilot_initiator_header, true);
       assert.equal(result.value.websearch, undefined);
       assert.equal(result.value.context7, undefined);
       assert.equal(result.value.system_prompt_log, undefined);
@@ -40,7 +39,6 @@ describe("BlackbytesConfigSchema", () => {
       disabled_tools: ["tool1", "tool2"],
       disabled_sub_agents: ["explore", "oracle"],
       hashline_edit: false,
-      copilot_initiator_header: false,
       websearch: { provider: "exa", exa_api_key: "key123" },
       context7: { api_key: "c7key" },
       system_prompt_log: {

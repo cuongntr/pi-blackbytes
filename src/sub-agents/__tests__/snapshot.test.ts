@@ -28,7 +28,6 @@ const baseConfig: BlackbytesConfig = {
   disabled_tools: [],
   disabled_sub_agents: [],
   hashline_edit: true,
-  copilot_initiator_header: true,
 };
 
 describe("resolveAgentSnapshot", () => {

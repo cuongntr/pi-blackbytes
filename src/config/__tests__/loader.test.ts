@@ -42,11 +42,10 @@ async function loadWith(dir: string) {
 test("missing settings file returns defaults", async () => {
   await withTempSettings(null, async (dir) => {
     const config = await loadWith(dir);
-    // defaults: disabled_tools=[], disabled_sub_agents=[], hashline_edit=true, copilot_initiator_header=true
+    // defaults: disabled_tools=[], disabled_sub_agents=[], hashline_edit=true
     assert.deepEqual(config.disabled_tools, []);
     assert.deepEqual(config.disabled_sub_agents, []);
     assert.equal(config.hashline_edit, true);
-    assert.equal(config.copilot_initiator_header, true);
   });
 });
 
@@ -77,7 +76,6 @@ test("valid config returns parsed config", async () => {
     disabled_tools: ["tool1", "tool2"],
     disabled_sub_agents: ["explore"],
     hashline_edit: false,
-    copilot_initiator_header: false,
   };
   const settings = { blackbytes };
   await withTempSettings(JSON.stringify(settings), async (dir) => {
@@ -85,6 +83,5 @@ test("valid config returns parsed config", async () => {
     assert.deepEqual(config.disabled_tools, ["tool1", "tool2"]);
     assert.deepEqual(config.disabled_sub_agents, ["explore"]);
     assert.equal(config.hashline_edit, false);
-    assert.equal(config.copilot_initiator_header, false);
   });
 });

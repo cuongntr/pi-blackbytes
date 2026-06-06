@@ -6,33 +6,25 @@ import { formatApproxWords } from "./tool-output.js";
 const CALL_MARK = "⏺";
 const RESULT_MARK = "  ⎿  ";
 const RESULT_CONTINUATION = "     ";
-const DETAIL_PREFIX = "  ";
 
-export interface BoxStateOptions {
+export interface LightweightCallOptions {
   readonly isError?: boolean;
   readonly isPartial?: boolean;
-  // Retained for API compatibility with the previous boxed renderer. The
-  // lightweight renderer is borderless, so closeBottom has no visual effect.
-  readonly closeBottom?: boolean;
-  // Retained for API compatibility. Background fills are intentionally ignored
-  // in the lightweight renderer to keep tool output calm and readable.
-  readonly bgToken?: "toolSuccessBg" | "toolErrorBg" | "toolPendingBg";
 }
 
-export interface BoxedResultOptions extends BoxStateOptions {
+export interface LightweightResultOptions extends LightweightCallOptions {
   readonly footerLines?: readonly string[];
   readonly emptyText?: string;
-  readonly seamTop?: boolean;
   readonly live?: boolean;
 }
 
-export function boxWidth(width: number): number {
+function lineWidth(width: number): number {
   const finiteWidth = Number.isFinite(width) ? Math.floor(width) : 1;
   return Math.max(1, finiteWidth);
 }
 
-export function boxInnerWidth(width: number): number {
-  return Math.max(1, boxWidth(width) - visibleWidth(RESULT_MARK));
+export function innerWidth(width: number): number {
+  return Math.max(1, lineWidth(width) - visibleWidth(RESULT_MARK));
 }
 
 function componentFromBody(body: Component | readonly string[] | string): Component {
@@ -55,7 +47,7 @@ function cachedComponent(
       opts.onInvalidate?.();
     },
     render(width: number): string[] {
-      const renderedWidth = boxWidth(width);
+      const renderedWidth = lineWidth(width);
       const hit = cache.get(renderedWidth);
       const now = Date.now();
       if (hit) {
@@ -71,22 +63,22 @@ function cachedComponent(
   };
 }
 
-function compactStatus(theme: Theme, opts: BoxStateOptions): string {
+function compactStatus(theme: Theme, opts: LightweightCallOptions): string {
   if (opts.isError) return theme.fg("error", "✗");
   if (opts.isPartial) return theme.fg("accent", "…");
   return "";
 }
 
-function callMarkToken(opts: BoxStateOptions): "success" | "error" | "accent" {
+function callMarkToken(opts: LightweightCallOptions): "success" | "error" | "accent" {
   if (opts.isError) return "error";
   if (opts.isPartial) return "accent";
   return "success";
 }
 
-export function formatBoxedTitle(
+export function formatLightweightTitle(
   theme: Theme,
   toolName: string,
-  opts: BoxStateOptions = {},
+  opts: LightweightCallOptions = {},
 ): string {
   const status = compactStatus(theme, opts);
   const suffix = status ? ` ${status}` : "";
@@ -94,37 +86,24 @@ export function formatBoxedTitle(
   return `${mark} ${theme.fg("toolTitle", theme.bold(toolName))}${suffix}`;
 }
 
-export function renderBoxedToolCall(
-  theme: Theme,
-  toolName: string,
-  detailLines: readonly string[],
-  opts: BoxStateOptions = {},
-): Component {
-  return cachedComponent((width) => {
-    const lines = [truncateToWidth(formatBoxedTitle(theme, toolName, opts), width, "…")];
-    for (const detail of detailLines) {
-      lines.push(truncateToWidth(`${DETAIL_PREFIX}${detail}`, width, "…"));
-    }
-    return lines;
-  });
-}
-
-export function renderCompactBoxedToolCall(
+export function renderLightweightToolCall(
   theme: Theme,
   toolName: string,
   detailLine = "",
-  opts: BoxStateOptions = {},
+  opts: LightweightCallOptions = {},
 ): Component {
   return cachedComponent((width) => {
     const detail = detailLine ? `(${detailLine})` : "";
-    return [truncateToWidth(`${formatBoxedTitle(theme, toolName, opts)}${detail}`, width, "…")];
+    return [
+      truncateToWidth(`${formatLightweightTitle(theme, toolName, opts)}${detail}`, width, "…"),
+    ];
   });
 }
 
 function prefixBodyLines(
   theme: Theme,
   bodyLines: readonly string[],
-  opts: BoxedResultOptions,
+  opts: LightweightResultOptions,
 ): string[] {
   const contentLines =
     bodyLines.length > 0 ? [...bodyLines] : [theme.fg("muted", opts.emptyText ?? "(no output)")];
@@ -144,16 +123,16 @@ function prefixBodyLines(
   return lines;
 }
 
-export function renderBoxedToolResult(
+export function renderLightweightToolResult(
   theme: Theme,
   body: Component | readonly string[] | string,
-  opts: BoxedResultOptions = {},
+  opts: LightweightResultOptions = {},
 ): Component {
   const bodyComponent = componentFromBody(body);
   return cachedComponent(
     (width) => {
       bodyComponent.invalidate?.();
-      const bodyLines = bodyComponent.render(boxInnerWidth(width));
+      const bodyLines = bodyComponent.render(innerWidth(width));
       return prefixBodyLines(theme, bodyLines, opts).map((line) =>
         truncateToWidth(line, width, "…"),
       );
@@ -162,12 +141,12 @@ export function renderBoxedToolResult(
   );
 }
 
-export function boxedExpandHint(theme: Theme): string {
+export function lightweightExpandHint(theme: Theme): string {
   const key = keyText("app.tools.expand") || "ctrl+o";
   return theme.fg("accent", `${key} to expand`);
 }
 
-export function formatBoxedFooter(
+export function formatLightweightFooter(
   theme: Theme,
   text: string,
   extraParts: readonly string[] = [],

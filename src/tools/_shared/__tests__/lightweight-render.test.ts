@@ -2,12 +2,11 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { visibleWidth } from "@earendil-works/pi-tui";
 import {
-  boxedExpandHint,
-  formatBoxedFooter,
-  renderBoxedToolCall,
-  renderBoxedToolResult,
-  renderCompactBoxedToolCall,
-} from "../boxed-render.js";
+  formatLightweightFooter,
+  lightweightExpandHint,
+  renderLightweightToolCall,
+  renderLightweightToolResult,
+} from "../lightweight-render.js";
 
 function theme(): any {
   return {
@@ -27,17 +26,15 @@ function plainTheme(): any {
 
 describe("lightweight tool renderer", () => {
   it("renders a compact Claude-like call without borders", () => {
-    const out = renderCompactBoxedToolCall(theme(), "glob", "pattern **/*.ts")
-      .render(80)
-      .join("\n");
+    const out = renderLightweightToolCall(theme(), "glob", "pattern **/*.ts").render(80).join("\n");
     assert.match(out, /«success:⏺»/);
     assert.match(out, /glob/);
     assert.match(out, /pattern/);
     assert.doesNotMatch(out, /┌|└|│/);
   });
 
-  it("renders multiline calls as a lead line plus indented details", () => {
-    const out = renderBoxedToolCall(theme(), "bash", ["$ bun run test", "> --watch"], {
+  it("marks partial calls with the accent state glyph", () => {
+    const out = renderLightweightToolCall(theme(), "bash", "bun run test", {
       isPartial: true,
     })
       .render(60)
@@ -50,8 +47,7 @@ describe("lightweight tool renderer", () => {
   });
 
   it("renders results with a Claude-like output marker", () => {
-    const out = renderBoxedToolResult(theme(), "output", {
-      seamTop: true,
+    const out = renderLightweightToolResult(theme(), "output", {
       footerLines: ["footer"],
     })
       .render(50)
@@ -63,7 +59,7 @@ describe("lightweight tool renderer", () => {
   });
 
   it("renders lightweight results with footer and error marker", () => {
-    const out = renderBoxedToolResult(theme(), "boom", {
+    const out = renderLightweightToolResult(theme(), "boom", {
       isError: true,
       footerLines: ["footer"],
     })
@@ -77,24 +73,24 @@ describe("lightweight tool renderer", () => {
   });
 
   it("keeps narrow output within the granted width", () => {
-    const out = renderBoxedToolResult(theme(), "alpha beta gamma delta epsilon").render(20);
+    const out = renderLightweightToolResult(theme(), "alpha beta gamma delta epsilon").render(20);
     assert.ok(out.length > 0);
     for (const line of out) assert.ok(visibleWidth(line) <= 20);
   });
 
   it("formats footer and expand hint", () => {
-    assert.match(formatBoxedFooter(theme(), "hello world", ["◷ 1ms"]), /~2 words/);
-    assert.match(boxedExpandHint(theme()), /expand/);
+    assert.match(formatLightweightFooter(theme(), "hello world", ["◷ 1ms"]), /~2 words/);
+    assert.match(lightweightExpandHint(theme()), /expand/);
   });
 
   it("renders identical output across repeated renders at the same width", () => {
-    const comp = renderBoxedToolResult(theme(), "alpha beta gamma delta epsilon", {
+    const comp = renderLightweightToolResult(theme(), "alpha beta gamma delta epsilon", {
       footerLines: ["footer"],
     });
     const first = comp.render(40);
     const second = comp.render(40);
     assert.deepEqual(second, first);
-    const call = renderBoxedToolCall(theme(), "bash", ["$ ls", "> -la"]);
+    const call = renderLightweightToolCall(theme(), "bash", "ls -la");
     assert.deepEqual(call.render(40), call.render(40));
   });
 
@@ -109,7 +105,7 @@ describe("lightweight tool renderer", () => {
       },
     };
 
-    const comp = renderBoxedToolResult(plainTheme(), body);
+    const comp = renderLightweightToolResult(plainTheme(), body);
     comp.render(40);
     const before = invalidations;
 
@@ -131,7 +127,7 @@ describe("lightweight tool renderer", () => {
           return [`${width}:${renders}`];
         },
       };
-      const comp = renderBoxedToolResult(plainTheme(), body, { live: true });
+      const comp = renderLightweightToolResult(plainTheme(), body, { live: true });
 
       assert.match(comp.render(80).join("\n"), /75:1/);
       now += 50;
@@ -145,15 +141,13 @@ describe("lightweight tool renderer", () => {
   });
 
   it("recomputes after invalidate() and never exceeds the granted width at narrow widths", () => {
-    const comp = renderBoxedToolResult(theme(), "alpha beta gamma");
+    const comp = renderLightweightToolResult(theme(), "alpha beta gamma");
     const before = comp.render(40);
     comp.invalidate();
     assert.deepEqual(comp.render(40), before);
 
     for (let width = 1; width < 12; width++) {
-      const narrow = renderBoxedToolCall(plainTheme(), "x", ["detail"], {
-        bgToken: "toolPendingBg",
-      }).render(width);
+      const narrow = renderLightweightToolCall(plainTheme(), "x", "detail").render(width);
       assert.ok(narrow.length > 0);
       for (const line of narrow) {
         assert.ok(

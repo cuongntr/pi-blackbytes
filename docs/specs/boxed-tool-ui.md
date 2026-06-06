@@ -30,7 +30,7 @@ Measurable acceptance:
 - Blackbytes extension tools render boxed call/result panels in tests.
 - The built-in `bash` wrapper does not register unless `boxed_builtin_tools` is enabled; the built-in `read` renderer remains active and strips anchors from display.
 - `bash` collapsed result processes only tail-preview-sized output, not full split of large output.
-- `bun run lint && bun run build && bun run test` passes.
+- `bun run check` passes.
 - Package remains under the existing `<500KB` gzipped budget.
 
 ## 3. Personas / Users
@@ -74,6 +74,7 @@ Acceptance criteria:
   - `boxed_max_preview_lines?: number` default `5`
   - `boxed_max_expanded_lines?: number` default `200`
   - `boxed_dim_output?: boolean` default `false`
+  - `read_tool_display?: "compact" | "preview"` default `"compact"`
 - The built-in `bash` wrapper is registered only when `boxed_builtin_tools` is true.
 - If disabled, Pi built-in tool behavior is untouched except the existing hashline read-renderer behavior.
 - Schema remains passthrough for unknown keys.
@@ -192,6 +193,7 @@ ui: z.object({
   boxed_max_preview_lines: z.number().int().min(0).max(1000).optional(),
   boxed_max_expanded_lines: z.number().int().min(0).max(5000).optional(),
   boxed_dim_output: z.boolean().optional(),
+  read_tool_display: z.enum(["compact", "preview"]).optional(),
 }).optional()
 ```
 
@@ -204,6 +206,7 @@ const DEFAULT_BOXED_UI = {
   boxed_max_preview_lines: 5,
   boxed_max_expanded_lines: 200,
   boxed_dim_output: false,
+  read_tool_display: "compact",
 };
 ```
 
@@ -221,7 +224,8 @@ Configuration contract:
       "boxed_builtin_tools": false,
       "boxed_max_preview_lines": 5,
       "boxed_max_expanded_lines": 200,
-      "boxed_dim_output": false
+      "boxed_dim_output": false,
+      "read_tool_display": "compact"
     }
   }
 }
@@ -344,7 +348,7 @@ Tests:
   - unavailable factory skips safely
 - Existing tool renderer tests updated for boxed output.
 
-Verification order per project: `bun run lint && bun run build && bun run test`.
+Full project verification: `bun run check`. Targeted iteration: `bun run lint && bun run typecheck && bun run build && bun run test`.
 
 ## 7. Phase 1 MVP Scope
 

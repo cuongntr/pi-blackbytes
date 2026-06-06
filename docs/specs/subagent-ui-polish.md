@@ -127,7 +127,7 @@ Screenshot before/after ở 1 width chuẩn (terminal ngồi làm việc thườ
 
 - Update `src/sub-agents/__tests__/render.test.ts` nếu có (hoặc tạo mới). Snapshot test 4 state: running / completed / failed / cancelled.
 - Update test trong `progress-reporter.test.ts` cho `summarizeToolArgs` mới (path basename, bash split).
-- Run `bun run lint && bun run build && bun run test`.
+- Run `bun run check`.
 
 ### Regression check
 
@@ -150,7 +150,7 @@ Screenshot before/after ở 1 width chuẩn (terminal ngồi làm việc thườ
 ## Done check
 
 - [x] T1, T2, T3 đều ship.
-- [x] `bun run lint && bun run build && bun run test` xanh (645/645 tests, 0 regression).
+- [x] `bun run check` xanh.
 - [ ] Manual verify 4 case ở trên (pending user-side UI inspection).
 - [ ] Screenshot before/after attach vào PR.
 - [ ] Plan này update status từ "Approved" → "Done", thêm link PR.

@@ -209,7 +209,7 @@ src/commands/blackbytes-status.ts
   └─ config redaction + optional Kiro provider summary
 ```
 
-The registration entry point mirrors the existing `registerCopilotHeader()` pattern but supports multiple account aliases.
+The registration entry point supports multiple account aliases instead of a single hardcoded provider registration.
 
 ### 9.3 Config / Data Model
 

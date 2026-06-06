@@ -11,15 +11,15 @@
 Cross-project review of the builtin sub-agent prompts (`explore`, `oracle`, `librarian`, `general`, `reviewer`) confirmed that pi's prompt engineering is already strong on **cost discipline, runtime-context freshness, and safety**. Four gaps remain:
 
 1. **Oracle prompt is missing two high-value reasoning guardrails** present in oc-blackbytes: explicit `long_context_handling` (anchor claims to specific files/symbols when input is large) and `high_risk_self_check` (re-scan for unstated assumptions before finalizing answers on architecture / security / performance). Both materially raise the quality ceiling for the exact questions Oracle is invoked for.
-2. **Oracle and General have no sub-agent prompt variant for a configured GPT-family nested model.** The parent Bytes overlay already has model-family variants, but nested sub-agents always receive the same persona body. For GPT-family models, Oracle/General should use a prose-first prompt shape with an explicit opener blacklist and less template pressure.
+2. **Builtin sub-agent prompts support configured GPT-family nested models.** The parent Bytes overlay has model-family variants, and nested sub-agents carry matching `systemPromptByFamily.gpt` bodies selected from the configured nested model.
 3. **General prompt hard-codes a tool-name list** ("Depending on session configuration, your tools may include: …") that can drift from the **runtime allowlist** assembled in `buildGeneralSafetyOverlay()`. The overlay is already authoritative, so the static list is redundant at best and misleading at worst.
-4. **Routing intent is duplicated across free-text descriptions and a hardcoded Bytes overlay matrix.** The tool description strings carry positive routing hints, strict gating, and cost warnings, while `src/system-prompt/bytes/overlay.ts` separately hardcodes a routing matrix. `/blackbytes-status` and future UI surfaces cannot display routing intent without parsing or duplicating prose.
+4. **Routing intent is typed metadata.** Tool descriptions carry concise operational constraints, while `SubAgentRoutingMetadata` supplies routing categories, cost, use/avoid hints, and key triggers for the Bytes overlay and `/blackbytes-status`.
 
-These are not new sub-agents and not new tools — they are surgical edits to existing prompts plus two optional declaration fields.
+This spec covers the existing builtin sub-agent prompt system and optional declaration metadata fields.
 
 ## 2. Non-Goals
 
-- No new sub-agent. No change to `allowedTools`, `mutability`, or `finalizeMode`.
+- The builtin sub-agent set, `allowedTools`, `mutability`, and `finalizeMode` remain unchanged.
 - No change to runner / nested CLI flags.
 - No required migration for user-defined YAML agents.
 - No user-defined YAML per-model prompt variants in this iteration; `systemPromptByFamily` is for builtin code declarations only.
@@ -27,7 +27,7 @@ These are not new sub-agents and not new tools — they are surgical edits to ex
 
 ## 3. Solution
 
-### 3.1 Oracle: add `long_context_handling` + `high_risk_self_check`
+### 3.1 Oracle: `long_context_handling` + `high_risk_self_check`
 
 Two short sections appended after the existing `## Scope Discipline` block in `src/sub-agents/oracle.ts`. Together ≤14 lines; they sit between Scope Discipline and Output Style. Content is paraphrased — not copied — from oc-blackbytes to match pi's Markdown-headings style and pi's existing `file://` link convention.
 
@@ -50,9 +50,9 @@ Before finalizing answers on architecture, security, or performance:
 - Confirm each Action-plan step is concrete and immediately executable.
 ```
 
-### 3.2 Per-model prompt variants (Oracle + General only)
+### 3.2 Per-model prompt variants
 
-Add an **optional** `systemPromptByFamily` field on `SubAgentDeclaration<T>`. Reuse the existing `ModelFamily` and `classifyModel()` from `src/shared/model-capability.ts`; do **not** create a second model-family type. The existing type includes `"kimi"`, and this work must not regress that support.
+`SubAgentDeclaration<T>` includes an optional `systemPromptByFamily` field. Prompt selection uses the existing `ModelFamily` and `classifyModel()` from `src/shared/model-capability.ts`; there is no second model-family type. The existing type includes `"kimi"`, and that support remains part of the contract.
 
 ```ts
 import type { ModelFamily } from "../shared/model-capability.js";
@@ -73,12 +73,13 @@ Resolution rules (centralized in `src/sub-agents/prompt-builder.ts`):
 5. `fallbackModels` do not affect prompt selection in this iteration. The prompt body is selected from the primary resolved model and reused for fallback attempts. This is acceptable because fallback is an error-recovery path and all prompt bodies remain compatible; revisit per metrics if fallback use becomes common.
 6. The `prependSystemPrompt` runtime overlay is **always** prepended after family resolution, unchanged.
 
-Only Oracle and General ship `gpt` variants in this iteration:
+All five builtin sub-agents carry `gpt` variants:
 
-- **Oracle GPT variant** — prose-first, explicit opener blacklist, no 6-point template by default ("Use a short paragraph for trivial questions; reserve the structured template for genuinely complex ones."). Same `Effort estimate` tag set. Same self-contained-final-message clause. ~50 lines.
-- **General GPT variant** — prose-first, same Plan-Sanity Check, same constraints, opener blacklist. ~40 lines.
-
-Explore, Librarian, Reviewer keep a single prompt — their outputs are already structured enough that family-specific tuning is not justified for this iteration. Revisit per metrics.
+- **Explore GPT variant** — outcome-first exploration with the same Tour Mode and citation guarantees.
+- **Oracle GPT variant** — prose-first reasoning with long-context anchoring, high-risk self-check, and explicit opener discipline.
+- **Librarian GPT variant** — compact research contract that preserves strict ALL-of gating, source triangulation, and citation requirements.
+- **General GPT variant** — implementation-focused prompt with the same Plan-Sanity Check, safety constraints, and verification discipline.
+- **Reviewer GPT variant** — severity-classified review contract preserving the literal `## Findings`, `### High`, and `## Verdict` headings.
 
 ### 3.3 General: drop the static tool list, defer to overlay
 
@@ -96,7 +97,7 @@ do not attempt tools that are not listed there.
 
 `buildGeneralSafetyOverlay()` already renders the finalized list. Remove the duplicated enumeration to eliminate drift risk (for example, when a tool is added, renamed, or disabled via `disabled_tools`).
 
-Add guard tests in `src/sub-agents/__tests__/general.test.ts`:
+Guard tests in `src/sub-agents/__tests__/general.test.ts`:
 
 - `generalDeclaration.systemPrompt` does not contain `Depending on session configuration`.
 - `generalDeclaration.systemPrompt` does not contain the removed static tool-list bullets.
@@ -104,12 +105,12 @@ Add guard tests in `src/sub-agents/__tests__/general.test.ts`:
 
 ### 3.4 Routing metadata as a typed field
 
-Add to `SubAgentDeclaration<T>`:
+`SubAgentDeclaration<T>` includes typed routing metadata:
 
 ```ts
 export interface SubAgentRoutingMetadata {
-  category: "exploration" | "advisor" | "specialist" | "executor" | "utility";
-  cost: "free" | "cheap" | "expensive";
+  category: "exploration" | "reasoning" | "research" | "implementation" | "review";
+  cost: "low" | "medium" | "high";
   useWhen: string[];   // ≤6 short bullets
   avoidWhen: string[]; // ≤6 short bullets
   keyTrigger?: string; // one-line headline trigger
@@ -125,7 +126,7 @@ Populate `routing` for all 5 builtin declarations. Extend `SubAgentMeta` in `src
 
 YAML loader (`src/sub-agents/loader.ts`) accepts an optional `routing:` block with the same shape; validate it with Zod and field length caps. YAML agents without routing remain valid and render with a placeholder in status output.
 
-Consumers updated to read from `routing` instead of duplicating free text:
+Consumers read from `routing` instead of duplicating free text:
 
 - `src/system-prompt/bytes/overlay.ts` — the positive routing matrix in the Conditional Workflows section is built from enabled agents' `routing.keyTrigger` / `routing.useWhen`, not hardcoded strings.
 - `src/handlers/before-agent-start.ts` / `src/system-prompt/bytes/shared.ts` — pass registered routing metadata into `BytesPromptRenderContext` alongside enabled tool/sub-agent sets.
@@ -167,7 +168,7 @@ Consumers updated to read from `routing` instead of duplicating free text:
 2. **GPT variant applies only to a configured nested GPT model.** Setting `blackbytes.sub_agents.oracle.model` or `blackbytes.sub_agents.general.model` to a GPT-family model selects the `gpt` variant for that sub-agent.
 3. **Runtime overlay precedence is unchanged.** `prependSystemPrompt` still runs after family resolution; the order is `[runtime overlay] + [family-resolved system prompt body]`.
 4. **Fallback models reuse the primary prompt body** in this iteration. This avoids a larger fallback-runner refactor and keeps the change surgical.
-5. **`/blackbytes-status` gains a routing section** under enabled sub-agents, sourced from typed `routing` metadata. Cost classification (`free` / `cheap` / `expensive`) is editorial — defined per-agent, not measured.
+5. **`/blackbytes-status` includes a routing section** under enabled sub-agents, sourced from typed `routing` metadata. Cost classification (`low` / `medium` / `high`) is editorial — defined per-agent, not measured.
 6. **Tool description text is shorter and less duplicative.** The parent agent still sees gating rules (for example, `DO NOT use for: …`) but positive routing hints come from the metadata-driven Bytes overlay.
 7. **No regression in token budget for Claude/default users.** The default Oracle prompt body grows by ≤14 lines; General prompt body shrinks by removing the static tool list. Net default-prompt change is approximately neutral.
 
@@ -177,9 +178,9 @@ Consumers updated to read from `routing` instead of duplicating free text:
 **Owner**: maintainer  
 **Phase**: Phase 1 MVP
 
-**MVP lock**: implement Oracle guardrails; add Oracle/General GPT prompt variants selected only from a configured nested model; remove General's static tool list; add typed routing metadata; render routing from metadata in the Bytes overlay and `/blackbytes-status`; cover the behavior with automated tests.
+**MVP lock**: Oracle guardrails; GPT prompt variants for all builtin sub-agents selected only from a configured nested model; General prompt authority delegated to the runtime overlay; typed routing metadata rendered in the Bytes overlay and `/blackbytes-status`; automated coverage for the behavior.
 
-**Out of phase**: YAML `system_prompt_by_family`, per-attempt prompt switching for `fallbackModels`, new agents/tools, Reviewer bash access, and `/blackbytes-status` redesign beyond one new section.
+**Out of phase**: YAML `system_prompt_by_family`, per-attempt prompt switching for `fallbackModels`, additional agents/tools, Reviewer bash access, and `/blackbytes-status` redesign beyond the routing/status sections.
 
 ### 6.1 Dependency graph
 
@@ -196,12 +197,12 @@ T-008 Verification + manual checks depends on T-003, T-004, T-006, T-007
 
 ### 6.2 Leaf tasks
 
-#### T-001 — Add declaration and YAML routing scaffolding
+#### T-001 — Declaration and YAML routing scaffolding
 
 **Depends on**: none  
 **Related files**: `src/sub-agents/declaration.ts`, `src/config/resource-metadata.ts`, `src/sub-agents/loader.ts`, `src/sub-agents/__tests__/loader.test.ts`, `src/sub-agents/__tests__/snapshot.test.ts`
 
-Add `SubAgentRoutingMetadata`, `systemPromptByFamily?`, and `routing?` to `SubAgentDeclaration`. Extend `SubAgentMeta` and `declarationToMeta()` so routing survives runtime registration. Extend the YAML loader with optional `routing:` only; do not add YAML per-family prompts.
+`SubAgentDeclaration` carries `SubAgentRoutingMetadata`, `systemPromptByFamily?`, and `routing?`. `SubAgentMeta` and `declarationToMeta()` preserve routing through runtime registration. The YAML loader accepts optional `routing:` and does not expose YAML per-family prompts.
 
 **Acceptance criteria**:
 - Builtin and YAML declarations compile with optional routing metadata.
@@ -216,7 +217,7 @@ Add `SubAgentRoutingMetadata`, `systemPromptByFamily?`, and `routing?` to `SubAg
 **Depends on**: T-001  
 **Related files**: `src/sub-agents/prompt-builder.ts`, `src/sub-agents/register.ts`, `src/shared/model-capability.ts`, `src/sub-agents/__tests__/prompt-builder.test.ts`, `src/sub-agents/__tests__/delegates.test.ts`
 
-Add `resolveSystemPromptBody(decl, modelId?)` using `classifyModel()` from `src/shared/model-capability.ts`. Move `registerSubAgent()` prompt construction after snapshot lookup so `snapshot.model` is available before the prompt body is selected.
+`resolveSystemPromptBody(decl, modelId?)` uses `classifyModel()` from `src/shared/model-capability.ts`. `registerSubAgent()` constructs the prompt after snapshot lookup so `snapshot.model` is available before the prompt body is selected.
 
 **Acceptance criteria**:
 - No configured nested model → default `systemPrompt`, even when the parent cached model family is GPT.
@@ -227,26 +228,26 @@ Add `resolveSystemPromptBody(decl, modelId?)` using `classifyModel()` from `src/
 
 **Definition of Done**: prompt-builder tests cover fallback behavior; register-level test captures `--system-prompt` and proves GPT/default selection.
 
-#### T-003 — Harden Oracle prompt and add Oracle GPT variant
+#### T-003 — Oracle prompt hardening and GPT variant
 
 **Depends on**: T-002  
 **Related files**: `src/sub-agents/oracle.ts`, `src/sub-agents/__tests__/snapshot.test.ts` or a dedicated prompt snapshot test, `src/sub-agents/__tests__/delegates.test.ts`
 
-Append `## Long-Context Handling` and `## High-Risk Self-Check` to the default Oracle prompt. Add `ORACLE_GPT_PROMPT` with the same role/safety semantics but prose-first output guidance.
+The default Oracle prompt includes `## Long-Context Handling` and `## High-Risk Self-Check`. `ORACLE_GPT_PROMPT` keeps the same role/safety semantics with prose-first output guidance.
 
 **Acceptance criteria**:
-- Default Oracle prompt contains both new sections in the specified location.
+- Default Oracle prompt contains both guardrail sections in the specified location.
 - Oracle GPT variant keeps the self-contained final message requirement, effort tags, uncertainty rules, language matching, and read-only constraints.
 - GPT variant avoids forcing the 6-point answer template for trivial questions.
 
 **Definition of Done**: prompt snapshot passes; configured `sub_agents.oracle.model = "gpt-*"` sends the GPT body to nested Pi in an automated capture test.
 
-#### T-004 — Clean up General prompt and add General GPT variant
+#### T-004 — General prompt overlay authority and GPT variant
 
 **Depends on**: T-002  
 **Related files**: `src/sub-agents/general.ts`, `src/sub-agents/__tests__/general.test.ts`, `src/sub-agents/__tests__/delegates.test.ts`
 
-Replace General's static `## Tool Access` list with the overlay-deferring paragraph. Remove the unused `TOOL_NAMES` import. Add `GENERAL_GPT_PROMPT` with the same Plan-Sanity Check and execution constraints but prose-first formatting.
+General's `## Tool Access` section defers to the runtime overlay. `GENERAL_GPT_PROMPT` keeps the same Plan-Sanity Check and execution constraints with prose-first formatting.
 
 **Acceptance criteria**:
 - Default General prompt no longer contains `Depending on session configuration` or the removed static tool-list bullets.
@@ -260,7 +261,7 @@ Replace General's static `## Tool Access` list with the overlay-deferring paragr
 **Depends on**: T-001  
 **Related files**: `src/sub-agents/{explore,oracle,librarian,general,reviewer}.ts`, `src/sub-agents/routing.ts`, `src/sub-agents/__tests__/routing.test.ts`
 
-Populate `routing` for all 5 builtin declarations. Add `buildRoutingSummary(metas, enabledSubAgents)` as the single helper used by overlay/status consumers.
+All 5 builtin declarations define `routing`. `buildRoutingSummary(metas, enabledSubAgents)` is the shared helper used by overlay/status consumers.
 
 **Acceptance criteria**:
 - Each builtin has `category`, `cost`, `useWhen`, `avoidWhen`, and a concise `keyTrigger` where useful.
@@ -274,7 +275,7 @@ Populate `routing` for all 5 builtin declarations. Add `buildRoutingSummary(meta
 **Depends on**: T-005  
 **Related files**: `src/system-prompt/bytes/types.ts`, `src/system-prompt/bytes/shared.ts`, `src/system-prompt/bytes/overlay.ts`, `src/handlers/before-agent-start.ts`, `src/commands/blackbytes-status.ts`, `src/handlers/__tests__/before-agent-start.test.ts`, `src/commands/__tests__/blackbytes-status.test.ts`
 
-Thread registered routing metadata into `BytesPromptRenderContext`. Replace the hardcoded Conditional Workflows routing matrix with metadata-driven lines. Add a `Sub-Agent Routing` section and interactive menu entry to `/blackbytes-status`.
+Registered routing metadata flows into `BytesPromptRenderContext`. The Conditional Workflows routing matrix uses metadata-driven lines. `/blackbytes-status` includes a `Sub-Agent Routing` section and interactive menu entry.
 
 **Acceptance criteria**:
 - Overlay routing lines change when metadata fixtures change, proving they are not hardcoded per-agent strings.
@@ -303,27 +304,27 @@ Shorten the 5 delegate tool descriptions by removing duplicated positive `useWhe
 **Depends on**: T-003, T-004, T-006, T-007  
 **Related files**: `package.json`, relevant changed tests, scratch `settings.json` only if needed for manual validation
 
-Run the project-defined verification sequence and one startup benchmark. Manually exercise the new status section and nested GPT prompt selection.
+Run the project-defined verification sequence and one startup benchmark. Manually exercise the status routing section and nested GPT prompt selection.
 
 **Acceptance criteria**:
-- `bun run lint && bun run build && bun run test` passes.
+- `bun run check` passes.
 - `bun run bench:startup` is within ±5% of the local baseline or the delta is explained.
 - Manual `/blackbytes-status` shows `Sub-Agent Routing`.
-- Manual nested `system_prompt_log` capture confirms Oracle or General GPT body when configured.
+- Manual nested `system_prompt_log` capture confirms GPT prompt bodies for configured builtin agents.
 
 **Definition of Done**: verification results are recorded in the implementation PR/summary; any failures have follow-up tasks or fixes.
 
 ### 6.3 Test strategy
 
 - **Unit tests**: declaration/meta copy, YAML routing validation, routing summary, prompt-body resolver.
-- **Register integration tests**: capture nested `--system-prompt` for default vs GPT-configured Oracle/General.
+- **Register integration tests**: capture nested `--system-prompt` for default vs GPT-configured builtin agents.
 - **Overlay/status tests**: metadata-driven routing matrix, disabled-agent filtering, YAML placeholder rendering.
 - **Regression tests**: General prompt static list removed; `TOOL_NAMES` import removed; parent GPT model does not leak into nested prompt selection.
 - **Verification commands**: `bun run lint`, `bun run build`, `bun run test`, `bun run bench:startup`.
 
 ### 6.4 Rollback and compatibility
 
-No data migration or persistent config migration is required. All new declaration fields are optional; YAML `routing` is optional. Rollback is a code revert of the declaration/prompt/status changes. Existing user YAML agents continue to load because the new routing block is optional and per-family YAML prompts are not introduced.
+No data migration or persistent config migration is required. Declaration fields are optional; YAML `routing` is optional. Existing user YAML agents continue to load because the routing block is optional and per-family YAML prompts are not exposed.
 
 ### 6.5 Beads Trace
 
@@ -343,10 +344,10 @@ No data migration or persistent config migration is required. All new declaratio
 
 | Risk | Mitigation |
 |---|---|
-| Family detection mis-classifies a new model name. | Reuse `classifyModel()` from `src/shared/model-capability.ts`; unknown families fall back to `systemPrompt` and never throw. |
-| Parent model family accidentally changes nested prompts. | Variant selection must use `snapshot.model` only. Add a test where parent/cache is GPT but `snapshot.model` is undefined and the default prompt is used. |
+| Family detection mis-classifies an unknown model name. | Reuse `classifyModel()` from `src/shared/model-capability.ts`; unknown families fall back to `systemPrompt` and never throw. |
+| Parent model family accidentally changes nested prompts. | Variant selection uses `snapshot.model` only. Tests cover a GPT parent/cache with undefined `snapshot.model` and the default prompt. |
 | Fallback model receives a prompt optimized for the primary model. | Accepted for this iteration to keep fallback execution simple; prompt variants remain compatible. Revisit only if fallback metrics show meaningful usage. |
-| Routing metadata drifts from the prose in tool descriptions. | Descriptions stop carrying positive `useWhen` lists. Overlay and status read from `routing`. Add tests that the overlay/status output is generated from metadata fixtures. |
+| Routing metadata drifts from the prose in tool descriptions. | Descriptions avoid positive `useWhen` lists. Overlay and status read from `routing`, with tests generated from metadata fixtures. |
 | User YAML agents without `routing` show up empty in `/blackbytes-status`. | Render `—` placeholder; do not require `routing` (back-compat). |
 | Snapshot tests churn. | Land Phase 1 first with no prompt text changes; update snapshots in Phase 2/3/4 deliberately. |
 | GPT variant diverges from default and confuses contributors. | Co-locate both prompts in the same file; add a short comment explaining which sections must stay semantically aligned and which are intentionally model-specific. |
@@ -354,7 +355,6 @@ No data migration or persistent config migration is required. All new declaratio
 ## 8. Out of Scope (Explicit)
 
 - Reviewer gaining `bash` access (architectural decision, separate spec).
-- Explore / Librarian gaining GPT variants (revisit per usage metrics).
 - User-defined YAML `system_prompt_by_family` support.
 - Per-attempt prompt-body switching for `fallbackModels`.
 - `/blackbytes-status` UI redesign — just one new section.
@@ -362,11 +362,11 @@ No data migration or persistent config migration is required. All new declaratio
 
 ## 9. Acceptance Criteria
 
-- Oracle prompt contains the two new sections; snapshot test passes.
-- Setting a GPT model for Oracle or General results in the GPT-variant body being sent to the nested CLI, verified by an automated `--system-prompt` capture test and optionally by `system_prompt_log`.
-- Parent/host GPT model selection does **not** change Oracle or General prompt bodies when the sub-agent has no configured nested model.
+- Oracle prompt contains the two guardrail sections; snapshot test passes.
+- Setting a GPT model for a builtin agent results in that agent's GPT-variant body being sent to the nested CLI, verified by automated `--system-prompt` capture tests and optionally by `system_prompt_log`.
+- Parent/host GPT model selection does **not** change builtin prompt bodies when the sub-agent has no configured nested model.
 - General prompt body no longer contains the removed static tool-list block, and `src/sub-agents/general.ts` no longer imports `TOOL_NAMES`.
 - `/blackbytes-status` shows a "Sub-Agent Routing" section with `category`, `cost`, `useWhen`, `avoidWhen` for each enabled builtin; YAML agents without routing show `—`.
 - Bytes overlay routing matrix is generated from typed routing metadata rather than hardcoded per-agent strings.
 - Tool description strings are shorter and retain strict gating/cost signals.
-- `bun run lint && bun run build && bun run test` clean. Startup bench within ±5% of baseline.
+- `bun run check` clean. Startup bench within ±5% of baseline.

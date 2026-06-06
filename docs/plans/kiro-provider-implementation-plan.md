@@ -75,7 +75,7 @@ Scope changes after this plan is promoted to Active require a delta-change doc.
 #### Task T-2: Register provider aliases during session start
 
 - **T-003 — Implement `registerKiroProviders()` and wire it into `session_start`**
-  - **What + why**: Add a Kiro provider registration entry point similar to `registerCopilotHeader()`, but capable of registering zero, one, or many account aliases from config.
+  - **What + why**: Add a Kiro provider registration entry point capable of registering zero, one, or many account aliases from config.
   - **Related files / packages**: new `src/providers/kiro/register.ts`, `src/handlers/index.ts`, `src/test-utils/pi-mock.ts`, `src/__tests__/integration/session-start.test.ts` or new provider integration test.
   - **Acceptance criteria**: disabled config registers nothing; enabled empty-account config registers default alias `kirob`; enabled two-account config registers two aliases; provider options include base URL, alias-scoped models, upstream-compatible OAuth hooks, credential hooks, and `streamSimple`.
   - **Definition of Done**: implementation + integration tests with Pi mock, including a test that external `kiro` provider collision is avoided unless explicitly configured.

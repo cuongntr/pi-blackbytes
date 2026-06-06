@@ -35,7 +35,7 @@ Exit criteria:
 - `bash` wrapper is registered only when `boxed_builtin_tools === true` and safely skipped if Pi factory access is unavailable.
 - `hashline_edit` expanded diff remains available and boxed.
 - Tests cover render helpers, shell highlighting, config, wrapper registration, and representative tool migration.
-- `bun run lint && bun run build && bun run test` passes.
+- `bun run check` passes.
 
 Scope changes after this plan require a delta-change doc.
 
@@ -145,7 +145,7 @@ Scope changes after this plan require a delta-change doc.
 - **T-012 — Run full verification and size check**
   - **What + why**: Ensure the feature is safe to ship and package budget remains healthy.
   - **Related files / packages**: all changed files; package scripts.
-  - **Acceptance criteria**: `bun run lint`, `bun run build`, `bun run test` pass; run `bun run check:size` if helper additions look size-risky.
+  - **Acceptance criteria**: `bun run check` passes.
   - **Definition of Done**: verification output captured in final report; failures fixed or documented honestly.
   - **References**: [`AGENTS.md#development`](../../AGENTS.md#development).
 
@@ -173,8 +173,8 @@ No cycles. Bottlenecks: T-001 and T-004 block most work; T-008 blocks only built
 - Stub theme token tests following the existing sub-agent/hashline renderer test pattern.
 - Integration-style registration tests using `src/test-utils/pi-mock.ts`.
 - Existing tool tests updated only where renderer expectations change.
-- Verification commands in project order: `bun run lint && bun run build && bun run test`.
-- Optional: `bun run check:size` after implementation because helper code touches package budget, though no dependency is added.
+- Full verification command: `bun run check`.
+- Targeted iteration command sequence: `bun run lint && bun run typecheck && bun run build && bun run test`.
 
 ## 5. Migration / Rollback
 
@@ -187,7 +187,7 @@ Backward compatibility:
 
 - Blackbytes tool execution and schemas preserved.
 - Built-in wrapper registration is opt-in (`boxed_builtin_tools=false` by default).
-- Existing `read` anchor-clean renderer behavior is not changed in Phase 1.
+- The built-in `read` anchor-clean renderer stays active; `ui.read_tool_display` selects compact collapsed summaries or preview-style collapsed output.
 
 Rollback:
 

@@ -374,7 +374,7 @@ Mỗi task được viết để 1 implementer (người hoặc `general` sub-ag
 
 - AGENTS.md "Core settings" section: thêm `hashline_edit.strict_patch` (bool, default true).
 - CHANGELOG: Unreleased section, group Added/Changed/Fixed theo Keep-a-Changelog.
-- Run `bun run lint && bun run build && bun run test && bun run check:size`. Bundle size phải < 500KB gzipped (current ~258KB → còn nhiều room).
+- Run `bun run check`. Bundle size phải < 500KB gzipped.
 - Manual smoke test: chạy `hashline_edit` qua live pi session, edit 1 file qua symlink + 1 edit dùng `replace_text` + 1 edit có diff preview output. Verify visually.
 
 **DoD**: 4 commands xanh; size budget pass; manual smoke recorded.
@@ -445,7 +445,7 @@ Mỗi task được viết để 1 implementer (người hoặc `general` sub-ag
 - Doc `postEditVerify` flag (per-call, không phải config).
 - Doc edit aliases trong AGENTS.md hoặc tool description.
 - CHANGELOG entry cho Phase 2.
-- `bun run lint && bun run build && bun run test && bun run check:size`.
+- `bun run check`.
 
 **DoD**: như T6.
 
@@ -455,11 +455,7 @@ Mỗi task được viết để 1 implementer (người hoặc `general` sub-ag
 
 ### Auto (CI)
 
-- `bun run lint` xanh.
-- `bun run build` xanh + `dist/index.js` exists.
-- `bun run test` xanh, tổng tests +~30 cases mới (Phase 1) + ~15 (Phase 2).
-- `bun run check:size` < 500KB gzipped.
-- `bun run typecheck` xanh (`hashline_edit` schema mở rộng không break consumer).
+- `bun run check` xanh: lint, typecheck, build, tests, and package size.
 
 ### Manual (live pi session)
 
@@ -518,7 +514,7 @@ Không cần feature flag runtime — config flag `strict_patch` đã đủ là 
 
 Phase 1:
 - [x] T1-T6 đều ship.
-- [x] `bun run lint && bun run build && bun run test && bun run check:size` xanh.
+- [x] `bun run check` xanh.
 - [ ] Manual verify 7 case Phase 1. _(deferred to release smoke; automated coverage = 52 new tests across the 5 modules)_
 - [x] CHANGELOG + AGENTS.md updated.
 - [x] Spec này update status từ "Draft" → "Phase 1 Done".

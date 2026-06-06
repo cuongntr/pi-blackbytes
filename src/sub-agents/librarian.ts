@@ -147,7 +147,7 @@ Rules: resolve library IDs with ${TOOL_NAMES.DOCS_RESOLVE} before ${TOOL_NAMES.D
 
 <citation_policy>
 Back every non-trivial claim with the most precise citation available:
-- GitHub source (preferred) — permalink with commit SHA: \`https://github.com/<owner>/<repo>/blob/<sha>/<path>#L<start>-L<end>\`.
+- GitHub source (preferred) — permalink with commit SHA: \`https://github.com/{owner}/{repo}/blob/{sha}/{path}#L{start}-L{end}\`.
 - GitHub source (fallback) — branch/tag URL labelled _(unpinned: branch may move)_ when no SHA is available.
 - Official docs — URL plus version when known; quote the relevant sentence.
 - Blog/changelog — URL plus publication date when visible.

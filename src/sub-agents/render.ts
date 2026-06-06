@@ -1,7 +1,6 @@
 import { type Theme, keyText } from "@earendil-works/pi-coding-agent";
 import { Container, Text } from "@earendil-works/pi-tui";
-import { isBoxedToolCallsEnabled } from "../tools/_shared/boxed-config.js";
-import { renderBoxedToolResult } from "../tools/_shared/boxed-render.js";
+import { renderLightweightToolResult } from "../tools/_shared/lightweight-render.js";
 import { SPINNER_TICK_MS, formatCost, formatDuration, getSpinnerFrame } from "./format.js";
 import { getAgentIcon } from "./icons.js";
 import type { ToolHistoryEntry } from "./progress-reporter.js";
@@ -402,29 +401,12 @@ export function buildSubAgentRenderResult() {
     // context.lastComponent is the box, not the SubAgentResultComponent.
     const component = state.component ?? new SubAgentResultComponent();
     state.component = component;
-    rebuildSubAgentResultComponent(
-      component,
-      result,
-      options,
-      state,
-      theme,
-      isBoxedToolCallsEnabled(),
-    );
+    rebuildSubAgentResultComponent(component, result, options, state, theme, true);
     component.invalidate();
-    if (!isBoxedToolCallsEnabled()) return component;
-    // Boxed: one continuous frame with the open-bottom call box above.
-    // Background matches state: pending while running, success/error on completion.
-    const status = result.details?.status ?? (options.isPartial ? "running" : "completed");
-    const bgToken =
-      status === "completed"
-        ? "toolSuccessBg"
-        : status === "running" || status === "starting"
-          ? "toolPendingBg"
-          : "toolErrorBg";
-    return renderBoxedToolResult(theme, component, {
-      seamTop: true,
+    // One continuous frame: the lightweight call line above carries the agent
+    // identity, so the result body renders seam-style beneath it.
+    return renderLightweightToolResult(theme, component, {
       live: isLive,
-      bgToken,
     });
   };
 }

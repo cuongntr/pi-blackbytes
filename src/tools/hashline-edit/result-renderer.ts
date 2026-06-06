@@ -1,7 +1,6 @@
 import { type Theme, keyText } from "@earendil-works/pi-coding-agent";
 import { Text } from "@earendil-works/pi-tui";
-import { isBoxedToolCallsEnabled } from "../_shared/boxed-config.js";
-import { renderBoxedToolResult } from "../_shared/boxed-render.js";
+import { renderLightweightToolResult } from "../_shared/lightweight-render.js";
 import type { DiffData } from "./diff-preview.js";
 
 interface RenderableResult {
@@ -26,9 +25,6 @@ interface DetailsShape {
 }
 
 const PARTIAL_LABEL = "Editing...";
-const BOXED_RESULT_BASE = { seamTop: true, bgToken: "toolPendingBg" } as const;
-const BOXED_RESULT_SUCCESS = { seamTop: true, bgToken: "toolSuccessBg" } as const;
-const BOXED_RESULT_ERROR = { seamTop: true, bgToken: "toolErrorBg" } as const;
 
 export function renderHashlineEditResult(
   result: RenderableResult,
@@ -38,12 +34,7 @@ export function renderHashlineEditResult(
 ) {
   if (options.isPartial) {
     const text = new Text(theme.fg("muted", PARTIAL_LABEL), 0, 0);
-    return isBoxedToolCallsEnabled()
-      ? renderBoxedToolResult(theme, text, {
-          ...BOXED_RESULT_BASE,
-          isPartial: true,
-        })
-      : text;
+    return renderLightweightToolResult(theme, text, { isPartial: true });
   }
 
   const details = (result.details as DetailsShape | undefined) ?? undefined;
@@ -51,29 +42,23 @@ export function renderHashlineEditResult(
   const fullText = details?.fullText ?? getContentText(result);
   const isError = context?.isError ?? false;
 
-  const resultBase = isError ? BOXED_RESULT_ERROR : BOXED_RESULT_SUCCESS;
-
   if (!options.expanded) {
     const text = renderCollapsed(summary, isError, theme);
-    return isBoxedToolCallsEnabled()
-      ? renderBoxedToolResult(theme, text, { ...resultBase, isError })
-      : text;
+    return renderLightweightToolResult(theme, text, { isError });
   }
 
   if (isError) {
     const text = new Text(theme.fg("error", fullText), 0, 0);
-    return isBoxedToolCallsEnabled()
-      ? renderBoxedToolResult(theme, text, { ...resultBase, isError })
-      : text;
+    return renderLightweightToolResult(theme, text, { isError });
   }
 
   if (!details?.diffData || details.diffData.ranges.length === 0) {
     const text = new Text(theme.fg("toolOutput", fullText), 0, 0);
-    return isBoxedToolCallsEnabled() ? renderBoxedToolResult(theme, text, resultBase) : text;
+    return renderLightweightToolResult(theme, text, { isError });
   }
 
   const text = renderExpandedDiff(summary, details.diffData, options.width, theme);
-  return isBoxedToolCallsEnabled() ? renderBoxedToolResult(theme, text, resultBase) : text;
+  return renderLightweightToolResult(theme, text, { isError });
 }
 
 function renderCollapsed(summary: string, isError: boolean, theme: Theme): Text {

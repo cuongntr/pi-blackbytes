@@ -1,8 +1,7 @@
 import assert from "node:assert/strict";
-import { afterEach, describe, it } from "node:test";
+import { describe, it } from "node:test";
 import type { ExtensionAPI, Theme } from "@earendil-works/pi-coding-agent";
 import { type Component, Text } from "@earendil-works/pi-tui";
-import { setBoxedToolCallsEnabled } from "../../_shared/boxed-config.js";
 import { registerCleanReadRenderer, renderCompactReadResult } from "../read-renderer.js";
 
 interface RegisteredReadTool {
@@ -71,10 +70,6 @@ function registerReadTool(input: {
   assert.ok(registeredTool);
   return registeredTool;
 }
-
-afterEach(() => {
-  setBoxedToolCallsEnabled(true);
-});
 
 describe("read renderer compact mode", () => {
   it("collapsed result renders as lightweight call/result lines without file contents", () => {
@@ -208,8 +203,7 @@ describe("read renderer compact mode", () => {
     assert.doesNotMatch(out, /┌|└|│/);
   });
 
-  it("expanded result is unboxed when boxed mode is disabled", () => {
-    setBoxedToolCallsEnabled(false);
+  it("expanded result is wrapped in lightweight result lines", () => {
     const tool = registerReadTool({
       display: "compact",
       originalRenderResult: (result) => new Text(result.content?.[0]?.text ?? "", 0, 0),
@@ -225,6 +219,7 @@ describe("read renderer compact mode", () => {
 
     assert.match(out, /hello/);
     assert.doesNotMatch(out, /1#AB/);
+    assert.match(out, /⎿/);
     assert.doesNotMatch(out, /┌|└|│/);
   });
 

@@ -11,9 +11,8 @@ import {
   createReadToolDefinition,
 } from "@earendil-works/pi-coding-agent";
 import { type Component, Container, Text } from "@earendil-works/pi-tui";
-import type { BoxedUiConfig } from "../../config/schema.js";
-import { isBoxedToolCallsEnabled } from "../_shared/boxed-config.js";
-import { renderBoxedToolResult } from "../_shared/boxed-render.js";
+import type { BlackbytesUiConfig } from "../../config/schema.js";
+import { renderLightweightToolResult } from "../_shared/lightweight-render.js";
 import { countLines, getTextOutput, stripTrailingNoticeLines } from "../_shared/tool-output.js";
 
 const ANCHOR_PATTERN = /^\d+#[A-Z]{2}\|/;
@@ -55,7 +54,7 @@ interface ReadTool {
 type ReadToolFactory = (cwd: string, options?: { autoResizeImages?: boolean }) => ReadTool;
 
 interface ReadRendererOptions {
-  readonly ui?: Pick<BoxedUiConfig, "read_tool_display">;
+  readonly ui?: Pick<BlackbytesUiConfig, "read_tool_display">;
   readonly factory?: ReadToolFactory;
 }
 
@@ -286,17 +285,11 @@ export function registerCleanReadRenderer(
         );
       }
       const inner = originalRenderResult(cleanResult, options, theme, context);
-      if (isBoxedToolCallsEnabled()) {
-        const header = buildExpandedHeader(cleanResult, theme, context as ReadRenderContext, cwd);
-        const body = new Container();
-        body.addChild(new Text(header, 0, 0));
-        body.addChild(inner);
-        return renderBoxedToolResult(theme, body, {
-          seamTop: true,
-          bgToken: "toolSuccessBg",
-        });
-      }
-      return inner;
+      const header = buildExpandedHeader(cleanResult, theme, context as ReadRenderContext, cwd);
+      const body = new Container();
+      body.addChild(new Text(header, 0, 0));
+      body.addChild(inner);
+      return renderLightweightToolResult(theme, body);
     },
   };
 

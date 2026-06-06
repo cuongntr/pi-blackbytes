@@ -82,10 +82,9 @@ Core settings:
 - `disabled_tools` / `disabled_sub_agents`
 - `hashline_edit` (boolean shorthand or object: `{ enabled?: boolean, strict_patch?: boolean }`)
   - `hashline_edit.strict_patch` (default `true`) — reject `lines` payloads that include accidental `LINE#ID|` prefixes with `[E_INVALID_PATCH]`. Set to `false` to restore the legacy silent-strip behaviour.
-- `ui.boxed_tool_calls` (default `true`) — boxed rendering for Blackbytes tool calls/results; set `false` for a rollback to the legacy unboxed renderer.
-- `ui.boxed_builtin_tools` (default `false`) — opt-in boxed wrappers for Pi builtin tools such as `bash` when the host Pi version exposes a compatible factory.
-- `ui.boxed_max_preview_lines` / `ui.boxed_max_expanded_lines` / `ui.boxed_dim_output` — boxed builtin output preview limits and colour mode.
-- `ui.read_tool_display` (`"compact"` default, or `"preview"`) — collapsed built-in `read` output renders as one unboxed line by default while preserving full content for the model/hashline anchors.
+- `ui.bash_wrapper_enabled` (default `true`) — lightweight wrapper for Pi builtin tools such as `bash`, active when the host Pi version exposes a compatible factory (it silently no-ops otherwise). Set `false` to leave Pi's built-in `bash` untouched.
+- `ui.bash_max_preview_lines` / `ui.bash_max_expanded_lines` / `ui.bash_dim_output` — bash wrapper output preview limits and colour mode.
+- `ui.read_tool_display` (`"compact"` default, or `"preview"`) — collapsed built-in `read` output renders as one line by default while preserving full content for the model/hashline anchors.
 - `websearch.provider`, `websearch.exa_api_key`, `websearch.tavily_api_key`
 - `context7.api_key`
 - `system_prompt_log.enabled`, `.path`, `.capture_agent_start`, `.capture_provider_system`, `.include_nested`, `.dedupe` (opt-in JSONL capture of full system prompts; provider capture extracts only system-like fields)
@@ -97,7 +96,7 @@ Core settings:
 - `sub_agents.<name>.promptMode` (RESERVED — `"static"` is the only safe value; `"append"` throws at runtime ("not yet supported"); YAML uses `prompt_mode`)
 - `sub_agents.<name>.temperature` (RESERVED — accepted by schema for forward-compat but NOT passed to the nested Pi CLI; see `/blackbytes-status`)
 
-Rollback snippet: set `blackbytes.ui.boxed_tool_calls=false` to restore unboxed Blackbytes tool renderers, and keep or set `blackbytes.ui.boxed_builtin_tools=false` to leave Pi built-ins untouched.
+Tool rendering: all Blackbytes tools and sub-agents render through a single lightweight, borderless renderer (Claude-style `⏺` call line + `⎿` result indent). There is no on/off toggle. To leave Pi's built-in `bash` untouched, set `blackbytes.ui.bash_wrapper_enabled=false` (it defaults to `true`).
 
 The schema is `.passthrough()`, so wizard-managed extra keys in the `blackbytes` object are preserved.
 

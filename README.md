@@ -172,11 +172,10 @@ Blackbytes reads the top-level `blackbytes` object from the Pi settings file.
       "api_key": "YOUR_CONTEXT7_KEY"
     },
     "ui": {
-      "boxed_tool_calls": true,
-      "boxed_builtin_tools": false,
-      "boxed_max_preview_lines": 5,
-      "boxed_max_expanded_lines": 200,
-      "boxed_dim_output": false,
+      "bash_wrapper_enabled": true,
+      "bash_max_preview_lines": 5,
+      "bash_max_expanded_lines": 200,
+      "bash_dim_output": false,
       "read_tool_display": "compact"
     },
     "system_prompt_log": {
@@ -215,7 +214,7 @@ Blackbytes reads the top-level `blackbytes` object from the Pi settings file.
 | `websearch.exa_api_key` | `string` | Exa credential. Overrides `EXA_API_KEY` when set. |
 | `websearch.tavily_api_key` | `string` | Tavily credential. Overrides `TAVILY_API_KEY` when set. |
 | `context7.api_key` | `string` | Context7 credential |
-| `ui` | `{ boxed_tool_calls?: boolean; boxed_builtin_tools?: boolean; boxed_max_preview_lines?: number; boxed_max_expanded_lines?: number; boxed_dim_output?: boolean; read_tool_display?: "compact" \| "preview" }` | Controls boxed rendering for Blackbytes tools, the optional built-in `bash` wrapper, and built-in `read` display. Defaults: `boxed_tool_calls=true`, `boxed_builtin_tools=false`, `boxed_max_preview_lines=5`, `boxed_max_expanded_lines=200`, `boxed_dim_output=false`, `read_tool_display="compact"`. |
+| `ui` | `{ bash_wrapper_enabled?: boolean; bash_max_preview_lines?: number; bash_max_expanded_lines?: number; bash_dim_output?: boolean; read_tool_display?: "compact" \| "preview" }` | Controls the built-in `bash` wrapper and built-in `read` display. Defaults: `bash_wrapper_enabled=true`, `bash_max_preview_lines=5`, `bash_max_expanded_lines=200`, `bash_dim_output=false`, `read_tool_display="compact"`. |
 | `system_prompt_log.enabled` | `boolean` | Opt-in full system-prompt capture to a JSONL file. Defaults to `false` because prompts may contain project context or secrets. |
 | `system_prompt_log.path` | `string` | Optional log file path. Defaults to `~/.pi/logs/pi-blackbytes-system-prompts.jsonl`; relative paths resolve against the current working directory. |
 | `system_prompt_log.capture_agent_start` | `boolean` | Capture Pi's final effective system prompt at `agent_start` (after `before_agent_start` chaining). Defaults to `true`. |
@@ -239,9 +238,9 @@ Blackbytes reads the top-level `blackbytes` object from the Pi settings file.
 - `disabled_sub_agents` uses agent names, not tool names: `explore`, `oracle`, `librarian`, `general`, `reviewer`.
 - `system_prompt_log` is intentionally opt-in. The `agent_start` capture is the canonical Pi-effective prompt; provider capture is only for verifying serialization and extracts system-like fields instead of dumping the full provider payload.
 - `temperature` is accepted by the schema for forward-compatibility but is NOT applied. See `/blackbytes-status` → "Reserved / Unsupported Settings" for details.
-- `ui.boxed_tool_calls` defaults to `true`; `ui.boxed_builtin_tools` defaults to `false`. The boxed `bash` wrapper is opt-in, while the built-in `read` renderer keeps displayed content anchor-free and preserves `LINE#ID|` anchors in conversation history.
-- `ui.read_tool_display` defaults to `"compact"`, so collapsed `read` results render as one unboxed line with path/range and line-count summary; set it to `"preview"` to restore Pi's content preview (still with anchors hidden from the TUI).
-- `ui.boxed_max_preview_lines` and `ui.boxed_max_expanded_lines` bound the collapsed and expanded output previews for boxed renderers; `ui.boxed_dim_output` keeps preview text in muted `toolOutput` colour instead of regular text.
+- All Blackbytes tools and sub-agents render through a single lightweight, borderless renderer; there is no on/off toggle. `ui.bash_wrapper_enabled` defaults to `true`, so the built-in `bash` tool also renders through the lightweight wrapper (set it to `false` to leave Pi's built-in `bash` untouched), while the built-in `read` renderer keeps displayed content anchor-free and preserves `LINE#ID|` anchors in conversation history.
+- `ui.read_tool_display` defaults to `"compact"`, so collapsed `read` results render as one line with path/range and line-count summary; set it to `"preview"` to restore Pi's content preview (still with anchors hidden from the TUI).
+- `ui.bash_max_preview_lines` and `ui.bash_max_expanded_lines` bound the collapsed and expanded `bash` output previews; `ui.bash_dim_output` keeps preview text in muted `toolOutput` colour instead of regular text.
 - `sub_agents.<name>.executionMode` serializes or parallelizes tool calls within a batch. Use `sequential` when ordering matters; omit it to keep Pi's default parallel execution.
 
 ## Tool surface
@@ -269,7 +268,7 @@ Every Blackbytes tool provides structured, scannable result rendering with three
 
 ### Built-in Pi tools
 
-When `blackbytes.ui.boxed_builtin_tools` is true, Pi's built-in `bash` tool renders through a boxed wrapper with shell highlighting, tail previews, capped expanded output, and footer metadata. The built-in `read` tool always uses the clean anchor-stripping renderer so `LINE#ID|` markers stay out of visible output while remaining in conversation history; collapsed `read` results are compact by default and render as a single unboxed line.
+When `blackbytes.ui.bash_wrapper_enabled` is true, Pi's built-in `bash` tool renders through a lightweight wrapper with shell highlighting, tail previews, capped expanded output, and footer metadata. The built-in `read` tool always uses the clean anchor-stripping renderer so `LINE#ID|` markers stay out of visible output while remaining in conversation history; collapsed `read` results are compact by default and render as a single line.
 
 ### HTTP-backed tools
 

@@ -1,5 +1,64 @@
 # Changelog
 
+## 2.17.0 (2026-06-06) — Sub-Agent Maintainability & GPT Prompt Variants
+
+Consolidate duplicated sub-agent declaration boilerplate behind a single source
+of truth and shared helpers, split the monolithic `hashline_edit` core into
+cohesive modules, and extend GPT-optimized prompt variants to every builtin
+sub-agent.
+
+### Added
+
+- **GPT prompt variants for all five builtins** — Explore, Oracle, Librarian,
+  General, and Reviewer each define a `systemPromptByFamily.gpt` variant
+  selected via `resolveSystemPromptBody()` when the configured nested model
+  classifies as GPT family (`gpt-*`, `o1`, `o3`, `o4`). The variants follow
+  OpenAI's GPT-5.x prompting guidance: outcome-first and shorter than the
+  defaults (~25–47% smaller), top-level `#` headings with `<xml>` tags
+  delimiting semantic behavioural blocks (tool rules, search/review contracts,
+  output specs, stop rules, citation policy), explicit anti-filler openers, and
+  fewer redundant negative rules. Each variant preserves its default persona's
+  contract — read-only/full-access guarantees, tool allowlists, the literal
+  `## Findings` / `### High` / `## Verdict` headings the host parses from
+  Reviewer, no-fabrication and citation-precision rules, and verification-gate
+  discipline. Non-GPT families continue to receive the default persona.
+- **`src/sub-agents/builtin-metadata.ts`** — a single source of truth for each
+  builtin's `name`, `description`, and `routing`. The five declarations spread
+  the shared metadata objects, and `SUB_AGENTS` in
+  `src/config/resource-metadata.ts` is derived from
+  `BUILTIN_SUB_AGENT_METADATA`, so the registry and the declarations can no
+  longer diverge. A drift-prevention test asserts
+  `declarationToMeta(decl)` deep-equals the derived `SUB_AGENTS` entry for every
+  builtin.
+- **`formatUserPrompt(main, context?, label?)`** in
+  `src/sub-agents/prompt-builder.ts` — the shared user-prompt composer used by
+  Explore, Oracle, General (default label) and Reviewer (`"Review context"`).
+- **`standardPrependOverlay(agentName)`** in `src/sub-agents/runtime-overlay.ts`
+  — the shared `prependSystemPrompt` factory for read-only builtins and the
+  YAML loader.
+- **Cohesive `hashline_edit` modules** — `schema.ts`, `anchors.ts`,
+  `validate.ts`, and `result.ts` split out of `src/tools/hashline-edit/`,
+  keeping the `applyHashlineEdits` orchestrator, the canonical-path mutation
+  queue, and tool registration in `index.ts`. The public surface
+  (`applyHashlineEdits`, `runQueuedHashlineEdit`, `safeRealpath`,
+  `registerHashlineEditTool`) is unchanged.
+
+### Changed
+
+- The Explore default persona describes search breadth in terms of the caller's
+  stated need rather than a `thoroughness` control, matching the
+  `delegate_explore` parameters schema (`question` + optional `context`).
+- The Librarian GPT variant uses brace-style URL placeholders
+  (`{owner}/{repo}/{sha}`) in its citation template so the only angle-bracket
+  constructs in the prompt are its real `<xml>` semantic blocks.
+
+### Robustness
+
+- A runtime-overlay test asserts `buildSubAgentRuntimeOverlay` always renders
+  the `### Current Date` and `### Working Environment` headings in order, which
+  the Librarian and General personas reference via "see the runtime overlay
+  above".
+
 ## 2.16.0 (2026-06-06) — Render Performance & Lightweight Tool UI
 
 Eliminate redundant per-tick work in the sub-agent live renderer, cache hot

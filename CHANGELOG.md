@@ -59,6 +59,14 @@ sub-agent.
   the Librarian and General personas reference via "see the runtime overlay
   above".
 
+### Removed
+
+- **GitHub Copilot provider-header override** — removed the obsolete
+  `copilot_initiator_header` setting, the `registerCopilotHeader()` session-start
+  hook, and its `X-Initiator: agent` provider registration. Existing settings that
+  still contain this key are treated as unknown passthrough config and no longer
+  affect runtime behavior.
+
 ## 2.16.0 (2026-06-06) — Render Performance & Lightweight Tool UI
 
 Eliminate redundant per-tick work in the sub-agent live renderer, cache hot

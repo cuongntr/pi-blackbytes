@@ -7,8 +7,9 @@ Pi coding-agent extension that replaces Pi's MCP-plugin dependency on the websea
 ### Development
 
 ```bash
+bun run check             # lint + typecheck + build + test + package size
 bun run build             # bun build src/index.ts -> dist/index.js (+ tsc --emitDeclarationOnly)
-bun run test              # bash -c 'node --import tsx --test src/**/*.test.ts'
+bun run test              # node scripts/run-tests.mjs
 bun run lint              # biome check src/
 bun run lint:fix          # biome check --fix src/
 bun run format            # biome format --write src/
@@ -18,7 +19,7 @@ bun run bench:tool-result # Tool result processing benchmark
 bun run check:size        # Package must be < 500KB gzipped
 ```
 
-Run in order: `lint -> build -> test`.
+Full verification uses `bun run check`. For targeted iteration, run `lint -> typecheck -> build -> test`.
 
 ### Pi commands
 
@@ -81,7 +82,6 @@ Core settings:
 - `disabled_tools` / `disabled_sub_agents`
 - `hashline_edit` (boolean shorthand or object: `{ enabled?: boolean, strict_patch?: boolean }`)
   - `hashline_edit.strict_patch` (default `true`) — reject `lines` payloads that include accidental `LINE#ID|` prefixes with `[E_INVALID_PATCH]`. Set to `false` to restore the legacy silent-strip behaviour.
-- `copilot_initiator_header`
 - `ui.boxed_tool_calls` (default `true`) — boxed rendering for Blackbytes tool calls/results; set `false` for a rollback to the legacy unboxed renderer.
 - `ui.boxed_builtin_tools` (default `false`) — opt-in boxed wrappers for Pi builtin tools such as `bash` when the host Pi version exposes a compatible factory.
 - `ui.boxed_max_preview_lines` / `ui.boxed_max_expanded_lines` / `ui.boxed_dim_output` — boxed builtin output preview limits and colour mode.
@@ -93,6 +93,7 @@ Core settings:
 - `sub_agents.<name>.reasoningEffort`
 - `sub_agents.<name>.timeoutMs` (per-agent timeout, 1..3600000 ms; YAML uses `timeout_ms`. Builtin defaults: explore=600000, librarian=900000, oracle=1200000, reviewer=900000, general=1800000)
 - `sub_agents.<name>.fallbackModels` (read-only agents only; string[], max 5, unique, non-empty; YAML uses `fallback_models`. `general` and mutating YAML agents are ineligible)
+- `sub_agents.<name>.executionMode` (`"sequential"` / `"parallel"`; YAML uses `execution_mode`)
 - `sub_agents.<name>.promptMode` (RESERVED — `"static"` is the only safe value; `"append"` throws at runtime ("not yet supported"); YAML uses `prompt_mode`)
 - `sub_agents.<name>.temperature` (RESERVED — accepted by schema for forward-compat but NOT passed to the nested Pi CLI; see `/blackbytes-status`)
 

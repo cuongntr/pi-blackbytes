@@ -164,7 +164,6 @@ Blackbytes reads the top-level `blackbytes` object from the Pi settings file.
     "disabled_tools": [],
     "disabled_sub_agents": [],
     "hashline_edit": { "strict_patch": true },
-    "copilot_initiator_header": true,
     "websearch": {
       "provider": "exa",
       "exa_api_key": "YOUR_EXA_KEY"
@@ -194,6 +193,7 @@ Blackbytes reads the top-level `blackbytes` object from the Pi settings file.
         "reasoningEffort": "high",
         "timeoutMs": 1200000,
         "fallbackModels": ["anthropic/claude-opus-4"],
+        "executionMode": "sequential",
         "temperature": 0.2
       },
       "general": {
@@ -211,7 +211,6 @@ Blackbytes reads the top-level `blackbytes` object from the Pi settings file.
 | `disabled_tools` | `string[]` | Disables specific public tool names for the entire session |
 | `disabled_sub_agents` | `("explore" \| "oracle" \| "librarian" \| "general" \| "reviewer")[]` | Disables delegate tools by agent name |
 | `hashline_edit` | `boolean` \| `{ enabled?: boolean, strict_patch?: boolean }` | Enables hashline rewriting for Pi `read`/`write` tool results. Object form exposes `strict_patch` (default `true`) — `lines` payloads containing accidental `LINE#ID\|` prefixes are rejected with `[E_INVALID_PATCH]`. Set `strict_patch: false` to restore the legacy silent-strip behaviour. |
-| `copilot_initiator_header` | `boolean` | Registers the GitHub Copilot provider header `X-Initiator: agent` |
 | `websearch.provider` | `"exa" \| "tavily"` | Selects the web backend. Defaults to `exa` when omitted. |
 | `websearch.exa_api_key` | `string` | Exa credential. Overrides `EXA_API_KEY` when set. |
 | `websearch.tavily_api_key` | `string` | Tavily credential. Overrides `TAVILY_API_KEY` when set. |
@@ -313,6 +312,7 @@ fallback_models:            # read-only agents only; at most 5 entries
   - anthropic/claude-opus-4
   - google/gemini-2.5-pro
 prompt_mode: static         # 'static' only; 'append' throws at runtime
+execution_mode: sequential  # optional; sequential | parallel
 routing:                    # optional typed routing metadata
   category: review           # exploration | reasoning | research | implementation | review
   cost: medium               # low | medium | high

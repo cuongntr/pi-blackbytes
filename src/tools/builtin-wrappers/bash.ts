@@ -1,12 +1,12 @@
 import * as PiAgent from "@earendil-works/pi-coding-agent";
 import type { ExtensionAPI, Theme } from "@earendil-works/pi-coding-agent";
 import { Text } from "@earendil-works/pi-tui";
-import type { BoxedUiConfig } from "../../config/schema.js";
+import type { BlackbytesUiConfig } from "../../config/schema.js";
 import {
-  formatBoxedFooter,
-  renderBoxedToolResult,
-  renderCompactBoxedToolCall,
-} from "../_shared/boxed-render.js";
+  formatLightweightFooter,
+  renderLightweightToolCall,
+  renderLightweightToolResult,
+} from "../_shared/lightweight-render.js";
 import { highlightShellLine } from "../_shared/shell-highlight.js";
 import { expandedPreview, getTextOutput, tailPreview } from "../_shared/tool-output.js";
 
@@ -31,9 +31,9 @@ interface BashRenderContext {
 
 export function registerBashWrapper(
   pi: ExtensionAPI,
-  opts: { readonly cwd: string; readonly ui: BoxedUiConfig; readonly factory?: BashFactory },
+  opts: { readonly cwd: string; readonly ui: BlackbytesUiConfig; readonly factory?: BashFactory },
 ): boolean {
-  if (!opts.ui.boxed_builtin_tools) return false;
+  if (!opts.ui.bash_wrapper_enabled) return false;
   const factory = opts.factory ?? getCreateBashTool();
   if (!factory) return false;
   let base: BashTool;
@@ -69,11 +69,9 @@ export function registerBashWrapper(
         const noun = hiddenLineCount === 1 ? "line" : "lines";
         detailParts.push(theme.fg("muted", `… ${hiddenLineCount} more ${noun}`));
       }
-      return renderCompactBoxedToolCall(theme, "Bash", detailParts.join(theme.fg("muted", " ")), {
+      return renderLightweightToolCall(theme, "Bash", detailParts.join(theme.fg("muted", " ")), {
         isError: context?.isError,
         isPartial: context?.isPartial,
-        closeBottom: !context?.hasResult,
-        bgToken: "toolPendingBg",
       });
     },
     renderResult(
@@ -83,14 +81,10 @@ export function registerBashWrapper(
       context?: BashRenderContext,
     ) {
       if (options.isPartial) {
-        return renderBoxedToolResult(
+        return renderLightweightToolResult(
           theme,
           new Text(theme.fg("muted", "Running command..."), 0, 0),
-          {
-            isPartial: true,
-            seamTop: true,
-            bgToken: "toolPendingBg",
-          },
+          { isPartial: true },
         );
       }
       const text = getTextOutput(result as never);
@@ -98,14 +92,14 @@ export function registerBashWrapper(
         context?.isError || (result as { isError?: boolean } | undefined)?.isError,
       );
       const preview = options.expanded
-        ? expandedPreview(text, opts.ui.boxed_max_expanded_lines)
-        : tailPreview(text, opts.ui.boxed_max_preview_lines);
+        ? expandedPreview(text, opts.ui.bash_max_expanded_lines)
+        : tailPreview(text, opts.ui.bash_max_preview_lines);
       const lines = preview.lines.map((line) =>
-        theme.fg(isError ? "error" : opts.ui.boxed_dim_output ? "toolOutput" : "text", line),
+        theme.fg(isError ? "error" : opts.ui.bash_dim_output ? "toolOutput" : "text", line),
       );
       if (preview.omittedLines > 0) {
         const label = options.expanded
-          ? `… ${preview.omittedLines} more lines omitted by boxed_max_expanded_lines`
+          ? `… ${preview.omittedLines} more lines omitted by bash_max_expanded_lines`
           : `… ${preview.omittedLines} earlier lines hidden`;
         lines.push(theme.fg("muted", label));
       }
@@ -115,13 +109,11 @@ export function registerBashWrapper(
       const explicitTimeout = context?.args?.timeout;
       const extraFooter =
         typeof explicitTimeout === "number" ? [theme.fg("muted", `⏹ ${explicitTimeout}s`)] : [];
-      const footer = formatBoxedFooter(theme, text, extraFooter);
-      return renderBoxedToolResult(theme, new Text(lines.join("\n"), 0, 0), {
+      const footer = formatLightweightFooter(theme, text, extraFooter);
+      return renderLightweightToolResult(theme, new Text(lines.join("\n"), 0, 0), {
         isError,
         footerLines: [footer],
         emptyText: "(no output)",
-        seamTop: true,
-        bgToken: isError ? "toolErrorBg" : "toolSuccessBg",
       });
     },
   } as never);

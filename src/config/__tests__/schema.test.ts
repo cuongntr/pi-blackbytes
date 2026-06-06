@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { BlackbytesConfigSchema, getBoxedUiConfig, parseBlackbytesConfig } from "../schema.js";
+import { BlackbytesConfigSchema, getUiConfig, parseBlackbytesConfig } from "../schema.js";
 
 describe("BlackbytesConfigSchema", () => {
   it("empty object validates with all defaults applied", () => {
@@ -116,31 +116,35 @@ describe("BlackbytesConfigSchema", () => {
     }
   });
 
-  it("applies boxed UI defaults and overrides", () => {
+  it("applies UI defaults and overrides", () => {
     const parsed = BlackbytesConfigSchema.parse({
       ui: {
-        boxed_tool_calls: false,
-        boxed_builtin_tools: true,
-        boxed_max_preview_lines: 8,
-        boxed_max_expanded_lines: 120,
-        boxed_dim_output: true,
+        bash_wrapper_enabled: true,
+        bash_max_preview_lines: 8,
+        bash_max_expanded_lines: 120,
+        bash_dim_output: true,
         read_tool_display: "preview",
       },
     });
 
-    assert.deepEqual(getBoxedUiConfig(parsed), {
-      boxed_tool_calls: false,
-      boxed_builtin_tools: true,
-      boxed_max_preview_lines: 8,
-      boxed_max_expanded_lines: 120,
-      boxed_dim_output: true,
+    assert.deepEqual(getUiConfig(parsed), {
+      bash_wrapper_enabled: true,
+      bash_max_preview_lines: 8,
+      bash_max_expanded_lines: 120,
+      bash_dim_output: true,
       read_tool_display: "preview",
     });
   });
 
-  it("defaults read tool display to compact", () => {
+  it("applies UI defaults from an empty config", () => {
     const parsed = BlackbytesConfigSchema.parse({});
-    assert.equal(getBoxedUiConfig(parsed).read_tool_display, "compact");
+    assert.deepEqual(getUiConfig(parsed), {
+      bash_wrapper_enabled: true,
+      bash_max_preview_lines: 5,
+      bash_max_expanded_lines: 200,
+      bash_dim_output: false,
+      read_tool_display: "compact",
+    });
   });
 
   it("rejects invalid read tool display values", () => {

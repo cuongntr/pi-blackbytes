@@ -2,15 +2,14 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
-import type { BoxedUiConfig } from "../../../config/schema.js";
+import type { BlackbytesUiConfig } from "../../../config/schema.js";
 import { registerBashWrapper } from "../bash.js";
 
-const ui: BoxedUiConfig = {
-  boxed_tool_calls: true,
-  boxed_builtin_tools: true,
-  boxed_max_preview_lines: 5,
-  boxed_max_expanded_lines: 200,
-  boxed_dim_output: false,
+const ui: BlackbytesUiConfig = {
+  bash_wrapper_enabled: true,
+  bash_max_preview_lines: 5,
+  bash_max_expanded_lines: 200,
+  bash_dim_output: false,
   read_tool_display: "compact",
 };
 
@@ -73,7 +72,7 @@ function assertRenderableTool(tool: RegisteredTool): asserts tool is RenderableR
   assert.equal(typeof tool.renderResult, "function");
 }
 
-function registerEnabledTool(config: BoxedUiConfig = ui): RegisteredTool {
+function registerEnabledTool(config: BlackbytesUiConfig = ui): RegisteredTool {
   let registeredTool: RegisteredTool | undefined;
   const enabled = registerBashWrapper(
     piCapturingTool((tool) => {
@@ -103,7 +102,7 @@ describe("registerBashWrapper", () => {
       }),
       {
         cwd: "/tmp",
-        ui: { ...ui, boxed_builtin_tools: false },
+        ui: { ...ui, bash_wrapper_enabled: false },
         factory: () => ({ execute: () => "unused" }),
       },
     );
@@ -192,7 +191,7 @@ describe("registerBashWrapper", () => {
   });
 
   it("renders collapsed tail preview, error color, and footer", () => {
-    const tool = registerEnabledTool({ ...ui, boxed_max_preview_lines: 2 });
+    const tool = registerEnabledTool({ ...ui, bash_max_preview_lines: 2 });
     assertRenderableTool(tool);
 
     const out = render(
@@ -233,7 +232,7 @@ describe("registerBashWrapper", () => {
   });
 
   it("renders expanded output caps and partial state", () => {
-    const tool = registerEnabledTool({ ...ui, boxed_max_expanded_lines: 2 });
+    const tool = registerEnabledTool({ ...ui, bash_max_expanded_lines: 2 });
     assertRenderableTool(tool);
 
     const expanded = render(
@@ -251,7 +250,7 @@ describe("registerBashWrapper", () => {
     assert.match(expanded, /line1/);
     assert.match(expanded, /line2/);
     assert.doesNotMatch(expanded, /line3/);
-    assert.match(expanded, /boxed_max_expanded_lines/);
+    assert.match(expanded, /bash_max_expanded_lines/);
     assert.match(partial, /Running command/);
   });
 });

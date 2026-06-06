@@ -12,7 +12,7 @@ import { setupBranding } from "../branding.js";
 import { getEnabledSet, initEnabledSet } from "../config/enabled-set.js";
 import { loadBlackbytesConfig } from "../config/loader.js";
 import { registerSubAgentMeta } from "../config/resource-metadata.js";
-import { getBoxedUiConfig, getHashlineEditConfig } from "../config/schema.js";
+import { getHashlineEditConfig, getUiConfig } from "../config/schema.js";
 import { getLogger } from "../shared/logger.js";
 import { setModelFamily } from "../shared/model-capability.js";
 import { resetSessionRuntimeState } from "../shared/session-state.js";
@@ -31,7 +31,6 @@ import { registerSubAgent } from "../sub-agents/register.js";
 import { reviewerDeclaration } from "../sub-agents/reviewer.js";
 import { initAgentSnapshot } from "../sub-agents/snapshot.js";
 import { assertUniqueNames } from "../sub-agents/validate-unique.js";
-import { setBoxedToolCallsEnabled } from "../tools/_shared/boxed-config.js";
 import { registerAstGrepReplaceTool } from "../tools/ast-grep/replace.js";
 import { registerAstGrepSearchTool } from "../tools/ast-grep/search.js";
 import { registerBuiltinWrappers } from "../tools/builtin-wrappers/index.js";
@@ -99,12 +98,11 @@ export async function handleSessionStart(
     });
   }
 
-  const boxedUi = getBoxedUiConfig(config);
-  setBoxedToolCallsEnabled(boxedUi.boxed_tool_calls);
+  const uiConfig = getUiConfig(config);
 
   // Local tools
   registerHashlineEditTool(pi, { strictPatch: getHashlineEditConfig(config).strict_patch });
-  registerCleanReadRenderer(pi, _ctx.cwd ?? process.cwd(), { ui: boxedUi });
+  registerCleanReadRenderer(pi, _ctx.cwd ?? process.cwd(), { ui: uiConfig });
   registerAstGrepSearchTool(pi);
   registerAstGrepReplaceTool(pi);
   registerGlobTool(pi);
@@ -117,7 +115,7 @@ export async function handleSessionStart(
   registerQueryDocsTool(pi);
   registerGrepAppSearchTool(pi);
 
-  registerBuiltinWrappers(pi, { cwd: _ctx.cwd ?? process.cwd(), ui: boxedUi });
+  registerBuiltinWrappers(pi, { cwd: _ctx.cwd ?? process.cwd(), ui: uiConfig });
 
   // Sub-agent delegates — declaration-driven registration
   for (const decl of allDeclarations) {

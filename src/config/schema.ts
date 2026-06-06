@@ -29,21 +29,21 @@ export const BlackbytesConfigSchema = z
       .optional(),
     ui: z
       .object({
-        boxed_tool_calls: z.boolean().optional(),
-        boxed_builtin_tools: z.boolean().optional(),
-        boxed_max_preview_lines: z
+        // Opt-in lightweight wrapper for Pi builtin tools such as `bash`.
+        bash_wrapper_enabled: z.boolean().optional(),
+        bash_max_preview_lines: z
           .number()
-          .int("boxed_max_preview_lines must be an integer")
-          .min(0, "boxed_max_preview_lines must be non-negative")
-          .max(1000, "boxed_max_preview_lines must not exceed 1000")
+          .int("bash_max_preview_lines must be an integer")
+          .min(0, "bash_max_preview_lines must be non-negative")
+          .max(1000, "bash_max_preview_lines must not exceed 1000")
           .optional(),
-        boxed_max_expanded_lines: z
+        bash_max_expanded_lines: z
           .number()
-          .int("boxed_max_expanded_lines must be an integer")
-          .min(0, "boxed_max_expanded_lines must be non-negative")
-          .max(5000, "boxed_max_expanded_lines must not exceed 5000")
+          .int("bash_max_expanded_lines must be an integer")
+          .min(0, "bash_max_expanded_lines must be non-negative")
+          .max(5000, "bash_max_expanded_lines must not exceed 5000")
           .optional(),
-        boxed_dim_output: z.boolean().optional(),
+        bash_dim_output: z.boolean().optional(),
         read_tool_display: z.enum(["compact", "preview"]).optional(),
       })
       .passthrough()
@@ -138,23 +138,22 @@ export function getHashlineEditConfig(config: BlackbytesConfig): {
   };
 }
 
-export interface BoxedUiConfig {
-  boxed_tool_calls: boolean;
-  boxed_builtin_tools: boolean;
-  boxed_max_preview_lines: number;
-  boxed_max_expanded_lines: number;
-  boxed_dim_output: boolean;
+export interface BlackbytesUiConfig {
+  /** Opt-in lightweight wrapper around Pi builtin tools (e.g. bash). */
+  bash_wrapper_enabled: boolean;
+  bash_max_preview_lines: number;
+  bash_max_expanded_lines: number;
+  bash_dim_output: boolean;
   read_tool_display: "compact" | "preview";
 }
 
-export function getBoxedUiConfig(config: BlackbytesConfig): BoxedUiConfig {
+export function getUiConfig(config: BlackbytesConfig): BlackbytesUiConfig {
   const raw = config.ui;
   return {
-    boxed_tool_calls: raw?.boxed_tool_calls ?? true,
-    boxed_builtin_tools: raw?.boxed_builtin_tools ?? false,
-    boxed_max_preview_lines: raw?.boxed_max_preview_lines ?? 5,
-    boxed_max_expanded_lines: raw?.boxed_max_expanded_lines ?? 200,
-    boxed_dim_output: raw?.boxed_dim_output ?? false,
+    bash_wrapper_enabled: raw?.bash_wrapper_enabled ?? true,
+    bash_max_preview_lines: raw?.bash_max_preview_lines ?? 5,
+    bash_max_expanded_lines: raw?.bash_max_expanded_lines ?? 200,
+    bash_dim_output: raw?.bash_dim_output ?? false,
     read_tool_display: raw?.read_tool_display ?? "compact",
   };
 }

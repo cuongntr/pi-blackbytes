@@ -1,6 +1,5 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { getEnabledSet } from "../../config/enabled-set.js";
-import { isBoxedToolCallsEnabled } from "./boxed-config.js";
 
 /**
  * Registers a tool with the pi extension API if it is enabled in the current session config.
@@ -14,14 +13,13 @@ export function registerTool(pi: ExtensionAPI, name: string, definition: any): v
     return;
   }
 
-  // When lightweight custom rendering is on, use the self shell so Pi does not
-  // add its default tool wrapper around our Claude-like call/result lines.
-  // In unboxed rollback mode the renderers return plain Text and need Pi's
-  // default shell.
+  // Tools with custom rendering use the self shell so Pi does not add its
+  // default tool wrapper around our lightweight call/result lines. Respect an
+  // explicit renderShell if the caller already set one.
   const hasCustomRender =
     typeof definition.renderCall === "function" || typeof definition.renderResult === "function";
   const def =
-    hasCustomRender && isBoxedToolCallsEnabled() && definition.renderShell === undefined
+    hasCustomRender && definition.renderShell === undefined
       ? { ...definition, renderShell: "self" }
       : definition;
 

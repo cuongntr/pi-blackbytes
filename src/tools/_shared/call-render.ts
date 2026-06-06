@@ -1,7 +1,5 @@
 import type { Theme } from "@earendil-works/pi-coding-agent";
-import { Text } from "@earendil-works/pi-tui";
-import { isBoxedToolCallsEnabled } from "./boxed-config.js";
-import { renderCompactBoxedToolCall } from "./boxed-render.js";
+import { renderLightweightToolCall } from "./lightweight-render.js";
 
 /** Safely extract a string from unknown args */
 export function str(v: unknown): string | null {
@@ -44,19 +42,10 @@ export function makeRenderCall(
   ) => {
     const safeArgs = args && typeof args === "object" ? (args as Record<string, unknown>) : {};
     const detail = formatArgs(safeArgs, theme);
-    if (isBoxedToolCallsEnabled()) {
-      return renderCompactBoxedToolCall(theme, titleFromIconName(icon, name), detail, {
-        isError: context?.isError,
-        isPartial: context?.isPartial,
-        closeBottom: !context?.hasResult,
-        bgToken: "toolPendingBg",
-      });
-    }
-    return new Text(
-      [theme.fg("toolTitle", titleFromIconName(icon, name)), detail].filter(Boolean).join(" "),
-      0,
-      0,
-    );
+    return renderLightweightToolCall(theme, titleFromIconName(icon, name), detail, {
+      isError: context?.isError,
+      isPartial: context?.isPartial,
+    });
   };
 }
 
@@ -70,18 +59,9 @@ export function makeSubAgentRenderCall(icon: string, name: string, primaryKey: s
     const safeArgs = args && typeof args === "object" ? (args as Record<string, unknown>) : {};
     const val = str(safeArgs[primaryKey]);
     const detail = val ? theme.fg("accent", `"${truncate(val, 60)}"`) : "";
-    if (isBoxedToolCallsEnabled()) {
-      return renderCompactBoxedToolCall(theme, titleCaseName(name), detail, {
-        isError: context?.isError,
-        isPartial: context?.isPartial,
-        closeBottom: !context?.hasResult,
-        bgToken: "toolPendingBg",
-      });
-    }
-    return new Text(
-      [theme.fg("toolTitle", titleCaseName(name)), detail].filter(Boolean).join(" "),
-      0,
-      0,
-    );
+    return renderLightweightToolCall(theme, titleCaseName(name), detail, {
+      isError: context?.isError,
+      isPartial: context?.isPartial,
+    });
   };
 }

@@ -1,7 +1,6 @@
 import type { Theme } from "@earendil-works/pi-coding-agent";
 import { Text } from "@earendil-works/pi-tui";
-import { isBoxedToolCallsEnabled } from "./boxed-config.js";
-import { boxedExpandHint, renderBoxedToolResult } from "./boxed-render.js";
+import { lightweightExpandHint, renderLightweightToolResult } from "./lightweight-render.js";
 import { getTextOutput } from "./tool-output.js";
 
 export interface ToolResultStats {
@@ -16,7 +15,7 @@ interface RenderableResult {
 
 /**
  * Build an enhanced renderResult function for extension tools.
- * Adds boxed ✓/✗ status, partial state support, and expandable full output.
+ * Adds ✓/✗ status, partial state support, and expandable full output.
  */
 export function buildStatsRenderResult(opts: { readonly partial: string }) {
   return (
@@ -25,15 +24,9 @@ export function buildStatsRenderResult(opts: { readonly partial: string }) {
     theme: Theme,
     context?: { readonly isError?: boolean },
   ) => {
-    if (!isBoxedToolCallsEnabled()) {
-      return renderUnboxedStatsResult(result, options, theme, context, opts.partial);
-    }
-
     if (options.isPartial) {
-      return renderBoxedToolResult(theme, new Text(theme.fg("muted", opts.partial), 0, 0), {
+      return renderLightweightToolResult(theme, new Text(theme.fg("muted", opts.partial), 0, 0), {
         isPartial: true,
-        seamTop: true,
-        bgToken: "toolPendingBg",
       });
     }
 
@@ -42,82 +35,22 @@ export function buildStatsRenderResult(opts: { readonly partial: string }) {
     const summary = stats?.summary || "";
     const isError = context?.isError ?? false;
 
-    const resultBg = isError ? "toolErrorBg" : "toolSuccessBg";
-
     if (options.expanded) {
-      return renderBoxedToolResult(
+      return renderLightweightToolResult(
         theme,
         new Text(theme.fg(isError ? "error" : "toolOutput", fullText), 0, 0),
-        {
-          isError,
-          seamTop: true,
-          bgToken: resultBg,
-        },
+        { isError },
       );
     }
 
     const icon = isError ? theme.fg("error", "✗") : theme.fg("success", "✓");
     const parts: string[] = [icon];
     if (summary) parts.push(theme.fg(isError ? "error" : "muted", summary));
-    parts.push(boxedExpandHint(theme));
-    return renderBoxedToolResult(theme, new Text(parts.join(theme.fg("muted", " · ")), 0, 0), {
-      isError,
-      seamTop: true,
-      bgToken: resultBg,
-    });
+    parts.push(lightweightExpandHint(theme));
+    return renderLightweightToolResult(
+      theme,
+      new Text(parts.join(theme.fg("muted", " · ")), 0, 0),
+      { isError },
+    );
   };
-}
-
-export function renderStatsResult(
-  result: RenderableResult,
-  options: { expanded: boolean },
-  theme: Theme,
-) {
-  if (!isBoxedToolCallsEnabled()) {
-    return renderUnboxedStatsResult(result, options, theme);
-  }
-
-  const stats = result.details as ToolResultStats | undefined;
-  const fullText = stats?.fullText || getTextOutput(result);
-  const summary = stats?.summary || "";
-  if (options.expanded) {
-    return renderBoxedToolResult(theme, new Text(theme.fg("toolOutput", fullText), 0, 0));
-  }
-  return renderBoxedToolResult(
-    theme,
-    new Text(
-      [summary ? theme.fg("muted", summary) : "", boxedExpandHint(theme)]
-        .filter(Boolean)
-        .join(theme.fg("muted", " · ")),
-      0,
-      0,
-    ),
-  );
-}
-
-function renderUnboxedStatsResult(
-  result: RenderableResult,
-  options: { readonly expanded: boolean; readonly isPartial?: boolean },
-  theme: Theme,
-  context?: { readonly isError?: boolean },
-  partialLabel?: string,
-) {
-  if (options.isPartial) {
-    return new Text(theme.fg("muted", partialLabel ?? "Working..."), 0, 0);
-  }
-
-  const stats = result.details as ToolResultStats | undefined;
-  const fullText = stats?.fullText || getTextOutput(result);
-  const summary = stats?.summary || "";
-  const isError = context?.isError ?? false;
-
-  if (options.expanded) {
-    return new Text(theme.fg(isError ? "error" : "toolOutput", fullText), 0, 0);
-  }
-
-  const icon = isError ? theme.fg("error", "✗") : theme.fg("success", "✓");
-  const parts: string[] = [icon];
-  if (summary) parts.push(theme.fg(isError ? "error" : "muted", summary));
-  parts.push(boxedExpandHint(theme));
-  return new Text(parts.join(theme.fg("muted", " · ")), 0, 0);
 }

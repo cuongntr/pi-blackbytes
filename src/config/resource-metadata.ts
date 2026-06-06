@@ -1,6 +1,7 @@
 // Shared resource metadata — single source of truth for enabled-set filtering
 // and prompt/resource injection.
 
+import { BUILTIN_SUB_AGENT_METADATA } from "../sub-agents/builtin-metadata.js";
 import type { SubAgentRoutingMetadata } from "../sub-agents/declaration.js";
 import type { PromptFeatureFlags } from "../system-prompt/bytes/types.js";
 
@@ -67,33 +68,12 @@ export const TOOL_GROUPS: readonly ToolGroupMeta[] = [
   },
 ];
 
-export const SUB_AGENTS: readonly SubAgentMeta[] = [
-  {
-    name: "explore",
-    description: "Contextual grep for codebases",
-    promptFeatures: ["subagentDelegation"],
-  },
-  {
-    name: "oracle",
-    description: "Read-only consultation agent for debugging and architecture",
-    promptFeatures: ["subagentDelegation"],
-  },
-  {
-    name: "librarian",
-    description: "External docs/library/API research and open-source examples",
-    promptFeatures: ["subagentDelegation"],
-  },
-  {
-    name: "general",
-    description: "Implementation executor for heavy multi-file work",
-    promptFeatures: ["subagentDelegation"],
-  },
-  {
-    name: "reviewer",
-    description: "Read-only code reviewer for diffs, branches, and PRs",
-    promptFeatures: ["subagentDelegation"],
-  },
-];
+export const SUB_AGENTS: readonly SubAgentMeta[] = BUILTIN_SUB_AGENT_METADATA.map((a) => ({
+  name: a.name,
+  description: a.description,
+  promptFeatures: ["subagentDelegation"],
+  routing: a.routing,
+}));
 
 // ---------------------------------------------------------------------------
 // Runtime sub-agent metadata registry

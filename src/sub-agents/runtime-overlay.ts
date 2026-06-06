@@ -115,3 +115,16 @@ export function buildSubAgentRuntimeOverlay(input: BuildSubAgentRuntimeOverlayIn
 
   return rendered;
 }
+
+/**
+ * Standard `prependSystemPrompt` hook for read-only sub-agents.
+ *
+ * Every read-only builtin (and the YAML loader's default) wraps
+ * `buildSubAgentRuntimeOverlay` with an identical `({ cwd, finalizedTools })`
+ * closure. This factory removes that per-declaration boilerplate so a
+ * declaration only needs `prependSystemPrompt: standardPrependOverlay("name")`.
+ */
+export function standardPrependOverlay(agentName: string) {
+  return ({ cwd, finalizedTools }: { cwd?: string; finalizedTools: readonly string[] }): string =>
+    buildSubAgentRuntimeOverlay({ agentName, cwd, finalizedTools });
+}

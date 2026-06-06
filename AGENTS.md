@@ -56,7 +56,7 @@ All tools and sub-agents are registered in `handleSessionStart()` (`src/handlers
 
 1. Define a declaration with `defineSubAgent()` in `src/sub-agents/<name>.ts`
 2. Export the declaration and add it to `BUILTIN_DECLARATIONS` in `src/handlers/index.ts`
-3. Add metadata to `SUB_AGENTS` in `src/config/resource-metadata.ts`
+3. Add a `<NAME>_METADATA` entry to `src/sub-agents/builtin-metadata.ts` and include it in `BUILTIN_SUB_AGENT_METADATA`; the declaration spreads it and `SUB_AGENTS` is derived automatically.
 4. Add the icon to `SUB_AGENT_ICONS` in `src/sub-agents/icons.ts`
 5. Add `routing` metadata to the declaration (category, cost, useWhen, avoidWhen, keyTrigger)
 6. Update the hardcoded agent-name lists in the affected test files (see `src/config/__tests__/enabled-set.test.ts` for the pattern)

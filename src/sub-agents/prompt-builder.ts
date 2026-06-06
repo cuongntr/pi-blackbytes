@@ -98,3 +98,27 @@ export function buildSystemPrompt(opts: BuildSystemPromptOptions): string {
     `Sub-agent "${opts.declaration.name}" uses promptMode "append" which is not yet supported. No stable API exists to retrieve the parent session's system prompt from inside a registered tool execute callback. Set promptMode to "static" (the default) or omit the field until append mode is implemented in a future release (pib-vyj.2.3).`,
   );
 }
+
+// ---------------------------------------------------------------------------
+// User-prompt helper
+// ---------------------------------------------------------------------------
+
+/**
+ * Compose a sub-agent's user prompt from its primary argument plus optional
+ * caller-supplied context, using the shared delimiter convention. Several
+ * builtin declarations repeated this exact ternary; centralising it keeps the
+ * formatting (delimiter, label spacing) consistent across agents.
+ *
+ * @param main The primary prompt text (question / task / request).
+ * @param context Optional additional context block.
+ * @param label Heading used to introduce the context block.
+ *   Defaults to "Additional context".
+ * @returns `main` alone when no context, otherwise main + delimited context.
+ */
+export function formatUserPrompt(
+  main: string,
+  context?: string,
+  label = "Additional context",
+): string {
+  return context ? `${main}\n\n---\n\n${label}:\n${context}` : main;
+}

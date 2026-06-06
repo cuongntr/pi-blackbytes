@@ -1,7 +1,8 @@
 import { Type } from "typebox";
 import { TOOL_NAMES } from "../config/resource-metadata.js";
+import { LIBRARIAN_METADATA } from "./builtin-metadata.js";
 import { defineSubAgent } from "./declaration.js";
-import { buildSubAgentRuntimeOverlay } from "./runtime-overlay.js";
+import { standardPrependOverlay } from "./runtime-overlay.js";
 
 const LIBRARIAN_SYSTEM_PROMPT = `# Librarian — Sub-Agent Persona
 
@@ -109,15 +110,8 @@ docs URL, etc.) — do not convert remote URLs to \`file://\`.
 Detect the language the user writes in and respond in the same language. Keep code, technical terms, library names, URLs, and structured findings in English.`;
 
 export const librarianDeclaration = defineSubAgent<{ question: string }>({
-  name: "librarian",
+  ...LIBRARIAN_METADATA,
   toolName: "delegate_librarian",
-  description:
-    "Delegate to the Librarian ONLY when ALL of these hold: " +
-    "(a) needs EXTERNAL info; " +
-    "(b) needs MULTIPLE sources or current-year authoritative answer; (c) direct tools " +
-    "would each be insufficient alone. DO NOT use for single URL fetch, single docs " +
-    "lookup, single GitHub search, or local-codebase questions. " +
-    "Cost signal: ~5–10× more tokens and latency.",
   parameters: Type.Object({
     question: Type.String({
       description:
@@ -142,27 +136,7 @@ export const librarianDeclaration = defineSubAgent<{ question: string }>({
   mutability: "read-only",
   finalizeMode: "strict",
   source: "builtin",
-  routing: {
-    category: "research",
-    cost: "high",
-    useWhen: [
-      "Needs 3+ external sources to answer confidently",
-      "Official docs + changelog + real-world examples needed",
-      "Current-year authoritative answer that may have changed",
-    ],
-    avoidWhen: [
-      "Single URL fetch or single docs lookup suffices",
-      "Local-codebase questions",
-      "Trivial facts or restating known information",
-    ],
-    keyTrigger: "Multi-source external research requiring triangulation",
-  },
   staticOverrides: { timeoutMs: 900_000 },
   buildUserPrompt: (p) => p.question,
-  prependSystemPrompt: ({ cwd, finalizedTools }) =>
-    buildSubAgentRuntimeOverlay({
-      agentName: "librarian",
-      cwd,
-      finalizedTools,
-    }),
+  prependSystemPrompt: standardPrependOverlay("librarian"),
 });

@@ -1,7 +1,9 @@
 import { Type } from "typebox";
 import { TOOL_NAMES } from "../config/resource-metadata.js";
+import { ORACLE_METADATA } from "./builtin-metadata.js";
 import { defineSubAgent } from "./declaration.js";
-import { buildSubAgentRuntimeOverlay } from "./runtime-overlay.js";
+import { formatUserPrompt } from "./prompt-builder.js";
+import { standardPrependOverlay } from "./runtime-overlay.js";
 
 const ORACLE_SYSTEM_PROMPT = `# Oracle — Sub-Agent Persona
 
@@ -168,12 +170,8 @@ export const oracleDeclaration = defineSubAgent<{
   question: string;
   context?: string;
 }>({
-  name: "oracle",
+  ...ORACLE_METADATA,
   toolName: "delegate_oracle",
-  description:
-    "Delegate a hard reasoning or architecture problem to the Oracle " +
-    "sub-agent — a high-IQ read-only consultation specialist. " +
-    "The sub-agent has read-only access and uses elevated reasoning effort.",
   parameters: Type.Object({
     question: Type.String({
       description:
@@ -193,28 +191,8 @@ export const oracleDeclaration = defineSubAgent<{
   allowedTools: ["read", "grep", TOOL_NAMES.GLOB, TOOL_NAMES.AST_SEARCH],
   mutability: "read-only",
   finalizeMode: "strict",
-  buildUserPrompt: (p) =>
-    p.context ? `${p.question}\n\n---\n\nAdditional context:\n${p.context}` : p.question,
+  buildUserPrompt: (p) => formatUserPrompt(p.question, p.context),
   staticOverrides: { reasoningEffort: "high", timeoutMs: 1_200_000 },
   source: "builtin",
-  routing: {
-    category: "reasoning",
-    cost: "high",
-    useWhen: [
-      "Hard architecture or debugging decisions",
-      "Security or performance trade-off analysis",
-      "After 2 failed attempts at solving a problem",
-    ],
-    avoidWhen: [
-      "Simple questions answerable from local code",
-      "Tasks that need file writes or bash execution",
-    ],
-    keyTrigger: "Deep analytical reasoning on hard problems",
-  },
-  prependSystemPrompt: ({ cwd, finalizedTools }) =>
-    buildSubAgentRuntimeOverlay({
-      agentName: "oracle",
-      cwd,
-      finalizedTools,
-    }),
+  prependSystemPrompt: standardPrependOverlay("oracle"),
 });

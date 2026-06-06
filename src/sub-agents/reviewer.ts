@@ -1,7 +1,9 @@
 import { Type } from "typebox";
 import { TOOL_NAMES } from "../config/resource-metadata.js";
+import { REVIEWER_METADATA } from "./builtin-metadata.js";
 import { defineSubAgent } from "./declaration.js";
-import { buildSubAgentRuntimeOverlay } from "./runtime-overlay.js";
+import { formatUserPrompt } from "./prompt-builder.js";
+import { standardPrependOverlay } from "./runtime-overlay.js";
 
 const REVIEWER_SYSTEM_PROMPT = `# Reviewer — Sub-Agent Persona
 
@@ -120,12 +122,8 @@ export const reviewerDeclaration = defineSubAgent<{
   request: string;
   context?: string;
 }>({
-  name: "reviewer",
+  ...REVIEWER_METADATA,
   toolName: "delegate_reviewer",
-  description:
-    "Delegate a code review to a read-only Reviewer that produces " +
-    "severity-classified findings (High/Medium/Low) and a verdict. " +
-    "Caller MUST include diff, patch, or changed-file list in `context`.",
   parameters: Type.Object({
     request: Type.String({
       description:
@@ -147,17 +145,6 @@ export const reviewerDeclaration = defineSubAgent<{
   mutability: "read-only",
   finalizeMode: "strict",
   source: "builtin",
-  routing: {
-    category: "review",
-    cost: "medium",
-    useWhen: [
-      "After significant implementation, before commits/PRs",
-      "When user asks for fresh eyes on changes",
-      "Pre-merge code quality and correctness check",
-    ],
-    avoidWhen: ["Trivial or single-line changes", "When no diff or change context is available"],
-    keyTrigger: "Severity-classified code review with verdict",
-  },
   staticOverrides: { timeoutMs: 900_000 },
   buildUserPrompt: (p) => {
     // Diagnostic: warn the host when reviewer is invoked without a meaningful
@@ -179,12 +166,7 @@ export const reviewerDeclaration = defineSubAgent<{
         );
       }
     }
-    return p.context ? `${p.request}\n\n---\n\nReview context:\n${p.context}` : p.request;
+    return formatUserPrompt(p.request, p.context, "Review context");
   },
-  prependSystemPrompt: ({ cwd, finalizedTools }) =>
-    buildSubAgentRuntimeOverlay({
-      agentName: "reviewer",
-      cwd,
-      finalizedTools,
-    }),
+  prependSystemPrompt: standardPrependOverlay("reviewer"),
 });

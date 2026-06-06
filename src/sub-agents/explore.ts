@@ -1,7 +1,9 @@
 import { Type } from "typebox";
 import { TOOL_NAMES } from "../config/resource-metadata.js";
+import { EXPLORE_METADATA } from "./builtin-metadata.js";
 import { defineSubAgent } from "./declaration.js";
-import { buildSubAgentRuntimeOverlay } from "./runtime-overlay.js";
+import { formatUserPrompt } from "./prompt-builder.js";
+import { standardPrependOverlay } from "./runtime-overlay.js";
 
 const EXPLORE_SYSTEM_PROMPT = `# Explore — Sub-Agent Persona
 
@@ -80,12 +82,8 @@ When the question asks how a flow works (entry → handler → side-effect), res
 Detect the language the user writes in and respond in the same language. Keep file paths, code snippets, tool names, and \`file://\` links in English.`;
 
 export const exploreDeclaration = defineSubAgent<{ question: string; context?: string }>({
-  name: "explore",
+  ...EXPLORE_METADATA,
   toolName: "delegate_explore",
-  description:
-    "Delegate a codebase exploration or flow walk-through to a specialized " +
-    "Explore sub-agent. The sub-agent has read/search access only " +
-    "(no writes, no bash).",
   parameters: Type.Object({
     question: Type.String({
       description:
@@ -105,24 +103,7 @@ export const exploreDeclaration = defineSubAgent<{ question: string; context?: s
   mutability: "read-only",
   finalizeMode: "strict",
   source: "builtin",
-  routing: {
-    category: "exploration",
-    cost: "medium",
-    useWhen: [
-      "Broad or unfamiliar codebase search",
-      "Cross-file discovery or tracing a flow",
-      "Answering 'Where is X?' or 'How does Y work?'",
-    ],
-    avoidWhen: ["Simple grep or single-file lookup", "Tasks that need writes or bash execution"],
-    keyTrigger: "Deep contextual grep across multiple files",
-  },
   staticOverrides: { timeoutMs: 600_000 },
-  buildUserPrompt: (p) =>
-    p.context ? `${p.question}\n\n---\n\nAdditional context:\n${p.context}` : p.question,
-  prependSystemPrompt: ({ cwd, finalizedTools }) =>
-    buildSubAgentRuntimeOverlay({
-      agentName: "explore",
-      cwd,
-      finalizedTools,
-    }),
+  buildUserPrompt: (p) => formatUserPrompt(p.question, p.context),
+  prependSystemPrompt: standardPrependOverlay("explore"),
 });

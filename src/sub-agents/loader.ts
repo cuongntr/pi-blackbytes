@@ -16,7 +16,7 @@ import {
   validateToolNames,
 } from "./delegable-tools.js";
 import type { YamlDiagnostics, YamlLoadedDeclaration, YamlSkippedFile } from "./diagnostics.js";
-import { buildSubAgentRuntimeOverlay } from "./runtime-overlay.js";
+import { standardPrependOverlay } from "./runtime-overlay.js";
 
 // ---------------------------------------------------------------------------
 // YAML schema
@@ -241,12 +241,7 @@ function toDeclaration(
       return params.prompt;
     },
     staticOverrides,
-    prependSystemPrompt: ({ cwd, finalizedTools }) =>
-      buildSubAgentRuntimeOverlay({
-        agentName: input.name,
-        cwd,
-        finalizedTools,
-      }),
+    prependSystemPrompt: standardPrependOverlay(input.name),
   });
 }
 

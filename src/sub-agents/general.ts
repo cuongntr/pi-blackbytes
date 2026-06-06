@@ -1,8 +1,10 @@
 import { Type } from "typebox";
 import { getEnabledSet } from "../config/enabled-set.js";
+import { GENERAL_METADATA } from "./builtin-metadata.js";
 import { defineSubAgent } from "./declaration.js";
 import { PI_BUILTIN_TOOLS, resolveToolStrategy } from "./delegable-tools.js";
 import { buildGeneralSafetyOverlay } from "./general-safety-overlay.js";
+import { formatUserPrompt } from "./prompt-builder.js";
 
 const GENERAL_SYSTEM_PROMPT = `# General — Sub-Agent Persona (Implementation Executor)
 
@@ -123,12 +125,8 @@ do not attempt tools that are not listed there.
 Respond in the user's language. Keep code, technical terms, and output in English.`;
 
 export const generalDeclaration = defineSubAgent<{ task: string; context?: string }>({
-  name: "general",
+  ...GENERAL_METADATA,
   toolName: "delegate_general",
-  description:
-    "Implementation executor agent. Handles heavy multi-file implementations, " +
-    "cross-layer refactors, mass migrations, and boilerplate generation. " +
-    "Full write access — operates as a fire-and-forget executor for well-defined tasks.",
   parameters: Type.Object({
     task: Type.String({
       description:
@@ -153,22 +151,6 @@ export const generalDeclaration = defineSubAgent<{ task: string; context?: strin
   mutability: "full-access",
   finalizeMode: "strict",
   source: "builtin",
-  routing: {
-    category: "implementation",
-    cost: "high",
-    useWhen: [
-      "Heavy implementation across 3+ files after plan is clear",
-      "Cross-layer refactors with disjoint write targets",
-      "Mass migrations, boilerplate generation, repetitive pattern changes",
-      "Scaffolding new modules, components, or test suites",
-    ],
-    avoidWhen: [
-      "Single-file edits or small focused changes",
-      "Exploratory work or understanding code",
-      "Work requiring mid-stream parent feedback",
-    ],
-    keyTrigger: "Heavy multi-file implementation with verifiable outcome",
-  },
   staticOverrides: { timeoutMs: 1_800_000 },
   prependSystemPrompt: ({ cwd, finalizedTools }) =>
     buildGeneralSafetyOverlay({
@@ -176,6 +158,5 @@ export const generalDeclaration = defineSubAgent<{ task: string; context?: strin
       enabledSet: getEnabledSet(),
       finalizedTools,
     }),
-  buildUserPrompt: (p) =>
-    p.context ? `${p.task}\n\n---\n\nAdditional context:\n${p.context}` : p.task,
+  buildUserPrompt: (p) => formatUserPrompt(p.task, p.context),
 });

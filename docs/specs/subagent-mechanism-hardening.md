@@ -79,7 +79,7 @@ Priority: P0
 Acceptance criteria:
 
 - Emit internal lifecycle records/events for start, progress snapshot, fallback attempt, completion, failure, timeout, and artifact persistence.
-- Classify failures into at least: spawn failure, timeout, model/provider unavailable, malformed JSONL, child non-zero exit, killed, and unknown.
+- Extend the existing `DelegateFailureKind` taxonomy (already defined in `src/sub-agents/types.ts` and emitted by `classifyFailure()` in `runner.ts`) instead of adding a parallel type. The two genuinely missing distinctions are malformed JSONL (requires new detection — `handleLine()` currently swallows `JSON.parse` errors) and an externally-killed child (requires capturing the `close` handler's `signal` argument). Keep existing names such as `spawn_error` and `failed`; do not rename them.
 - Preserve existing tool-result shape for callers; classification is additive through `details` and status summaries.
 - Redact secrets in all event payloads and diagnostics.
 
@@ -232,22 +232,28 @@ src/sub-agents/{explore,oracle,librarian,general,reviewer}.ts
 
 ### 9.3 Lifecycle and failure classification
 
-`runNestedPi()` already has the core enforcement points: spawn, JSONL parsing, timeout, kill grace, stdout/stderr bounding, and result construction. Phase 1 adds a small classification layer around those outcomes rather than changing the execution model.
+`runNestedPi()` already has the core enforcement points: spawn, JSONL parsing, timeout, kill grace, stdout/stderr bounding, and result construction. It **already classifies failures** via the existing `DelegateFailureKind` type (`src/sub-agents/types.ts`) and the `classifyFailure()` helper (`src/sub-agents/runner.ts`), threaded through every `DelegateResult` and surfaced by `formatDelegateFailure()`. Phase 1 **extends** that existing taxonomy rather than introducing a parallel `SubAgentFailureKind`.
 
-Proposed classification values:
+Current `DelegateFailureKind` values:
 
 ```ts
-type SubAgentFailureKind =
-  | "spawn_failed"
+type DelegateFailureKind =
+  | "failed"
   | "timed_out"
-  | "provider_or_model_unavailable"
-  | "malformed_jsonl"
-  | "child_exit_nonzero"
-  | "killed"
-  | "unknown";
+  | "cancelled"
+  | "spawn_error"
+  | "recursion_refused"
+  | "cli_usage_error"
+  | "invalid_tool_allowlist"
+  | "provider_or_model_unavailable";
 ```
 
-The classification should feed both the returned `details` and the delegation log. Existing fallback classification for `provider_or_model_unavailable` remains the source of truth for fallback eligibility.
+Phase 1 adds only the distinctions the runner cannot currently make. Keep the established names (do **not** rename `spawn_error`→`spawn_failed` or `failed`→`child_exit_nonzero`) to avoid churn in `runner.ts`, `register.ts`, `fallback.ts`, and tests:
+
+- `malformed_jsonl` — **new behavior required**: `handleLine()` swallows `JSON.parse` errors silently (intentional, to skip banner lines). This kind means detecting that the stream produced no valid `agent_end` while malformed `{...}` lines were seen — not relabeling an existing path.
+- `killed` — **new capture required**: distinguish an externally killed child (OS/OOM signal) from our own timeout/cancel. `child.on("close", ...)` must read the `signal` argument (only `_code` is captured today); a non-null signal we did not request maps to `killed`.
+
+The classification feeds both the returned `details` and the delegation log. Existing fallback classification for `provider_or_model_unavailable` (in `fallback.ts`) remains the source of truth for fallback eligibility.
 
 ### 9.4 Status diagnostics
 
@@ -371,3 +377,4 @@ Rollback:
 | Date | Author | Change |
 |---|---|---|
 | 2026-06-07 | Bytes | Created Draft spec from comparative sub-agent mechanism review |
+| 2026-06-07 | Bytes | Gate review fixes: §9.3 rewritten to reference existing `DelegateFailureKind`/`classifyFailure()` and extend (not replace); REQ-001 AC updated to require extending existing taxonomy; `malformed_jsonl` and `killed` detection requirements made explicit |

@@ -125,7 +125,7 @@ Tools: **10** enabled | Agents: **5** enabled | Skills: **2** enabled
 
 ### Section picker
 
-The picker presents 10 named sections plus a **Show All** option:
+The picker presents 11 named sections plus a **Show All** option:
 
 | # | Section | Description |
 |---|---|---|
@@ -134,11 +134,12 @@ The picker presents 10 named sections plus a **Show All** option:
 | 3 | Sub-Agent Routing | Typed routing metadata for each enabled sub-agent: category, cost, use-when/avoid-when hints, and key trigger |
 | 4 | Enabled Skills | Lists discovered Pi skills |
 | 5 | Delegation ROI | Session-scoped delegation metrics: per-agent call count, success rate, average duration, and accumulated cost |
-| 6 | Sub-Agent Snapshot | Resolved per-agent config snapshot (model, reasoning, timeout, fallback chain) |
-| 7 | YAML Diagnostics | Skipped YAML sub-agent files and reasons |
-| 8 | System Prompt Log | Current system prompt logging configuration |
-| 9 | Reserved / Unsupported Settings | Settings accepted by schema but not yet functional (e.g. `temperature`) |
-| 10 | Full Config (JSON) | Raw `blackbytes` config object with secrets redacted |
+| 6 | Sub-Agent Diagnostics | Per-agent status, recent failures by kind, nested Pi availability, YAML warnings |
+| 7 | Sub-Agent Snapshot | Resolved per-agent config snapshot (model, reasoning, timeout, fallback chain) |
+| 8 | YAML Diagnostics | Skipped YAML sub-agent files and reasons |
+| 9 | System Prompt Log | Current system prompt logging configuration |
+| 10 | Reserved / Unsupported Settings | Settings accepted by schema but not yet functional (e.g. `temperature`) |
+| 11 | Full Config (JSON) | Raw `blackbytes` config object with secrets redacted |
 | — | Show All | Prints all sections in order |
 
 Selecting a numbered section prints the overview header followed by that section only. Selecting **Show All** or pressing **Cancel** prints the full output, preserving backward-compatible behaviour.

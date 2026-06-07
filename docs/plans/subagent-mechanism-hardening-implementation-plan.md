@@ -46,26 +46,26 @@ Scope changes after this plan is promoted to Active require a delta-change doc.
 
 #### Task T-1: Define classification model and event payloads
 
-- **T-001 — Add sub-agent failure classification types and helpers**
-  - **What + why**: Define a small typed taxonomy for nested runner failures so callers and status output can distinguish timeout, spawn, model/provider, JSONL, child-exit, killed, and unknown failures. This turns opaque failure prose into actionable diagnostics without changing the public delegate schema.
-  - **Related files / packages**: new `src/sub-agents/failure-kind.ts` or similar, `src/sub-agents/types.ts`, `src/sub-agents/__tests__/failure-kind.test.ts`.
-  - **Acceptance criteria**: exports `SubAgentFailureKind`; maps known runner/fallback signals deterministically; unknown errors fall back to `unknown`; helper output is redaction-safe and serializable.
-  - **Definition of Done**: helper implemented, unit tests cover every kind, typecheck passes.
+- **T-001 — Extend the existing failure-classification taxonomy (do not build a parallel one)**
+  - **What + why**: `DelegateFailureKind` (8 values) and `classifyFailure()` already exist in `types.ts`/`runner.ts` and thread through every `DelegateResult`. Do **not** create a parallel `SubAgentFailureKind` or a new `failure-kind.ts`. Extend the existing type with the two genuinely missing distinctions — `malformed_jsonl` and `killed` — keeping current names (`spawn_error`, `failed`) to avoid churn across `runner.ts`, `register.ts`, `fallback.ts`, and tests.
+  - **Related files / packages**: `src/sub-agents/types.ts` (extend `DelegateFailureKind`), `src/sub-agents/runner.ts` (`classifyFailure` + `close` handler), `src/sub-agents/__tests__/runner.test.ts`.
+  - **Acceptance criteria**: `DelegateFailureKind` gains `malformed_jsonl` and `killed`; existing names unchanged; classifier output stays redaction-safe and serializable; no new parallel type or file is introduced.
+  - **Definition of Done**: type extended, unit tests cover the new kinds, typecheck passes, no rename regressions.
   - **References**: [`subagent-mechanism-hardening.md#req-001--sub-agent-lifecycle-events-and-failure-classification`](../specs/subagent-mechanism-hardening.md#req-001--sub-agent-lifecycle-events-and-failure-classification).
 
 - **T-002 — Thread failure classification through `runNestedPi()` results**
   - **What + why**: Attach structured classification details at the runner boundary where process, timeout, JSONL, and exit-code outcomes are known. This keeps classification close to the source and avoids fragile string parsing in status code.
   - **Related files / packages**: `src/sub-agents/runner.ts`, `src/sub-agents/fallback.ts`, `src/sub-agents/__tests__/runner.test.ts`, `src/sub-agents/__tests__/fallback.test.ts`.
-  - **Acceptance criteria**: timeout returns `timed_out`; spawn failure returns `spawn_failed`; malformed JSONL returns `malformed_jsonl`; non-zero child exit returns `child_exit_nonzero`; provider/model fallback path preserves `provider_or_model_unavailable`; existing bounded stdout/stderr behavior remains unchanged.
+  - **Acceptance criteria**: timeout returns `timed_out`; spawn failure returns `spawn_error` (existing name); non-zero child exit returns `failed` (existing name); malformed JSONL returns `malformed_jsonl` — **requires new detection logic**: `handleLine()` currently swallows `JSON.parse` errors silently; add a counter for lines starting with `{` that fail parse, and at process close, if `finalAssistantText` is empty (no valid `agent_end` received) **and** the malformed counter is > 0, classify as `malformed_jsonl` instead of `failed`; an externally-killed child returns `killed` — **requires reading the `signal` argument** in `child.on("close", (code, signal) => ...)` (only `_code` is captured today); when `signal` is non-null and was not requested by our own `requestTermination()`, classify as `killed`; provider/model fallback path preserves `provider_or_model_unavailable`; existing bounded stdout/stderr behavior remains unchanged.
   - **Definition of Done**: runner and fallback tests updated; no regression in existing timeout/SIGKILL tests.
   - **References**: [`subagent-mechanism-hardening.md#93-lifecycle-and-failure-classification`](../specs/subagent-mechanism-hardening.md#93-lifecycle-and-failure-classification).
 
 #### Task T-2: Extend delegation log safely
 
 - **T-003 — Record recent sub-agent failures, fallback attempts, and classification metadata**
-  - **What + why**: Extend the session-scoped delegation log so `/blackbytes-status` can show recent actionable failures and fallback behavior without re-parsing raw tool results.
+  - **What + why**: Extend the session-scoped delegation log so `/blackbytes-status` can show recent actionable failures and fallback behavior without re-parsing raw tool results. The real gap is that `DelegationEntry` currently has **no** `failureKind` field (only `success: boolean`). Fallback attempt metadata already exists — reuse `AttemptSummary` / `FallbackResult.attemptedModels` / `formatAttempts()` from `fallback.ts` rather than recomputing it.
   - **Related files / packages**: `src/sub-agents/delegation-log.ts`, `src/sub-agents/register.ts`, `src/sub-agents/fallback.ts`, `src/sub-agents/__tests__/delegation-log.test.ts`, `src/sub-agents/__tests__/register.test.ts`.
-  - **Acceptance criteria**: log entries include optional `failureKind`, fallback attempt count/model list summary, output length, cost, duration, and redacted error hint; entries are capped to avoid unbounded memory; successful entries remain as today.
+  - **Acceptance criteria**: `DelegationEntry` gains an optional `failureKind`; the fallback attempt summary is sourced from the existing `AttemptSummary`/`formatAttempts()` data (not recomputed); entries include output length, cost, duration, and a redacted error hint; entries are capped to the most recent N entries (suggest 100) to bound session memory — the current log has **no** cap, so T-003 introduces one by evicting oldest entries when the limit is reached; successful entries remain as today.
   - **Definition of Done**: delegation-log tests cover success, failure, fallback, cap behavior, and redaction.
   - **References**: [`subagent-mechanism-hardening.md#92-architecture`](../specs/subagent-mechanism-hardening.md#92-architecture).
 
@@ -74,7 +74,7 @@ Scope changes after this plan is promoted to Active require a delta-change doc.
 #### Task T-3: Build diagnostic data model
 
 - **T-004 — Add sub-agent diagnostics summary builder**
-  - **What + why**: Create a pure summary helper that gathers snapshots, YAML diagnostics, recent delegation failures, fallback eligibility, timeout config, and nested Pi health hints. Keeping this pure makes status rendering testable and avoids UI code owning business logic.
+  - **What + why**: Create a pure summary helper that gathers snapshots, YAML diagnostics, recent delegation failures, fallback eligibility, and timeout config. Nested Pi availability is provided separately by T-005 and composed at render time (T-006), not owned here. Keeping this pure makes status rendering testable and avoids UI code owning business logic.
   - **Related files / packages**: new `src/sub-agents/diagnostics-summary.ts`, `src/sub-agents/snapshot.ts`, `src/sub-agents/diagnostics.ts`, `src/sub-agents/delegation-log.ts`, `src/sub-agents/__tests__/diagnostics-summary.test.ts`.
   - **Acceptance criteria**: summary lists enabled/disabled agent status, configured/default timeout, fallback model count and eligibility, YAML skipped files/reasons, recent failures by kind, and delegation ROI summary; all string fields are redacted.
   - **Definition of Done**: pure helper tests pass with builtin, YAML, disabled-agent, fallback, and no-failure fixtures.
@@ -92,7 +92,7 @@ Scope changes after this plan is promoted to Active require a delta-change doc.
 - **T-006 — Add Sub-Agent Diagnostics section to `/blackbytes-status`**
   - **What + why**: Expose the diagnostics summary through the existing interactive status viewer so users can troubleshoot sub-agent issues without source inspection.
   - **Related files / packages**: `src/commands/blackbytes-status.ts`, `src/commands/__tests__/blackbytes-status.test.ts`.
-  - **Acceptance criteria**: status menu includes Sub-Agent Diagnostics; expanded section shows timeout/fallback/YAML/recent failure/nested Pi health data; disabled resources obey existing status conventions; no secrets appear in rendered output.
+  - **Acceptance criteria**: status menu includes Sub-Agent Diagnostics; the section **reuses** existing Snapshot (timeout/fallback), YAML Diagnostics, and Delegation ROI data rather than re-rendering duplicate copies — the genuinely new content is recent-failures-by-kind and nested Pi availability; disabled resources obey existing status conventions; no secrets appear in rendered output.
   - **Definition of Done**: status tests cover normal, no-agents, YAML-warning, failure, and redaction cases.
   - **References**: [`subagent-mechanism-hardening.md#94-status-diagnostics`](../specs/subagent-mechanism-hardening.md#94-status-diagnostics).
 
@@ -139,8 +139,8 @@ Scope changes after this plan is promoted to Active require a delta-change doc.
 | T-002 depends on T-001 | Runner needs the classification type/helper. |
 | T-003 depends on T-001, T-002 | Delegation log records classified outcomes. |
 | T-004 depends on T-003 | Diagnostics summary consumes delegation log metadata. |
-| T-005 depends on T-004 | Availability status is one input to the diagnostics summary. |
-| T-006 depends on T-004, T-005 | Status rendering consumes the complete diagnostics summary. |
+| T-005 independent of T-004 | Nested Pi availability is a standalone lazy check, not an input to the summary builder. |
+| T-006 depends on T-004, T-005 | Status rendering composes the summary (T-004) and the standalone availability check (T-005). |
 | T-008 depends on T-007 | Tests assert the prompt contracts after prompt edits. |
 | T-009 depends on T-006, T-007 | Docs should match the implemented diagnostics and contracts. |
 | T-010 depends on all implementation/doc tasks | Verify after code and docs settle. |
@@ -184,17 +184,19 @@ Rollback:
 | R-002 | Status diagnostics duplicate existing Delegation ROI. | Reuse ROI summary and add only troubleshooting fields not already shown — owner: invoker | open |
 | R-003 | Prompt contracts become too rigid. | Add compact headings only and test required presence, not full wording — owner: invoker | open |
 | R-004 | Nested Pi availability check slows UI. | Use lazy/cached health checks with test seams — owner: invoker | open |
-| Q-001 | Should lifecycle records be emitted on Pi event bus or kept internal first? | Phase 1 can keep internal log; decide event bus exposure after implementation review — owner: invoker | open |
+| Q-001 | Should lifecycle records be emitted on Pi event bus or kept internal first? | **Resolved: internal first.** The delegation log is already session-scoped in-memory; T-003 extends `DelegationEntry` with `failureKind` without event-bus exposure. Event bus can be revisited post-Phase 1 if diagnostics consumers emerge — owner: invoker | resolved |
 
 ## 7. Beads Handoff Notes
 
 - Beads directory detected at `.beads/` with `beads.db` and `issues.jsonl`; use the `br`/`bv` ecosystem unless project tooling indicates otherwise.
 - Suggested feature label: `feature:subagent-hardening`.
 - Suggested service label: `service:sub-agents`.
-- Convert after `plan-ready-for-beads` passes and the owner resolves whether lifecycle records should be event-bus-visible in Phase 1.
+- Convert after `plan-ready-for-beads` passes. Q-001 (event bus vs internal) resolved as "internal first" — no blocker.
 
 ## 8. Revision History
 
 | Date | Author | Change |
 |---|---|---|
 | 2026-06-07 | Bytes | Created Draft implementation plan from comparative sub-agent mechanism review |
+| 2026-06-07 | Bytes | Gate review fixes: T-001 rewritten to extend existing `DelegateFailureKind` (no parallel type); T-002 AC clarified `malformed_jsonl`/`killed` detection requirements; T-003 scoped to reuse `AttemptSummary`/`formatAttempts()`; T-004/T-005 dependency corrected; T-006 AC narrowed to reuse existing data; Q-001 resolved as "internal first" |
+| 2026-06-07 | Bytes | Plan review pass: T-002 AC expanded with concrete `malformed_jsonl` detection algorithm (malformed-line counter + no valid `agent_end` at close); T-003 cap specified (most recent ~100 entries, evict oldest) |

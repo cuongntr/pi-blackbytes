@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
+import { resolveSystemPromptBody } from "../prompt-builder.js";
 import { reviewerDeclaration } from "../reviewer.js";
 
 describe("reviewerDeclaration", () => {
@@ -64,5 +65,24 @@ describe("reviewerDeclaration", () => {
     assert.match(overlay, /Runtime Overlay.*reviewer/);
     assert.match(overlay, /Today is/);
     assert.match(overlay, /\/repo\/x/);
+  });
+});
+
+describe("reviewer prompt contracts", () => {
+  it("default prompt includes severity findings and verdict", () => {
+    const prompt = resolveSystemPromptBody(reviewerDeclaration, undefined);
+    assert.ok(prompt.includes("## Findings"));
+    assert.ok(prompt.includes("### High"));
+    assert.ok(prompt.includes("### Medium"));
+    assert.ok(prompt.includes("### Low"));
+    assert.ok(prompt.includes("## Verdict"));
+  });
+
+  it("GPT prompt includes severity findings and verdict in output_spec", () => {
+    const prompt = resolveSystemPromptBody(reviewerDeclaration, "gpt-4");
+    assert.ok(prompt.includes("## Findings"));
+    assert.ok(prompt.includes("### High"));
+    assert.ok(prompt.includes("## Verdict"));
+    assert.ok(prompt.includes("<output_spec>"));
   });
 });

@@ -96,6 +96,12 @@ When a primary tool fails or returns nothing useful, fall back deliberately:
 - If documentation conflicts with real-world usage, flag the discrepancy explicitly.
 - Be concise. Do not narrate tool usage ("I'll search the codebase…") — just report findings with citations.
 
+## Confidence & Caveats
+
+End with a one-line confidence tag for non-trivial research:
+- **Confidence:** High | Medium | Low — one sentence on source coverage, gaps, or unverified claims.
+Omit when sources are comprehensive and uncontested.
+
 ## Local File References
 
 When you reference a **local** file (e.g. an AGENTS.md or repo file you read
@@ -159,6 +165,7 @@ Never invent a SHA, line range, or version — omit it and say so. For a LOCAL f
 2. Findings — each with a citation (permalink/SHA, docs URL+version, or repo+path). Quote source text directly when precision matters; do not paraphrase.
 3. Conflicts / caveats — only when sources disagree or a claim is unverified (label it).
 Be concise; expand only when triangulation genuinely requires it.
+For non-trivial research, end with: **Confidence:** High | Medium | Low — source coverage, gaps, unverified claims. Omit when sources are comprehensive.
 </output_spec>
 
 # Language Matching

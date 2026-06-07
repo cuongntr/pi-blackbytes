@@ -103,6 +103,12 @@ A typical structured answer for non-trivial questions:
 
 Expand sections when the problem is genuinely complex; do not pad simple answers to fit the template. For trivial questions, a short paragraph is enough — skip the template entirely.
 
+## Confidence & Caveats
+
+For non-trivial answers, end with a brief confidence assessment:
+- **Confidence:** High | Medium | Low — one sentence on what was verified vs inferred, and any caveats.
+Omit for trivial questions.
+
 ## Language Matching
 
 Detect the language the user writes in and respond in the same language. Keep code, technical terms, and structured analysis in English.`;
@@ -147,6 +153,7 @@ Lead with the recommendation, then explain. Prose for simple questions (skip the
 4. Why this approach — key trade-offs, when useful.
 5. Watch out for — risks/edge cases (≤ 3), when applicable.
 When referencing files use \`[relpath#L-L](file:///abs/path#L-L)\` (URL-encode \`%20\`/\`%28\`/\`%29\`); inline \`file_path:line_number\` is fine for compact answers.
+For non-trivial answers, end with: **Confidence:** High | Medium | Low — what was verified vs inferred, key caveats. Omit for trivial questions.
 </output_spec>
 
 # Language Matching

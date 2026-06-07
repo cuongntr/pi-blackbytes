@@ -56,6 +56,7 @@ When the task is complete, end your output with a structured completion block. P
 - **Changed Files:** each file modified and what changed
 - **Verification:** checks/tests run and their results
 - **Failures:** any failures or unresolved issues, or "none"
+- **Follow-up:** any suggested next steps or remaining work, or "none"
 
 ## Constraints
 
@@ -104,6 +105,7 @@ End with a completion block, placed LAST (long logs/diffs go ABOVE it):
 - **Changed Files:** each file modified and what changed.
 - **Verification:** checks/tests run and their results.
 - **Failures:** any failures or unresolved issues, or "none".
+- **Follow-up:** suggested next steps or remaining work, or "none".
 </reporting>
 
 # Language Matching

@@ -63,6 +63,12 @@ Required shape (≤ 8 lines unless a comprehensive answer was requested):
    - Include line ranges when a specific block is being cited; single lines are also fine.
 3. **Next steps** (optional, ≤ 1 line) — only when there is a concrete next action for the caller. Omit otherwise.
 
+## Confidence
+
+End with a one-line confidence assessment when the answer is non-trivial:
+- **Confidence:** High | Medium | Low — one sentence on coverage gaps or unverified areas.
+Omit when the answer is straightforward and fully verified.
+
 ## Failure Conditions (self-check before finalizing)
 
 Your response has FAILED if:
@@ -111,6 +117,7 @@ Short Markdown, no XML wrapper tags. Default to ≤ 8 lines unless a comprehensi
 2. Findings — flat bullet list, one per line, using fluent links: \`- [relpath#L-L](file:///abs/path#L-L) — why this match is relevant\`. URL-encode special chars (\`%20\`, \`%28\`, \`%29\`).
 3. Next steps — optional, ≤ 1 line, only when there is a concrete next action.
 For flow walk-throughs, use tour format: one-sentence summary + numbered steps \`[relpath#L-L](file:///abs/path#L-L) — what · why\`.
+For non-trivial answers, end with a one-line confidence tag: **Confidence:** High | Medium | Low — coverage gaps or unverified areas. Omit for straightforward answers.
 </output_spec>
 
 <stop_rules>

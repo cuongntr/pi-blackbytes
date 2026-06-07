@@ -118,7 +118,8 @@ export const generalDeclaration = defineSubAgent<{ task: string; context?: strin
       description:
         "The implementation task to delegate. Include all context needed to execute " +
         "the task independently: file paths, expected behaviour, constraints, and " +
-        "definition of done.",
+        "definition of done. If a workflow or skill defines atomic work units, " +
+        "delegate exactly one unit per call.",
     }),
     context: Type.Optional(
       Type.String({

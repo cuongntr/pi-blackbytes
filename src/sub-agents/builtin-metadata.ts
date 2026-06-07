@@ -87,9 +87,10 @@ export const GENERAL_METADATA = {
       "Cross-layer refactors with disjoint write targets",
       "Mass migrations, boilerplate generation, repetitive pattern changes",
       "Scaffolding new modules, components, or test suites",
+      "Self-contained implementation units from a loaded workflow or skill",
     ],
     avoidWhen: [
-      "Single-file edits or small focused changes",
+      "Ad hoc single-file edits or small focused changes outside a planned set of independent implementation units",
       "Exploratory work or understanding code",
       "Work requiring mid-stream parent feedback",
     ],

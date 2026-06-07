@@ -465,6 +465,19 @@ describe("builtin description length (T-007)", () => {
     assert.match(generalDeclaration.description, /fire-and-forget executor/);
   });
 
+  it("general routing supports loaded workflow units with scoped avoidWhen", () => {
+    assert.ok(
+      generalDeclaration.routing?.useWhen.some((entry) => entry.includes("workflow or skill")),
+    );
+    assert.ok(
+      generalDeclaration.routing?.avoidWhen.some((entry) =>
+        entry.includes("outside a planned set"),
+      ),
+    );
+    // avoidWhen must not use confusing "unless" exception clauses
+    assert.ok(!generalDeclaration.routing?.avoidWhen.some((entry) => entry.includes("unless")));
+  });
+
   it("librarian preserves 'ALL of these hold' gate phrase", () => {
     assert.match(librarianDeclaration.description, /ALL of these hold/);
   });

@@ -93,10 +93,10 @@ function buildConditionalWorkflowsBody(context: BytesPromptRenderContext): strin
     }
     if (context.enabledSubAgents.has("general")) {
       lines.push(
-        "  - You know exactly what to do and the implementation spans 3+ files → General.",
+        "  - You know exactly what to do and the implementation spans 3+ files, or a loaded workflow or skill defines a self-contained implementation unit → General.",
       );
       lines.push(
-        "  - A task has independent parts that can be implemented simultaneously → fire multiple General in parallel.",
+        "  - A task has independent workflow or skill units that do not overlap files or shared state → fire multiple General calls in parallel, one unit per call; do not merge units just because the combined batch is large.",
       );
     }
     if (context.enabledSubAgents.has("librarian")) {
@@ -156,6 +156,13 @@ const INVESTIGATE_BODY = [
   "- Never speculate about code you have not read. If the user references a file, read it before answering or editing.",
   "- Always investigate and read relevant files BEFORE making claims about the codebase. When uncertain, use a tool rather than guessing.",
   "- Ground every answer in actual code and tool output, not in priors.",
+].join("\n");
+
+const SKILLS_BODY = [
+  "- When the available-skills list contains a skill whose description matches the user's task or workflow, read that skill file before planning or implementing.",
+  "- Treat loaded skill instructions as task-specific workflow requirements unless they conflict with higher-priority instructions.",
+  "- If a loaded skill defines atomic work units, preserve those units in delegation and verification instead of merging them into larger batches.",
+  "- Do not invent skills or assume unavailable skill content; use only skills actually listed in the current session.",
 ].join("\n");
 
 const HARD_BOUNDARIES_BODY = [
@@ -232,6 +239,7 @@ export function buildBytesPromptOverlay(context: BytesPromptRenderContext): Prom
     section("Autonomy & Persistence", "autonomy_and_persistence", AUTONOMY_BODY),
     section("Investigate Before Acting", "investigate_before_acting", INVESTIGATE_BODY),
     section("Session Capabilities", "session_capabilities", buildSessionCapabilitiesBody(context)),
+    section("Skills", "skills", SKILLS_BODY),
     section("Hard Boundaries", "hard_boundaries", HARD_BOUNDARIES_BODY),
     section("Work Defaults", "work_defaults", WORK_DEFAULTS_BODY),
     section("Tool Use Protocol", "tool_use_protocol", TOOL_USE_BODY),

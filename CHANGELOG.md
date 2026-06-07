@@ -1,5 +1,42 @@
 # Changelog
 
+## 2.18.0 (2026-06-07) — Skill-Aware Delegation & Lightweight Renderer
+
+Add a Skills prompt section to the Bytes v2 overlay, extend General sub-agent
+routing to support self-contained workflow and skill units, and finalize the
+lightweight borderless renderer migration.
+
+### Added
+
+- **Skills prompt section** — the Bytes v2 overlay contains a dedicated `skills`
+  section (the 15th) with four guidance bullets: load matching skills before
+  planning, treat loaded skill instructions as task-specific workflow requirements,
+  preserve atomic work units in delegation instead of merging them, and use only
+  skills actually listed in the current session.
+- **Skill/workflow-aware General delegation triggers** — the Conditional Workflows
+  section includes two General-specific proactive triggers: (1) delegate to General
+  when a loaded workflow or skill defines a self-contained implementation unit, and
+  (2) fire multiple General calls in parallel when a task has independent
+  workflow/skill units, one unit per call.
+- **General routing metadata for skill units** — `GENERAL_METADATA.useWhen`
+  includes "Self-contained implementation units from a loaded workflow or skill";
+  `avoidWhen` scopes the single-file exclusion to ad hoc edits outside a planned
+  set of independent implementation units.
+- **General task parameter guidance** — the `task` parameter description instructs
+  callers to delegate exactly one atomic work unit per call when a workflow or
+  skill defines them.
+
+### Changed
+
+- **Lightweight borderless renderer** — all Blackbytes tools and sub-agents render
+  through a single lightweight, borderless renderer (Claude-style `⏺` call line +
+  `⎿` result indent) with no on/off toggle. The former boxed renderer and its
+  `ui.boxed_tool_calls` / `ui.boxed_builtin_tools` config keys are removed.
+- **`ui.bash_*` config keys** — the built-in `bash` wrapper config keys are
+  renamed from `ui.boxed_*` to `ui.bash_*` (`bash_wrapper_enabled`,
+  `bash_max_preview_lines`, `bash_max_expanded_lines`, `bash_dim_output`).
+  `bash_wrapper_enabled` defaults to `true`.
+
 ## 2.17.0 (2026-06-06) — Sub-Agent Maintainability & GPT Prompt Variants
 
 Consolidate duplicated sub-agent declaration boilerplate behind a single source

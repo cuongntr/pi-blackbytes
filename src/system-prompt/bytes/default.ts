@@ -12,6 +12,7 @@ const CLAUDE_TAGS: Record<PromptSectionKey, string> = {
   autonomy_and_persistence: "autonomy_and_persistence",
   investigate_before_acting: "investigate_before_acting",
   session_capabilities: "capabilities",
+  skills: "skills",
   hard_boundaries: "engineering",
   work_defaults: "workflow_defaults",
   tool_use_protocol: "tool_use",

@@ -45,6 +45,7 @@ describe("bytes overlay rendering", () => {
       assert.ok(prompt.includes("Precedence"));
       assert.ok(prompt.includes("Session Capabilities"));
       assert.ok(prompt.includes("Hashline Edit Workflow"));
+      assert.ok(prompt.includes("Skills"));
       assert.ok(prompt.includes("Default to delegating"));
       assert.ok(prompt.includes("Documentation lookup may be available"));
       assert.ok(prompt.includes("Web lookup capabilities may be available"));
@@ -54,6 +55,17 @@ describe("bytes overlay rendering", () => {
       assert.ok(prompt.includes("`general`"));
       assert.ok(prompt.includes("`reviewer`"));
     }
+  });
+
+  it("renders skill-loading and atomic-unit delegation guidance", () => {
+    const prompt = renderPrompt("claude", [], ["general"]);
+
+    assert.ok(prompt.includes("read that skill file before planning or implementing"));
+    assert.ok(prompt.includes("If a loaded skill defines atomic work units"));
+    assert.ok(prompt.includes("one unit per call"));
+    assert.ok(prompt.includes("do not merge units just because the combined batch is large"));
+    // The anti-bundling guidance must be merged into the trigger, not a standalone bullet
+    assert.ok(!prompt.includes("  - Do not bundle"));
   });
 
   it("renders librarian-specific trigger guidance only when librarian is enabled", () => {

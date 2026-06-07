@@ -6,6 +6,7 @@ const SECTION_ORDER: PromptSectionKey[] = [
   "autonomy_and_persistence",
   "investigate_before_acting",
   "session_capabilities",
+  "skills",
   "hard_boundaries",
   "work_defaults",
   "tool_use_protocol",

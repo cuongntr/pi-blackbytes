@@ -49,6 +49,143 @@ describe("logDelegation / getDelegationLog", () => {
     // The internal log via a fresh call still has just 1 entry
     assert.equal(getDelegationLog().length, 1);
   });
+
+  it("logs entries with failureKind", () => {
+    logDelegation({
+      agent: "explore",
+      startedAt: 1000,
+      durationMs: 500,
+      success: false,
+      toolCallCount: 3,
+      outputChars: 0,
+      failureKind: "timed_out",
+    });
+    const log = getDelegationLog();
+    assert.equal(log.length, 1);
+    assert.equal(log[0].failureKind, "timed_out");
+  });
+
+  it("logs entries with fallbackAttempts", () => {
+    logDelegation({
+      agent: "explore",
+      startedAt: 2000,
+      durationMs: 800,
+      success: true,
+      toolCallCount: 5,
+      outputChars: 200,
+      fallbackAttempts: [
+        {
+          model: "gpt-4o",
+          status: "provider_or_model_unavailable",
+          retriable: true,
+          durationMs: 1200,
+        },
+        {
+          model: "claude-opus-4",
+          status: "success",
+          retriable: false,
+          durationMs: 4500,
+        },
+      ],
+    });
+    const log = getDelegationLog();
+    assert.equal(log.length, 1);
+    assert.ok(log[0].fallbackAttempts);
+    assert.equal(log[0].fallbackAttempts!.length, 2);
+    assert.equal(log[0].fallbackAttempts![0].model, "gpt-4o");
+    assert.equal(log[0].fallbackAttempts![1].status, "success");
+  });
+
+  it("logs entries with artifactPath", () => {
+    logDelegation({
+      agent: "explore",
+      startedAt: 2500,
+      durationMs: 600,
+      success: true,
+      toolCallCount: 2,
+      outputChars: 300,
+      artifactPath: "/tmp/pi-blackbytes/artifact.md",
+    });
+    const log = getDelegationLog();
+    assert.equal(log.length, 1);
+    assert.equal(log[0].artifactPath, "/tmp/pi-blackbytes/artifact.md");
+  });
+
+  it("logs entries with errorHint (up to ~200 chars)", () => {
+    const hint = "A".repeat(200);
+    logDelegation({
+      agent: "explore",
+      startedAt: 3000,
+      durationMs: 300,
+      success: false,
+      toolCallCount: 1,
+      outputChars: 0,
+      errorHint: hint,
+    });
+    const log = getDelegationLog();
+    assert.equal(log.length, 1);
+    assert.equal(log[0].errorHint, hint);
+    assert.equal(log[0].errorHint!.length, 200);
+  });
+
+  it("omits optional fields when absent", () => {
+    logDelegation({
+      agent: "general",
+      startedAt: 4000,
+      durationMs: 100,
+      success: true,
+      toolCallCount: 1,
+      outputChars: 50,
+    });
+    const entry = getDelegationLog()[0];
+    assert.equal(entry.failureKind, undefined);
+    assert.equal(entry.fallbackAttempts, undefined);
+    assert.equal(entry.errorHint, undefined);
+    assert.equal(entry.artifactPath, undefined);
+  });
+});
+
+describe("delegation log entry cap", () => {
+  it("evicts oldest entries when cap (100) is exceeded", () => {
+    // Log 105 entries
+    const total = 105;
+    for (let i = 1; i <= total; i++) {
+      logDelegation({
+        agent: `agent-${i}`,
+        startedAt: i,
+        durationMs: 10,
+        success: true,
+        toolCallCount: 1,
+        outputChars: 0,
+      });
+    }
+
+    const log = getDelegationLog();
+    assert.equal(log.length, 100, "expected 100 entries after eviction");
+
+    // First 5 entries (agent-1 through agent-5) should have been evicted
+    assert.equal(log[0].agent, "agent-6", "oldest entry should be evicted");
+    assert.equal(log[0].startedAt, 6);
+
+    // Last entry should be agent-105
+    assert.equal(log[log.length - 1].agent, "agent-105", "newest entry should remain");
+    assert.equal(log[log.length - 1].startedAt, 105);
+  });
+
+  it("does not evict entries when under the cap", () => {
+    for (let i = 1; i <= 5; i++) {
+      logDelegation({
+        agent: `under-${i}`,
+        startedAt: i,
+        durationMs: 10,
+        success: true,
+        toolCallCount: 1,
+        outputChars: 0,
+      });
+    }
+    const log = getDelegationLog();
+    assert.equal(log.length, 5);
+  });
 });
 
 describe("resetDelegationLog", () => {

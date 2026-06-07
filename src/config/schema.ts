@@ -45,6 +45,12 @@ export const BlackbytesConfigSchema = z
           .optional(),
         bash_dim_output: z.boolean().optional(),
         read_tool_display: z.enum(["compact", "preview"]).optional(),
+        // Controls how much detail is shown for each sub-agent in collapsed state.
+        // "full" = identity + metrics + tool activity (5-6 lines each)
+        // "compact" = identity + metrics only (2 lines, default)
+        // "minimal" = identity line only (1 line)
+        // Collapsed tool activity is suppressed when not "full"; use ctrl+o to expand.
+        sub_agent_display: z.enum(["full", "compact", "minimal"]).optional(),
       })
       .passthrough()
       .optional(),
@@ -79,6 +85,7 @@ export const BlackbytesConfigSchema = z
               })
               .optional(),
             executionMode: z.enum(["sequential", "parallel"]).optional(),
+            artifactCapture: z.boolean().optional(),
             // RESERVED / UNSUPPORTED
             // ----------------------
             // The nested Pi CLI does not currently accept a `--temperature` flag
@@ -145,6 +152,8 @@ export interface BlackbytesUiConfig {
   bash_max_expanded_lines: number;
   bash_dim_output: boolean;
   read_tool_display: "compact" | "preview";
+  /** Collapsed sub-agent display density: "full" | "compact" | "minimal". */
+  sub_agent_display: "full" | "compact" | "minimal";
 }
 
 export function getUiConfig(config: BlackbytesConfig): BlackbytesUiConfig {
@@ -155,5 +164,6 @@ export function getUiConfig(config: BlackbytesConfig): BlackbytesUiConfig {
     bash_max_expanded_lines: raw?.bash_max_expanded_lines ?? 200,
     bash_dim_output: raw?.bash_dim_output ?? false,
     read_tool_display: raw?.read_tool_display ?? "compact",
+    sub_agent_display: raw?.sub_agent_display ?? "compact",
   };
 }

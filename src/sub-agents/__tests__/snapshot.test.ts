@@ -158,6 +158,15 @@ describe("resolveAgentSnapshot", () => {
       "undefined when unconfigured (Pi parallel default)",
     );
   });
+
+  it("resolves artifactCapture from JSON config and defaults off", () => {
+    const enabledConfig: BlackbytesConfig = {
+      ...baseConfig,
+      sub_agents: { explore: { artifactCapture: true } },
+    };
+    assert.equal(resolveAgentSnapshot(baseDecl, enabledConfig).artifactCapture, true);
+    assert.equal(resolveAgentSnapshot(baseDecl, baseConfig).artifactCapture, false);
+  });
 });
 
 describe("session snapshot lifecycle", () => {

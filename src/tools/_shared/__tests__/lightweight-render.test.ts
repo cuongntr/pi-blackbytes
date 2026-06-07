@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { visibleWidth } from "@earendil-works/pi-tui";
+import { makeSubAgentRenderCall } from "../call-render.js";
 import {
   formatLightweightFooter,
   lightweightExpandHint,
@@ -44,6 +45,31 @@ describe("lightweight tool renderer", () => {
     assert.match(out, /bun run test/);
     assert.match(out, /«accent:…»/);
     assert.doesNotMatch(out, /┌|└|│/);
+  });
+
+  it("marks every builtin sub-agent call as an agent and keeps multiline prompts on one line", () => {
+    const cases = [
+      { icon: "🔭", name: "explore", primaryKey: "question", expected: "Agent: Explore" },
+      { icon: "🧠", name: "oracle", primaryKey: "question", expected: "Agent: Oracle" },
+      { icon: "📚", name: "librarian", primaryKey: "question", expected: "Agent: Librarian" },
+      { icon: "⚡", name: "general", primaryKey: "task", expected: "Agent: General" },
+      { icon: "📋", name: "reviewer", primaryKey: "request", expected: "Agent: Reviewer" },
+    ] as const;
+
+    for (const c of cases) {
+      const call = makeSubAgentRenderCall(c.icon, c.name, c.primaryKey);
+      const out = call(
+        { [c.primaryKey]: "## Bead: Add lazy check\n\n### Objective\nMake it obvious" },
+        plainTheme(),
+      )
+        .render(120)
+        .join("\n");
+
+      assert.match(out, /^⏺ Agent: /);
+      assert.match(out, new RegExp(`${c.expected} \\(`));
+      assert.match(out, /## Bead: Add lazy check ### Objective/);
+      assert.doesNotMatch(out, /\n.*### Objective/);
+    }
   });
 
   it("renders results with a Claude-like output marker", () => {

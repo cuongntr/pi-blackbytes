@@ -1,6 +1,7 @@
 import { spawn as nodeSpawn } from "node:child_process";
 import type { SpawnOptions } from "node:child_process";
 import { redactSecrets } from "../shared/redact.js";
+import { captureArtifact } from "./artifacts.js";
 import type { DelegateResult, PiSessionEvent, RunNestedPiOptions } from "./types.js";
 
 export type { RunNestedPiOptions, DelegateResult };
@@ -66,6 +67,32 @@ export function boundReturnContent(text: string, maxChars = MAX_RETURN_CHARS): s
   if (maxChars <= TRUNCATION_MARKER.length) return text.slice(0, maxChars);
   return truncateMiddle(text, maxChars);
 }
+async function captureReturnArtifact(
+  content: string,
+  opts: {
+    captureArtifacts: boolean | undefined;
+    artifactAgent: string | undefined;
+    startedAt: number;
+    model?: string;
+  },
+): Promise<string | undefined> {
+  if (!opts.captureArtifacts || content.length <= MAX_RETURN_CHARS) return undefined;
+
+  try {
+    const artifact = await captureArtifact({
+      agent: opts.artifactAgent ?? "sub-agent",
+      content,
+      startedAt: opts.startedAt,
+      durationMs: Date.now() - opts.startedAt,
+      model: opts.model,
+    });
+    return artifact?.path;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error(`pi-blackbytes artifact capture failed: ${redactSecrets(message)}`);
+    return undefined;
+  }
+}
 
 function classifyFailure(
   details: string | undefined,
@@ -125,7 +152,11 @@ export async function runNestedPi(
     timeoutMs = 300_000,
     killGraceMs = DEFAULT_KILL_GRACE_MS,
     onUpdate,
+    captureArtifacts,
+    artifactAgent,
   } = opts;
+
+  const startedAt = Date.now();
 
   if (signal?.aborted) {
     return {
@@ -164,6 +195,7 @@ export async function runNestedPi(
     let terminationRequested = false;
     let killGraceHandle: ReturnType<typeof setTimeout> | undefined;
     let child: ReturnType<SpawnFn>;
+    let closeObserved = false;
 
     let stdout = "";
     let stderr = "";
@@ -193,14 +225,18 @@ export async function runNestedPi(
       requestTermination("timed_out");
     }, timeoutMs);
 
-    const finish = (result: DelegateResult) => {
-      if (settled) return;
-      settled = true;
-      if (timeoutHandle) clearTimeout(timeoutHandle);
+    const stopLifecycleWatchers = () => {
+      clearTimeout(timeoutHandle);
       if (killGraceHandle) clearTimeout(killGraceHandle);
       if (signal) {
         signal.removeEventListener("abort", callerAbortHandler);
       }
+    };
+
+    const finish = (result: DelegateResult) => {
+      if (settled) return;
+      settled = true;
+      stopLifecycleWatchers();
       resolve(result);
     };
 
@@ -245,6 +281,7 @@ export async function runNestedPi(
 
     let lineBuffer = "";
     let finalAssistantText = "";
+    let malformedLineCount = 0;
 
     const handleLine = (line: string): void => {
       const trimmed = line.trim();
@@ -256,6 +293,7 @@ export async function runNestedPi(
       try {
         event = JSON.parse(trimmed) as PiSessionEvent;
       } catch {
+        malformedLineCount++;
         return;
       }
       if (!event || typeof event !== "object" || typeof event.type !== "string") return;
@@ -311,7 +349,7 @@ export async function runNestedPi(
       stderr = appendBounded(stderr, chunk.toString());
     });
 
-    child.on("close", (_code) => {
+    child.on("close", async (_code, killSignal) => {
       if (terminationReason) {
         finish(makeTerminationResult(terminationReason));
         return;
@@ -323,19 +361,58 @@ export async function runNestedPi(
         lineBuffer = "";
       }
 
+      closeObserved = true;
+      // The child is closed, so timeout/cancellation should no longer be able
+      // to race with asynchronous success finalization such as artifact writes.
+      stopLifecycleWatchers();
+
+      // If a signal killed us externally (e.g. SIGTERM from a system OOM
+      // killer or a parent-initiated kill that wasn't requested by our own
+      // termination logic), classify as killed.
+      if (killSignal != null && !terminationRequested) {
+        finish({
+          success: false,
+          content: "Nested Pi killed",
+          details: stderr || undefined,
+          failureKind: "killed",
+        });
+        return;
+      }
+
       if (_code === 0) {
-        finish({ success: true, content: boundReturnContent(finalAssistantText || stdout) });
+        const fullContent = finalAssistantText || stdout;
+        const artifactPath = await captureReturnArtifact(fullContent, {
+          captureArtifacts,
+          artifactAgent,
+          startedAt,
+          model,
+        });
+        finish({
+          success: true,
+          content: boundReturnContent(fullContent),
+          artifactPath,
+        });
       } else {
+        const classifiedFailure = classifyFailure(stderr, "failed");
+        // If we have malformed JSONL lines (non-parseable lines starting with
+        // `{`) but no agent_end event captured, the output is likely truncated
+        // or corrupted. Classify as malformed_jsonl only when stderr did not
+        // already identify a more specific actionable failure kind.
+        const failureKind =
+          !finalAssistantText && malformedLineCount > 0 && classifiedFailure === "failed"
+            ? "malformed_jsonl"
+            : classifiedFailure;
         finish({
           success: false,
           content: "Nested Pi failed",
           details: stderr || undefined,
-          failureKind: classifyFailure(stderr, "failed"),
+          failureKind,
         });
       }
     });
 
     child.on("error", (err) => {
+      if (closeObserved) return;
       finish({
         success: false,
         content: "Nested Pi failed",

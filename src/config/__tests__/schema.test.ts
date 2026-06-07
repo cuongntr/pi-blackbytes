@@ -47,7 +47,12 @@ describe("BlackbytesConfigSchema", () => {
         capture_provider_system: true,
       },
       sub_agents: {
-        myAgent: { model: "gpt-4o", reasoningEffort: "high", temperature: 0.7 },
+        myAgent: {
+          model: "gpt-4o",
+          reasoningEffort: "high",
+          temperature: 0.7,
+          artifactCapture: true,
+        },
       },
     };
     const result = parseBlackbytesConfig(input);
@@ -66,6 +71,7 @@ describe("BlackbytesConfigSchema", () => {
       assert.equal(result.value.system_prompt_log?.include_nested, false);
       assert.equal(result.value.system_prompt_log?.dedupe, true);
       assert.equal(result.value.sub_agents?.myAgent?.model, "gpt-4o");
+      assert.equal(result.value.sub_agents?.myAgent?.artifactCapture, true);
     }
   });
 
@@ -116,6 +122,24 @@ describe("BlackbytesConfigSchema", () => {
     }
   });
 
+  it("accepts optional per-agent artifactCapture boolean and rejects invalid values", () => {
+    const valid = parseBlackbytesConfig({
+      sub_agents: { explore: { artifactCapture: false } },
+    });
+    assert.ok(valid.ok);
+    if (valid.ok) {
+      assert.equal(valid.value.sub_agents?.explore?.artifactCapture, false);
+    }
+
+    const invalid = parseBlackbytesConfig({
+      sub_agents: { explore: { artifactCapture: "yes" } },
+    });
+    assert.ok(!invalid.ok);
+    if (!invalid.ok) {
+      assert.ok(invalid.errors.some((error) => error.includes("artifactCapture")));
+    }
+  });
+
   it("applies UI defaults and overrides", () => {
     const parsed = BlackbytesConfigSchema.parse({
       ui: {
@@ -133,6 +157,7 @@ describe("BlackbytesConfigSchema", () => {
       bash_max_expanded_lines: 120,
       bash_dim_output: true,
       read_tool_display: "preview",
+      sub_agent_display: "compact",
     });
   });
 
@@ -144,6 +169,7 @@ describe("BlackbytesConfigSchema", () => {
       bash_max_expanded_lines: 200,
       bash_dim_output: false,
       read_tool_display: "compact",
+      sub_agent_display: "compact",
     });
   });
 

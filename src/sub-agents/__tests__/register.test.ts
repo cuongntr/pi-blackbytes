@@ -1,17 +1,23 @@
 import assert from "node:assert/strict";
 import { EventEmitter } from "node:events";
+import { mkdtemp, readdir } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { afterEach, beforeEach, describe, it } from "node:test";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 import { _resetEnabledSet, initEnabledSet } from "../../config/enabled-set.js";
 import type { BlackbytesConfig } from "../../config/schema.js";
 import { defineSubAgent } from "../declaration.js";
+import { getDelegationLog, resetDelegationLog } from "../delegation-log.js";
 import { registerSubAgent } from "../register.js";
 import type { SpawnFn } from "../runner.js";
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+
+const originalPiAgentDir = process.env.PI_AGENT_DIR;
 
 const defaultConfig: BlackbytesConfig = {
   disabled_tools: [],
@@ -139,11 +145,18 @@ const testDecl = defineSubAgent<{ question: string }>({
 beforeEach(() => {
   _resetEnabledSet();
   delete process.env.PI_NESTED_DEPTH;
+  resetDelegationLog();
 });
 
 afterEach(() => {
   _resetEnabledSet();
   delete process.env.PI_NESTED_DEPTH;
+  resetDelegationLog();
+  if (originalPiAgentDir === undefined) {
+    delete process.env.PI_AGENT_DIR;
+  } else {
+    process.env.PI_AGENT_DIR = originalPiAgentDir;
+  }
 });
 
 // ---------------------------------------------------------------------------
@@ -344,6 +357,37 @@ describe("registerSubAgent", () => {
     assert.doesNotMatch(result.content[0].text, /secret-token/);
     assert.doesNotMatch(result.content[0].text, /quoted-secret/);
     assert.doesNotMatch(result.content[0].text, /json-secret/);
+  });
+
+  it("records failureKind, fallbackAttempts, and errorHint in delegation log on failure", async () => {
+    initEnabledSet(defaultConfig);
+    const pi = makeFakePi();
+    const spawnFn = makeCapturingSpawnFn({
+      stderrData: "OPENAI_API_KEY=secret-token\nUnknown tool delegate_general",
+      exitCode: 1,
+    });
+
+    registerSubAgent(pi, testDecl, { spawnFn });
+
+    const tool = pi.registeredTools.get("delegate_explore")!;
+    await tool.execute("test-call", { question: "test" });
+
+    const log = getDelegationLog();
+    assert.ok(log.length > 0, "delegation log should have at least one entry");
+
+    const entry = log[log.length - 1];
+    assert.equal(entry.success, false);
+    assert.ok(entry.failureKind !== undefined, "failureKind should be set on failed delegations");
+    assert.match(entry.failureKind!, /invalid_tool_allowlist/);
+
+    // In the legacy path (no snapshot), only 1 attempt is recorded, so fallbackAttempts should be absent
+    assert.equal(entry.fallbackAttempts, undefined, "no fallbackAttempts for single-attempt path");
+
+    // errorHint should be set, redacted, and bounded to ~200 chars
+    assert.ok(entry.errorHint !== undefined, "errorHint should be set on failure");
+    assert.ok(entry.errorHint!.length <= 200, "errorHint should be bounded to 200 chars");
+    assert.ok(entry.errorHint!.includes("[REDACTED]"), "errorHint should contain redacted content");
+    assert.doesNotMatch(entry.errorHint!, /secret-token/, "errorHint should not leak secrets");
   });
 
   it("returns success content on runNestedPi success", async () => {
@@ -926,5 +970,61 @@ describe("registerSubAgent snapshot integration", () => {
 
     const modelIdx = capturedArgs.indexOf("--model");
     assert.equal(capturedArgs[modelIdx + 1], "frozen-model", "snapshot must remain stable");
+  });
+
+  it("passes artifactCapture snapshot setting through to the runner", async () => {
+    const { _resetAgentSnapshot, initAgentSnapshot } = await import("../snapshot.js");
+    initEnabledSet(defaultConfig);
+    _resetAgentSnapshot();
+
+    const largeText = "x".repeat(30_000);
+    const agentEndEvent = JSON.stringify({
+      type: "agent_end",
+      messages: [{ role: "assistant", content: [{ type: "text", text: largeText }] }],
+    });
+    const stdoutData = `${agentEndEvent}\n`;
+
+    const decl = defineSubAgent<{ q: string }>({
+      name: "explore",
+      toolName: "delegate_explore",
+      description: "x",
+      parameters: Type.Object({ q: Type.String() }),
+      systemPrompt: "x",
+      allowedTools: ["read"],
+      mutability: "read-only",
+      finalizeMode: "strict",
+      source: "builtin",
+      buildUserPrompt: (p) => p.q,
+    });
+
+    process.env.PI_AGENT_DIR = await mkdtemp(join(tmpdir(), "pi-blackbytes-register-artifacts-"));
+    initAgentSnapshot([decl], {
+      ...defaultConfig,
+      sub_agents: { explore: { artifactCapture: true } },
+    });
+    let pi = makeFakePi();
+    registerSubAgent(pi, decl, { spawnFn: makeCapturingSpawnFn({ stdoutData, exitCode: 0 }) });
+    await pi.registeredTools.get("delegate_explore")!.execute("call-artifact-on", { q: "q" });
+
+    let artifactFiles = (await readdir(process.env.PI_AGENT_DIR, { recursive: true })).filter(
+      (entry) => String(entry).endsWith(".md"),
+    );
+    assert.equal(artifactFiles.length, 1);
+    assert.ok(getDelegationLog().at(-1)?.artifactPath?.endsWith(".md"));
+
+    process.env.PI_AGENT_DIR = await mkdtemp(join(tmpdir(), "pi-blackbytes-register-artifacts-"));
+    initAgentSnapshot([decl], {
+      ...defaultConfig,
+      sub_agents: { explore: { artifactCapture: false } },
+    });
+    pi = makeFakePi();
+    registerSubAgent(pi, decl, { spawnFn: makeCapturingSpawnFn({ stdoutData, exitCode: 0 }) });
+    await pi.registeredTools.get("delegate_explore")!.execute("call-artifact-off", { q: "q" });
+
+    artifactFiles = (await readdir(process.env.PI_AGENT_DIR, { recursive: true })).filter((entry) =>
+      String(entry).endsWith(".md"),
+    );
+    assert.equal(artifactFiles.length, 0);
+    assert.equal(getDelegationLog().at(-1)?.artifactPath, undefined);
   });
 });

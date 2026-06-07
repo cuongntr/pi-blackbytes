@@ -6,7 +6,9 @@ export type DelegateFailureKind =
   | "recursion_refused"
   | "cli_usage_error"
   | "invalid_tool_allowlist"
-  | "provider_or_model_unavailable";
+  | "provider_or_model_unavailable"
+  | "malformed_jsonl"
+  | "killed";
 
 export interface RunNestedPiOptions {
   systemPrompt: string;
@@ -17,6 +19,8 @@ export interface RunNestedPiOptions {
   cwd?: string;
   signal?: AbortSignal;
   timeoutMs?: number; // default 300000 (5min)
+  captureArtifacts?: boolean;
+  artifactAgent?: string;
   /**
    * Internal callback used by the host registration layer to build safe
    * live progress updates for the parent TUI.
@@ -41,6 +45,7 @@ export interface DelegateResult {
   content: string;
   details?: string;
   failureKind?: DelegateFailureKind;
+  artifactPath?: string;
 }
 
 /**

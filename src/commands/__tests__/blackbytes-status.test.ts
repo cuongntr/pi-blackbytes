@@ -276,6 +276,346 @@ describe("handleBlackbytesStatus YAML diagnostics section", () => {
 });
 
 // ---------------------------------------------------------------------------
+// Diagnostics section tests
+// ---------------------------------------------------------------------------
+
+describe("handleBlackbytesStatus diagnostics section", () => {
+  let tmpDir: string;
+  const originalAgentDir = process.env.PI_AGENT_DIR;
+
+  beforeEach(async () => {
+    tmpDir = await makeTempAgentDir();
+    process.env.PI_AGENT_DIR = tmpDir;
+    _resetEnabledSet();
+    const { _resetAgentSnapshot } = await import("../../sub-agents/snapshot.js");
+    const { _resetYamlDiagnostics } = await import("../../sub-agents/diagnostics.js");
+    const { resetDelegationLog } = await import("../../sub-agents/delegation-log.js");
+    _resetAgentSnapshot();
+    _resetYamlDiagnostics();
+    resetDelegationLog();
+    const { _resetPiAvailability } = await import("../../sub-agents/pi-availability.js");
+    _resetPiAvailability();
+  });
+
+  afterEach(async () => {
+    if (originalAgentDir === undefined) {
+      delete process.env.PI_AGENT_DIR;
+    } else {
+      process.env.PI_AGENT_DIR = originalAgentDir;
+    }
+    await fs.rm(tmpDir, { recursive: true, force: true });
+    _resetEnabledSet();
+    const { _resetAgentSnapshot } = await import("../../sub-agents/snapshot.js");
+    const { _resetYamlDiagnostics } = await import("../../sub-agents/diagnostics.js");
+    const { resetDelegationLog } = await import("../../sub-agents/delegation-log.js");
+    _resetAgentSnapshot();
+    _resetYamlDiagnostics();
+    resetDelegationLog();
+    const { _resetPiAvailability } = await import("../../sub-agents/pi-availability.js");
+    _resetPiAvailability();
+  });
+
+  it("renders diagnostics section with healthy state (all agents enabled, no failures)", async () => {
+    const config = {
+      sub_agents: {
+        oracle: {
+          model: "claude-opus-4-5",
+          timeoutMs: 120000,
+          fallbackModels: ["claude-sonnet-4-20250514"],
+        },
+        explore: { model: "claude-sonnet-4-20250514", timeoutMs: 60000 },
+      },
+    };
+    await writeSettings(tmpDir, config);
+    const cfg = parseBlackbytesConfig(config);
+    assert.ok(cfg.ok);
+    if (!cfg.ok) return;
+    initEnabledSet(cfg.value);
+
+    const { defineSubAgent } = await import("../../sub-agents/declaration.js");
+    const { initAgentSnapshot } = await import("../../sub-agents/snapshot.js");
+    const { Type } = await import("typebox");
+    const { logDelegation } = await import("../../sub-agents/delegation-log.js");
+    const { checkPiAvailability } = await import("../../sub-agents/pi-availability.js");
+
+    const oracleDecl = defineSubAgent({
+      name: "oracle",
+      toolName: "delegate_oracle",
+      description: "Oracle agent",
+      parameters: Type.Object({ q: Type.String() }),
+      systemPrompt: "You are Oracle.",
+      allowedTools: ["read"],
+      source: "builtin",
+      buildUserPrompt: (p: { q: string }) => p.q,
+    });
+    const exploreDecl = defineSubAgent({
+      name: "explore",
+      toolName: "delegate_explore",
+      description: "Explore agent",
+      parameters: Type.Object({ q: Type.String() }),
+      systemPrompt: "You are Explore.",
+      allowedTools: ["read"],
+      source: "builtin",
+      buildUserPrompt: (p: { q: string }) => p.q,
+    });
+    initAgentSnapshot([oracleDecl, exploreDecl], cfg.value);
+
+    // Add successful delegations so success rate shows
+    logDelegation({
+      agent: "oracle",
+      startedAt: Date.now() - 10000,
+      durationMs: 5000,
+      success: true,
+      toolCallCount: 3,
+      outputChars: 500,
+    });
+    logDelegation({
+      agent: "explore",
+      startedAt: Date.now() - 5000,
+      durationMs: 2000,
+      success: true,
+      toolCallCount: 1,
+      outputChars: 100,
+    });
+
+    // Set Pi availability cache
+    await checkPiAvailability(async () => ({ available: true }));
+
+    const out = await handleBlackbytesStatus();
+
+    assert.match(out, /### Sub-Agent Diagnostics/);
+    assert.match(out, /Nested Pi CLI.*✓.*available/);
+    assert.match(out, /Agents.*2\/2 enabled/);
+    assert.match(out, /✓ oracle/);
+    assert.match(out, /✓ explore/);
+    assert.match(out, /120000ms/);
+    assert.match(out, /60000ms/);
+    assert.match(out, /1 fallback/);
+    assert.match(out, /Success rate.*100%.*2 delegations/);
+    assert.ok(!out.includes("Recent failures"), "should not show failures section when none");
+    assert.ok(!out.includes("YAML warnings"), "should not show YAML warnings when none");
+  });
+
+  it("renders diagnostics section with failures grouped by kind", async () => {
+    const config = {
+      sub_agents: {
+        oracle: { model: "claude-opus-4-5" },
+      },
+    };
+    await writeSettings(tmpDir, config);
+    const cfg = parseBlackbytesConfig(config);
+    assert.ok(cfg.ok);
+    if (!cfg.ok) return;
+    initEnabledSet(cfg.value);
+
+    const { defineSubAgent } = await import("../../sub-agents/declaration.js");
+    const { initAgentSnapshot } = await import("../../sub-agents/snapshot.js");
+    const { Type } = await import("typebox");
+    const { logDelegation } = await import("../../sub-agents/delegation-log.js");
+    const { checkPiAvailability } = await import("../../sub-agents/pi-availability.js");
+
+    const oracleDecl = defineSubAgent({
+      name: "oracle",
+      toolName: "delegate_oracle",
+      description: "x",
+      parameters: Type.Object({ q: Type.String() }),
+      systemPrompt: "x",
+      allowedTools: ["read"],
+      source: "yaml",
+      buildUserPrompt: (p: { q: string }) => p.q,
+    });
+    initAgentSnapshot([oracleDecl], cfg.value);
+
+    // 2 timed_out + 1 spawn_error
+    logDelegation({
+      agent: "oracle",
+      startedAt: Date.now() - 30000,
+      durationMs: 300000,
+      success: false,
+      toolCallCount: 0,
+      outputChars: 0,
+      failureKind: "timed_out",
+      errorHint: "Timeout after 300s",
+    });
+    logDelegation({
+      agent: "oracle",
+      startedAt: Date.now() - 20000,
+      durationMs: 300000,
+      success: false,
+      toolCallCount: 0,
+      outputChars: 0,
+      failureKind: "timed_out",
+      errorHint: "Timeout after 300s",
+    });
+    logDelegation({
+      agent: "oracle",
+      startedAt: Date.now() - 10000,
+      durationMs: 0,
+      success: false,
+      toolCallCount: 0,
+      outputChars: 0,
+      failureKind: "spawn_error",
+      errorHint: "pi CLI not found",
+    });
+
+    await checkPiAvailability(async () => ({ available: true }));
+
+    const out = await handleBlackbytesStatus();
+
+    assert.match(out, /### Sub-Agent Diagnostics/);
+    assert.match(out, /timed_out: 2x/);
+    assert.match(out, /spawn_error: 1x/);
+    assert.match(out, /Timeout after 300s/);
+    assert.match(out, /pi CLI not found/);
+    assert.match(out, /Success rate.*0%.*3 delegations/);
+  });
+
+  it("renders diagnostics section with Pi unavailable", async () => {
+    const config = {
+      sub_agents: {
+        oracle: { model: "claude-opus-4-5" },
+      },
+    };
+    await writeSettings(tmpDir, config);
+    const cfg = parseBlackbytesConfig(config);
+    assert.ok(cfg.ok);
+    if (!cfg.ok) return;
+    initEnabledSet(cfg.value);
+
+    const { defineSubAgent } = await import("../../sub-agents/declaration.js");
+    const { initAgentSnapshot } = await import("../../sub-agents/snapshot.js");
+    const { Type } = await import("typebox");
+    const { checkPiAvailability } = await import("../../sub-agents/pi-availability.js");
+
+    const oracleDecl = defineSubAgent({
+      name: "oracle",
+      toolName: "delegate_oracle",
+      description: "x",
+      parameters: Type.Object({ q: Type.String() }),
+      systemPrompt: "x",
+      allowedTools: ["read"],
+      source: "builtin",
+      buildUserPrompt: (p: { q: string }) => p.q,
+    });
+    initAgentSnapshot([oracleDecl], cfg.value);
+
+    await checkPiAvailability(async () => ({ available: false, error: "pi command not found" }));
+
+    const out = await handleBlackbytesStatus();
+
+    assert.match(out, /### Sub-Agent Diagnostics/);
+    assert.match(out, /Nested Pi CLI.*✗.*unavailable/);
+    assert.match(out, /hint: pi command not found/);
+  });
+
+  it("renders diagnostics section with YAML warnings", async () => {
+    const config = {
+      sub_agents: {
+        oracle: { model: "claude-opus-4-5" },
+      },
+    };
+    await writeSettings(tmpDir, config);
+    const cfg = parseBlackbytesConfig(config);
+    assert.ok(cfg.ok);
+    if (!cfg.ok) return;
+    initEnabledSet(cfg.value);
+
+    const { defineSubAgent } = await import("../../sub-agents/declaration.js");
+    const { initAgentSnapshot } = await import("../../sub-agents/snapshot.js");
+    const { Type } = await import("typebox");
+    const { setYamlDiagnostics } = await import("../../sub-agents/diagnostics.js");
+    const { checkPiAvailability } = await import("../../sub-agents/pi-availability.js");
+
+    const oracleDecl = defineSubAgent({
+      name: "oracle",
+      toolName: "delegate_oracle",
+      description: "x",
+      parameters: Type.Object({ q: Type.String() }),
+      systemPrompt: "x",
+      allowedTools: ["read"],
+      source: "builtin",
+      buildUserPrompt: (p: { q: string }) => p.q,
+    });
+    initAgentSnapshot([oracleDecl], cfg.value);
+
+    setYamlDiagnostics({
+      directory: "/tmp/test",
+      directoryExists: true,
+      scannedFiles: ["bad.yaml"],
+      loadedDeclarations: [],
+      skippedFiles: [
+        { file: "bad.yaml", reason: "YAML syntax error" },
+        {
+          file: "conflict.yaml",
+          reason: "Name conflict with builtin 'oracle'",
+          conflictWith: { source: "builtin" as const, name: "oracle" },
+        },
+      ],
+    });
+
+    await checkPiAvailability(async () => ({ available: true }));
+
+    const out = await handleBlackbytesStatus();
+
+    assert.match(out, /### Sub-Agent Diagnostics/);
+    assert.match(out, /YAML warnings/);
+    assert.match(out, /Skipped bad.yaml: YAML syntax error/);
+    assert.match(out, /Skipped conflict.yaml: Name conflict/);
+  });
+
+  it("redacts secrets from diagnostics output", async () => {
+    const config = {
+      sub_agents: {
+        oracle: { model: "claude-opus-4-5" },
+      },
+    };
+    await writeSettings(tmpDir, config);
+    const cfg = parseBlackbytesConfig(config);
+    assert.ok(cfg.ok);
+    if (!cfg.ok) return;
+    initEnabledSet(cfg.value);
+
+    const { defineSubAgent } = await import("../../sub-agents/declaration.js");
+    const { initAgentSnapshot } = await import("../../sub-agents/snapshot.js");
+    const { Type } = await import("typebox");
+    const { logDelegation } = await import("../../sub-agents/delegation-log.js");
+    const { checkPiAvailability } = await import("../../sub-agents/pi-availability.js");
+
+    const oracleDecl = defineSubAgent({
+      name: "oracle",
+      toolName: "delegate_oracle",
+      description: "x",
+      parameters: Type.Object({ q: Type.String() }),
+      systemPrompt: "x",
+      allowedTools: ["read"],
+      source: "builtin",
+      buildUserPrompt: (p: { q: string }) => p.q,
+    });
+    initAgentSnapshot([oracleDecl], cfg.value);
+
+    // Log a failure with a secret-shaped hint
+    logDelegation({
+      agent: "oracle",
+      startedAt: Date.now() - 10000,
+      durationMs: 5000,
+      success: false,
+      toolCallCount: 0,
+      outputChars: 0,
+      failureKind: "provider_or_model_unavailable",
+      errorHint: "API key sk-abc123def456ghi789jkl is invalid",
+    });
+
+    await checkPiAvailability(async () => ({ available: true }));
+
+    const out = await handleBlackbytesStatus();
+
+    // Verify secrets are redacted
+    assert.ok(!out.includes("sk-abc123def456ghi789jkl"), "raw API key must be redacted");
+    assert.ok(out.includes("[REDACTED]"), "redaction marker must be present");
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Interactive section picker tests
 // ---------------------------------------------------------------------------
 
@@ -287,6 +627,8 @@ describe("handleBlackbytesStatus interactive section picker", () => {
     tmpDir = await makeTempAgentDir();
     process.env.PI_AGENT_DIR = tmpDir;
     _resetEnabledSet();
+    const { _resetPiAvailability } = await import("../../sub-agents/pi-availability.js");
+    _resetPiAvailability();
   });
 
   afterEach(async () => {
@@ -297,13 +639,19 @@ describe("handleBlackbytesStatus interactive section picker", () => {
     }
     await fs.rm(tmpDir, { recursive: true, force: true });
     _resetEnabledSet();
+    const { _resetPiAvailability } = await import("../../sub-agents/pi-availability.js");
+    _resetPiAvailability();
   });
 
-  function mockCtx(selectResponse: string | undefined): StatusInteractiveCtx {
+  function mockCtx(
+    selectResponse: string | undefined,
+    piAvailabilityProbe?: StatusInteractiveCtx["piAvailabilityProbe"],
+  ): StatusInteractiveCtx {
     return {
       ui: {
         select: async () => selectResponse,
       },
+      ...(piAvailabilityProbe ? { piAvailabilityProbe } : {}),
     };
   }
 
@@ -370,6 +718,43 @@ describe("handleBlackbytesStatus interactive section picker", () => {
     assert.match(out, /temperature/);
     // Should NOT contain other sections
     assert.ok(!out.includes("### Enabled Tools"), "should not include other sections");
+  });
+
+  it("probes Pi availability when diagnostics section is selected", async () => {
+    await writeSettings(tmpDir, {});
+    const cfg = parseBlackbytesConfig({});
+    assert.ok(cfg.ok);
+    if (cfg.ok) initEnabledSet(cfg.value);
+    let probeCount = 0;
+
+    const out = await handleBlackbytesStatus(
+      mockCtx("Sub-Agent Diagnostics", async () => {
+        probeCount++;
+        return { available: true };
+      }),
+    );
+
+    assert.equal(probeCount, 1);
+    assert.match(out, /### Sub-Agent Diagnostics/);
+    assert.match(out, /Nested Pi CLI.*✓.*available/);
+  });
+
+  it("does not probe Pi availability for unrelated selected sections", async () => {
+    await writeSettings(tmpDir, {});
+    const cfg = parseBlackbytesConfig({});
+    assert.ok(cfg.ok);
+    if (cfg.ok) initEnabledSet(cfg.value);
+    let probeCount = 0;
+
+    const out = await handleBlackbytesStatus(
+      mockCtx("System Prompt Log", async () => {
+        probeCount++;
+        return { available: true };
+      }),
+    );
+
+    assert.equal(probeCount, 0);
+    assert.match(out, /### System Prompt Log/);
   });
 
   it("overview line includes tool/agent/skill counts", async () => {

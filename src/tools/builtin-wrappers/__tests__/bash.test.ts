@@ -11,6 +11,7 @@ const ui: BlackbytesUiConfig = {
   bash_max_expanded_lines: 200,
   bash_dim_output: false,
   read_tool_display: "compact",
+  sub_agent_display: "compact",
 };
 
 interface RegisteredTool {

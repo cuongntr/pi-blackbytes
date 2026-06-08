@@ -1,5 +1,8 @@
 import assert from "node:assert/strict";
 import { EventEmitter } from "node:events";
+import { mkdtemp, readFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { afterEach, beforeEach, describe, it } from "node:test";
 import type { SpawnFn } from "../runner.js";
 import { runNestedPi } from "../runner.js";
@@ -74,6 +77,7 @@ function makeFakeChild(options: {
 
 describe("runNestedPi", () => {
   const originalDepth = process.env.PI_NESTED_DEPTH;
+  const originalPiAgentDir = process.env.PI_AGENT_DIR;
 
   beforeEach(() => {
     delete process.env.PI_NESTED_DEPTH;
@@ -84,6 +88,11 @@ describe("runNestedPi", () => {
       delete process.env.PI_NESTED_DEPTH;
     } else {
       process.env.PI_NESTED_DEPTH = originalDepth;
+    }
+    if (originalPiAgentDir === undefined) {
+      delete process.env.PI_AGENT_DIR;
+    } else {
+      process.env.PI_AGENT_DIR = originalPiAgentDir;
     }
   });
 
@@ -116,6 +125,30 @@ describe("runNestedPi", () => {
 
     assert.equal(result.success, true);
     assert.equal(result.content, "Hello from nested Pi");
+  });
+
+  it("successful JSONL execution returns final assistant text", async () => {
+    const agentEndEvent = JSON.stringify({
+      type: "agent_end",
+      messages: [{ role: "assistant", content: [{ type: "text", text: "Hello from agent_end" }] }],
+    });
+    const fakeChild = makeFakeChild({
+      stdoutData: `banner line\n${agentEndEvent}\n`,
+      exitCode: 0,
+    });
+    const spawnFn = (() => fakeChild) as unknown as SpawnFn;
+
+    const result = await runNestedPi(
+      {
+        systemPrompt: "You are helpful",
+        userPrompt: "Hello",
+        allowedTools: ["read"],
+      },
+      spawnFn,
+    );
+
+    assert.equal(result.success, true);
+    assert.equal(result.content, "Hello from agent_end");
   });
 
   it("non-zero exit code returns failure with stderr details", async () => {
@@ -634,5 +667,277 @@ describe("runNestedPi", () => {
       !capturedArgs!.includes("--thinking"),
       "--thinking should not be present when reasoningEffort is undefined",
     );
+  });
+
+  it("malformed JSONL lines with non-zero exit classifies as malformed_jsonl", async () => {
+    // Emit lines that look like JSON (start with {) but are invalid JSON.
+    // No agent_end event captured. Exits non-zero.
+    const fakeChild = new EventEmitter() as EventEmitter & {
+      stdout: EventEmitter;
+      stderr: EventEmitter;
+      kill: (signal?: string) => void;
+      killed: boolean;
+      stdin: null;
+    };
+    fakeChild.stdout = new EventEmitter();
+    fakeChild.stderr = new EventEmitter();
+    fakeChild.stdin = null;
+    fakeChild.killed = false;
+    fakeChild.kill = () => {
+      fakeChild.killed = true;
+    };
+
+    const spawnFn = (() => fakeChild) as unknown as SpawnFn;
+
+    const resultPromise = runNestedPi(
+      {
+        systemPrompt: "You are helpful",
+        userPrompt: "Hello",
+        allowedTools: [],
+        timeoutMs: 30_000,
+      },
+      spawnFn,
+    );
+
+    // Emit malformed JSONL lines (start with { but not valid JSON)
+    process.nextTick(() => {
+      fakeChild.stdout.emit("data", Buffer.from('{"type": incomplete\n'));
+      fakeChild.stdout.emit("data", Buffer.from('{"bad": "json", missing\n'));
+      fakeChild.stderr.emit("data", Buffer.from("Some error\n"));
+      fakeChild.emit("close", 1);
+    });
+
+    const result = await resultPromise;
+
+    assert.equal(result.success, false);
+    assert.equal(result.content, "Nested Pi failed");
+    assert.equal(result.failureKind, "malformed_jsonl");
+    assert.equal(result.details, "Some error\n");
+  });
+
+  it("malformed JSONL does not override specific stderr classifications", async () => {
+    const stdoutData = '{"type": incomplete\n';
+    const fakeChild = makeFakeChild({
+      stdoutData,
+      stderrData: "model not found",
+      exitCode: 1,
+    });
+    const spawnFn = (() => fakeChild) as unknown as SpawnFn;
+
+    const result = await runNestedPi(
+      {
+        systemPrompt: "You are helpful",
+        userPrompt: "Hello",
+        allowedTools: [],
+      },
+      spawnFn,
+    );
+
+    assert.equal(result.success, false);
+    assert.equal(result.failureKind, "provider_or_model_unavailable");
+  });
+
+  it("killed by external signal returns killed failure", async () => {
+    // Child emits close with a signal but no terminationRequested
+    const child = new EventEmitter() as EventEmitter & {
+      stdout: EventEmitter;
+      stderr: EventEmitter;
+      kill: (signal?: string) => void;
+      killed: boolean;
+      stdin: null;
+    };
+    child.stdout = new EventEmitter();
+    child.stderr = new EventEmitter();
+    child.stdin = null;
+    child.killed = false;
+    child.kill = () => {
+      child.killed = true;
+    };
+
+    const spawnFn = (() => child) as unknown as SpawnFn;
+
+    const resultPromise = runNestedPi(
+      {
+        systemPrompt: "You are helpful",
+        userPrompt: "Hello",
+        allowedTools: [],
+        timeoutMs: 30_000,
+      },
+      spawnFn,
+    );
+
+    // Emit close with exitCode=null and signal=SIGTERM (external kill)
+    process.nextTick(() => {
+      child.emit("close", null, "SIGTERM");
+    });
+
+    const result = await resultPromise;
+
+    assert.equal(result.success, false);
+    assert.equal(result.content, "Nested Pi killed");
+    assert.equal(result.failureKind, "killed");
+  });
+
+  it("killed not triggered when termination was self-requested (cancellation wins)", async () => {
+    // When we request termination, the terminationReason check fires first,
+    // even if close emits with a non-null signal.
+    const signals: string[] = [];
+    const child = new EventEmitter() as EventEmitter & {
+      stdout: EventEmitter;
+      stderr: EventEmitter;
+      kill: (signal?: string) => void;
+      killed: boolean;
+      stdin: null;
+    };
+    child.stdout = new EventEmitter();
+    child.stderr = new EventEmitter();
+    child.stdin = null;
+    child.killed = false;
+    child.kill = (signal?: string) => {
+      child.killed = true;
+      signals.push(signal ?? "");
+      // Emit close with the signal (realistic: SIGTERM triggers close with signal)
+      process.nextTick(() => child.emit("close", null, signal ?? "SIGTERM"));
+    };
+    const spawnFn = (() => child) as unknown as SpawnFn;
+    const controller = new AbortController();
+
+    const resultPromise = runNestedPi(
+      {
+        systemPrompt: "You are helpful",
+        userPrompt: "Hello",
+        allowedTools: [],
+        signal: controller.signal,
+        timeoutMs: 30_000,
+      },
+      spawnFn,
+    );
+    controller.abort();
+
+    const result = await resultPromise;
+
+    assert.equal(result.success, false);
+    assert.equal(result.failureKind, "cancelled");
+    assert.equal(result.content, "Nested Pi cancelled");
+    assert.ok(signals.includes("SIGTERM"), "SIGTERM must have been sent");
+  });
+
+  it("captures an artifact for over-cap successful output when enabled", async () => {
+    process.env.PI_AGENT_DIR = await mkdtemp(join(tmpdir(), "pi-blackbytes-runner-artifacts-"));
+    const largeOutput = `${"x".repeat(30_000)}\nAPI_KEY=supersecret123`;
+    const agentEndEvent = JSON.stringify({
+      type: "agent_end",
+      messages: [{ role: "assistant", content: [{ type: "text", text: largeOutput }] }],
+    });
+    const fakeChild = makeFakeChild({ stdoutData: `${agentEndEvent}\n`, exitCode: 0 });
+    const spawnFn = (() => fakeChild) as unknown as SpawnFn;
+
+    const result = await runNestedPi(
+      {
+        systemPrompt: "You are helpful",
+        userPrompt: "Hello",
+        allowedTools: [],
+        model: "test-model",
+        captureArtifacts: true,
+        artifactAgent: "explore",
+      },
+      spawnFn,
+    );
+
+    assert.equal(result.success, true);
+    assert.ok(result.artifactPath);
+    assert.ok(result.content.length <= 24_576);
+    const artifact = await readFile(result.artifactPath, "utf8");
+    assert.ok(artifact.includes('agent: "explore"'));
+    assert.ok(artifact.includes('model: "test-model"'));
+    assert.ok(artifact.includes("API_KEY=[REDACTED]"));
+    assert.ok(!artifact.includes("supersecret123"));
+  });
+
+  it("does not capture artifacts for under-cap successful output", async () => {
+    process.env.PI_AGENT_DIR = await mkdtemp(join(tmpdir(), "pi-blackbytes-runner-artifacts-"));
+    const fakeChild = makeFakeChild({ stdoutData: "short output", exitCode: 0 });
+    const spawnFn = (() => fakeChild) as unknown as SpawnFn;
+
+    const result = await runNestedPi(
+      {
+        systemPrompt: "You are helpful",
+        userPrompt: "Hello",
+        allowedTools: [],
+        captureArtifacts: true,
+        artifactAgent: "explore",
+      },
+      spawnFn,
+    );
+
+    assert.equal(result.success, true);
+    assert.equal(result.content, "short output");
+    assert.equal(result.artifactPath, undefined);
+  });
+
+  it("continues successfully when artifact capture fails", async () => {
+    process.env.PI_AGENT_DIR = "/dev/null";
+    const originalConsoleError = console.error;
+    const errors: string[] = [];
+    console.error = (message?: unknown) => {
+      errors.push(String(message));
+    };
+
+    try {
+      const largeOutput = "x".repeat(30_000);
+      const agentEndEvent = JSON.stringify({
+        type: "agent_end",
+        messages: [{ role: "assistant", content: [{ type: "text", text: largeOutput }] }],
+      });
+      const fakeChild = makeFakeChild({ stdoutData: `${agentEndEvent}\n`, exitCode: 0 });
+      const spawnFn = (() => fakeChild) as unknown as SpawnFn;
+
+      const result = await runNestedPi(
+        {
+          systemPrompt: "You are helpful",
+          userPrompt: "Hello",
+          allowedTools: [],
+          captureArtifacts: true,
+          artifactAgent: "explore",
+        },
+        spawnFn,
+      );
+
+      assert.equal(result.success, true);
+      assert.equal(result.artifactPath, undefined);
+      assert.ok(result.content.length <= 24_576);
+      assert.ok(errors.some((message) => message.includes("artifact capture failed")));
+    } finally {
+      console.error = originalConsoleError;
+    }
+  });
+
+  it("malformed_jsonl flag does not fire when agent_end captured successfully", async () => {
+    // Valid JSONL with an agent_end event, followed by non-zero exit.
+    // Since finalAssistantText is populated, malformed_jsonl should NOT fire.
+    const agentEndEvent = JSON.stringify({
+      type: "agent_end",
+      messages: [{ role: "assistant", content: [{ type: "text", text: "Hello from assistant" }] }],
+    });
+    const stdoutData = `${agentEndEvent}\n{"type": "session"}\n`;
+    const fakeChild = makeFakeChild({
+      stdoutData,
+      stderrData: "Something went wrong",
+      exitCode: 1,
+    });
+    const spawnFn = (() => fakeChild) as unknown as SpawnFn;
+
+    const result = await runNestedPi(
+      {
+        systemPrompt: "You are helpful",
+        userPrompt: "Hello",
+        allowedTools: [],
+      },
+      spawnFn,
+    );
+
+    assert.equal(result.success, false);
+    assert.equal(result.content, "Nested Pi failed");
+    assert.equal(result.failureKind, "failed"); // NOT malformed_jsonl
   });
 });

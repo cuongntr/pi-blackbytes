@@ -5,8 +5,17 @@ import {
   getSystemPromptLogConfig,
   resolveSystemPromptLogPath,
 } from "../shared/system-prompt-log.js";
+import { type ArtifactStats, getArtifactStats } from "../sub-agents/artifacts.js";
 import { getDelegationSummary } from "../sub-agents/delegation-log.js";
+import { buildDiagnosticsSummary } from "../sub-agents/diagnostics-summary.js";
+import type { DiagnosticsSummary } from "../sub-agents/diagnostics-summary.js";
 import { type YamlDiagnostics, getYamlDiagnostics } from "../sub-agents/diagnostics.js";
+import {
+  type PiAvailabilityProbe,
+  type PiAvailabilityResult,
+  checkPiAvailability,
+  getCachedPiAvailability,
+} from "../sub-agents/pi-availability.js";
 import { buildRoutingSummary } from "../sub-agents/routing.js";
 import { getAgentSnapshot } from "../sub-agents/snapshot.js";
 import type { AgentSnapshot } from "../sub-agents/snapshot.js";
@@ -166,6 +175,85 @@ function buildYamlDiagnosticsSection(diag: YamlDiagnostics | undefined): string[
   return lines;
 }
 
+function buildDiagnosticsSection(
+  summary: DiagnosticsSummary,
+  piAvailability: PiAvailabilityResult,
+  artifactStats: ArtifactStats,
+): string[] {
+  const lines: string[] = ["### Sub-Agent Diagnostics"];
+
+  // Pi availability
+  const statusIcon =
+    piAvailability.status === "available"
+      ? "✓"
+      : piAvailability.status === "unavailable"
+        ? "✗"
+        : "?";
+  lines.push(`- **Nested Pi CLI:** ${statusIcon} ${piAvailability.status}`);
+  if (piAvailability.hint) {
+    lines.push(`  - hint: ${piAvailability.hint}`);
+  }
+
+  // Agent overview
+  if (summary.agents.length === 0) {
+    lines.push("- _No sub-agents registered._");
+  } else {
+    const enabled = summary.agents.filter((a) => a.enabled).length;
+    lines.push(`- **Agents:** ${enabled}/${summary.agents.length} enabled`);
+
+    for (const agent of summary.agents) {
+      const status = agent.enabled ? "✓" : "○";
+      const timeout = agent.timeoutMs ? `${agent.timeoutMs}ms` : "default";
+      const fallback =
+        agent.fallbackEligible && agent.fallbackModelCount > 0
+          ? `, ${agent.fallbackModelCount} fallback`
+          : "";
+      lines.push(`  - ${status} ${agent.name} (${agent.source}, ${timeout}${fallback})`);
+    }
+  }
+
+  // Success rate
+  if (summary.totalDelegations > 0) {
+    const pct = Math.round(summary.successRate * 100);
+    lines.push(`- **Success rate:** ${pct}% (${summary.totalDelegations} delegations)`);
+  }
+
+  // Recent failures
+  if (summary.recentFailures.length > 0) {
+    lines.push("- **Recent failures:**");
+    for (const group of summary.recentFailures) {
+      lines.push(`  - ${group.kind}: ${group.count}x`);
+      for (const hint of group.recentHints) {
+        lines.push(`    - ${hint}`);
+      }
+    }
+  }
+
+  // YAML warnings
+  if (summary.yamlWarnings.length > 0) {
+    lines.push("- **YAML warnings:**");
+    for (const warning of summary.yamlWarnings) {
+      lines.push(`  - ${warning}`);
+    }
+  }
+
+  // Artifact stats (opt-in per agent; the absence of artifacts is a valid
+  // state and is rendered as such rather than as an error).
+  if (artifactStats.status === "ok") {
+    const recent = artifactStats.mostRecent;
+    const recentLine = recent
+      ? ` (latest: \`${recent.relativePath}\`, ${new Date(recent.timestamp).toISOString()})`
+      : "";
+    lines.push(
+      `- **Artifacts:** ${artifactStats.count} captured under \`${artifactStats.directory}\`${recentLine}`,
+    );
+  } else {
+    lines.push(`- **Artifacts:** ${artifactStats.reason} (\`${artifactStats.directory}\`)`);
+  }
+
+  return lines;
+}
+
 // ---------------------------------------------------------------------------
 // Section builder — collects all status sections into a keyed map so the
 // interactive picker (and full-output path) can reuse the same data.
@@ -183,9 +271,17 @@ interface StatusSections {
   snapshot: string[];
   yaml: string[];
   config: string[];
+  diagnostics: string[];
 }
 
-async function buildStatusSections(): Promise<StatusSections> {
+interface BuildStatusSectionsOptions {
+  readonly probePiAvailability?: boolean;
+  readonly piAvailabilityProbe?: PiAvailabilityProbe;
+}
+
+async function buildStatusSections(
+  options: BuildStatusSectionsOptions = {},
+): Promise<StatusSections> {
   const config = await loadBlackbytesConfig();
   const redacted = redactConfig(config as unknown as Record<string, unknown>);
 
@@ -222,6 +318,15 @@ async function buildStatusSections(): Promise<StatusSections> {
     : ["### Sub-Agent Snapshot", "_Not initialized yet (session_start has not run)._"];
 
   const yamlLines = buildYamlDiagnosticsSection(getYamlDiagnostics());
+  const diagnosticsSummary = buildDiagnosticsSummary();
+  const piAvailability = options.probePiAvailability
+    ? await checkPiAvailability(options.piAvailabilityProbe)
+    : getCachedPiAvailability();
+  const diagnosticsLines = buildDiagnosticsSection(
+    diagnosticsSummary,
+    piAvailability,
+    await getArtifactStats(),
+  );
   const systemPromptLog = getSystemPromptLogConfig(config);
   const systemPromptLogPath = resolveSystemPromptLogPath(systemPromptLog.path, process.cwd());
   const systemPromptLogLines = [
@@ -276,6 +381,7 @@ async function buildStatusSections(): Promise<StatusSections> {
     reserved: reservedLines,
     snapshot: snapshotLines,
     yaml: yamlLines,
+    diagnostics: diagnosticsLines,
     config: ["### Config", "```json", JSON.stringify(redacted, null, 2), "```"],
   };
 }
@@ -302,6 +408,8 @@ function buildFullOutput(sections: StatusSections): string {
     "",
     ...sections.yaml,
     "",
+    ...sections.diagnostics,
+    "",
     ...sections.config,
   ].join("\n");
 }
@@ -318,6 +426,7 @@ const SECTION_MENU: Array<{ label: string; key: keyof StatusSections }> = [
   { label: "Delegation ROI", key: "delegationRoi" },
   { label: "Sub-Agent Snapshot", key: "snapshot" },
   { label: "YAML Diagnostics", key: "yaml" },
+  { label: "Sub-Agent Diagnostics", key: "diagnostics" },
   { label: "System Prompt Log", key: "systemPromptLog" },
   { label: "Reserved / Unsupported Settings", key: "reserved" },
   { label: "Full Config (JSON)", key: "config" },
@@ -333,6 +442,8 @@ export interface StatusInteractiveCtx {
   ui: {
     select(title: string, options: string[]): Promise<string | undefined>;
   };
+  /** Test seam; production uses the real `pi --version` probe. */
+  piAvailabilityProbe?: PiAvailabilityProbe;
 }
 
 export async function handleBlackbytesStatus(ctx?: StatusInteractiveCtx): Promise<string> {
@@ -367,6 +478,14 @@ export async function handleBlackbytesStatus(ctx?: StatusInteractiveCtx): Promis
     return buildFullOutput(sections);
   }
 
-  const sectionLines = sections[menuItem.key];
-  return [...sections.overview, "", ...sectionLines].join("\n");
+  const selectedSections =
+    menuItem.key === "diagnostics"
+      ? await buildStatusSections({
+          probePiAvailability: true,
+          piAvailabilityProbe: ctx.piAvailabilityProbe,
+        })
+      : sections;
+
+  const sectionLines = selectedSections[menuItem.key];
+  return [...selectedSections.overview, "", ...sectionLines].join("\n");
 }

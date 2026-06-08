@@ -5,6 +5,10 @@
  * {@link resetDelegationLog} which is called from `resetSessionRuntimeState()`.
  */
 
+import { redactSecrets } from "../shared/redact.js";
+import type { AttemptSummary } from "./fallback.js";
+import type { DelegateFailureKind } from "./types.js";
+
 export interface DelegationEntry {
   readonly agent: string;
   readonly startedAt: number; // Date.now()
@@ -14,12 +18,30 @@ export interface DelegationEntry {
   readonly outputChars: number;
   /** Estimated cost if available from the progress reporter's usage tracking */
   readonly cost?: number;
+  /** Failure classification when success is false */
+  readonly failureKind?: DelegateFailureKind;
+  /** Fallback attempt summaries when fallback was used */
+  readonly fallbackAttempts?: readonly AttemptSummary[];
+  /** Redacted error hint for diagnostics (max ~200 chars) */
+  readonly errorHint?: string;
+  readonly artifactPath?: string;
 }
+
+const MAX_ENTRIES = 100;
+const MAX_ERROR_HINT_CHARS = 200;
 
 const entries: DelegationEntry[] = [];
 
 export function logDelegation(entry: DelegationEntry): void {
-  entries.push(entry);
+  const sanitizedEntry =
+    entry.errorHint === undefined
+      ? entry
+      : { ...entry, errorHint: redactSecrets(entry.errorHint).slice(0, MAX_ERROR_HINT_CHARS) };
+  entries.push(sanitizedEntry);
+  // Evict oldest entries when cap exceeded
+  while (entries.length > MAX_ENTRIES) {
+    entries.shift();
+  }
 }
 
 export function getDelegationLog(): readonly DelegationEntry[] {
@@ -30,6 +52,8 @@ export function resetDelegationLog(): void {
   entries.length = 0;
 }
 
+// Compact ROI aggregate intentionally omits failure details; structured failure
+// diagnostics live in buildDiagnosticsSummary().
 export function getDelegationSummary(): string {
   if (entries.length === 0) return "No delegations this session.";
   const byAgent = new Map<

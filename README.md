@@ -13,6 +13,8 @@ Blackbytes extends Pi with:
 - **Five builtin sub-agents** — Explore (with Tour Mode for flow walk-throughs), Oracle (with long-context handling and high-risk self-check guardrails), Librarian, General, and Reviewer, each with typed declarations, typed routing metadata, runtime overlays, model fallback chains (read-only agents), per-model-family prompt variants (all five carry GPT-optimized prompt bodies), and per-agent timeout/model/reasoning configuration.
 - **Typed routing metadata** — each sub-agent declaration carries a `SubAgentRoutingMetadata` object with `category`, `cost`, `useWhen`, `avoidWhen`, and optional `keyTrigger` fields. This metadata drives the Bytes overlay routing matrix and the `/blackbytes-status` Sub-Agent Routing section, replacing hardcoded routing prose.
 - **Delegation ROI tracking** — in-memory session-scoped delegation log with per-agent metrics (call count, success rate, average duration, cost). Visible via `/blackbytes-status`.
+- **Redacted artifact capture** — opt-in per-agent persistence of large redacted sub-agent outputs to `$PI_AGENT_DIR/blackbytes/artifacts/sub-agents/<YYYY-MM-DD>/<agent>-<HHmmssSSS>.md` (512 KiB cap, 7-day retention). Surfaces the artifact directory, total count, and most recent artifact under `/blackbytes-status` Sub-Agent Diagnostics. Enable with `sub_agents.<name>.artifactCapture: true`.
+- **Sequential chain executor (internal-only)** — `src/sub-agents/chain.ts` runs 1–5 existing sub-agents in order, threading each step's output into the next under a `## Previous step output` heading. Reuses `runNestedPi()`, enforces a total timeout budget, and stops on first failure by default. **No public `delegate_chain` tool in Phase 2** — chains are constructed in code.
 - **`look_at` tool** — multimodal image inspector that loads a primary image plus up to 3 references (PNG/JPG/GIF/WebP/BMP/SVG, 10 MB each) and embeds them as `ImageContent` blocks alongside the analysis objective.
 - **Fluent `file://` links** — sub-agent output uses `[relpath#L-L](file:///abs/path#L-L)` links throughout.
 
@@ -125,7 +127,7 @@ Tools: **10** enabled | Agents: **5** enabled | Skills: **2** enabled
 
 ### Section picker
 
-The picker presents 10 named sections plus a **Show All** option:
+The picker presents 11 named sections plus a **Show All** option:
 
 | # | Section | Description |
 |---|---|---|
@@ -134,11 +136,12 @@ The picker presents 10 named sections plus a **Show All** option:
 | 3 | Sub-Agent Routing | Typed routing metadata for each enabled sub-agent: category, cost, use-when/avoid-when hints, and key trigger |
 | 4 | Enabled Skills | Lists discovered Pi skills |
 | 5 | Delegation ROI | Session-scoped delegation metrics: per-agent call count, success rate, average duration, and accumulated cost |
-| 6 | Sub-Agent Snapshot | Resolved per-agent config snapshot (model, reasoning, timeout, fallback chain) |
-| 7 | YAML Diagnostics | Skipped YAML sub-agent files and reasons |
-| 8 | System Prompt Log | Current system prompt logging configuration |
-| 9 | Reserved / Unsupported Settings | Settings accepted by schema but not yet functional (e.g. `temperature`) |
-| 10 | Full Config (JSON) | Raw `blackbytes` config object with secrets redacted |
+| 6 | Sub-Agent Diagnostics | Per-agent status, recent failures by kind, nested Pi availability, YAML warnings |
+| 7 | Sub-Agent Snapshot | Resolved per-agent config snapshot (model, reasoning, timeout, fallback chain) |
+| 8 | YAML Diagnostics | Skipped YAML sub-agent files and reasons |
+| 9 | System Prompt Log | Current system prompt logging configuration |
+| 10 | Reserved / Unsupported Settings | Settings accepted by schema but not yet functional (e.g. `temperature`) |
+| 11 | Full Config (JSON) | Raw `blackbytes` config object with secrets redacted |
 | — | Show All | Prints all sections in order |
 
 Selecting a numbered section prints the overview header followed by that section only. Selecting **Show All** or pressing **Cancel** prints the full output, preserving backward-compatible behaviour.

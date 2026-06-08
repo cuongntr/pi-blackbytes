@@ -40,6 +40,7 @@ const KNOWN_AGENT_FIELDS = new Set([
   "fallbackModels",
   "promptMode",
   "executionMode",
+  "artifactCapture",
 ]);
 
 /** Pi CLI accepted thinking levels (packages/coding-agent/src/cli/args.ts). */
@@ -118,6 +119,8 @@ export interface AgentSnapshot {
    * When `undefined`, Pi's default behavior applies (parallel).
    */
   readonly executionMode?: "sequential" | "parallel";
+  /** Whether this agent should capture large delegate outputs as local artifacts. */
+  readonly artifactCapture: boolean;
   /**
    * Whether this agent is eligible for model fallback.
    * True when mutability is `read-only` AND no MUTATING_EXEC_TOOLS appear in
@@ -176,6 +179,7 @@ export function resolveAgentSnapshot(
   let jsonFallbackModels: readonly string[] | undefined;
   let jsonPromptMode: "static" | "append" | undefined;
   let jsonExecutionMode: "sequential" | "parallel" | undefined;
+  let jsonArtifactCapture = false;
 
   if (jsonForAgent && typeof jsonForAgent === "object") {
     const obj = jsonForAgent as Record<string, unknown>;
@@ -189,6 +193,7 @@ export function resolveAgentSnapshot(
     if (obj.executionMode === "sequential" || obj.executionMode === "parallel") {
       jsonExecutionMode = obj.executionMode;
     }
+    if (typeof obj.artifactCapture === "boolean") jsonArtifactCapture = obj.artifactCapture;
     if (
       Array.isArray(obj.fallbackModels) &&
       obj.fallbackModels.every((s: unknown) => typeof s === "string" && s.length > 0)
@@ -230,6 +235,7 @@ export function resolveAgentSnapshot(
     timeoutMs: jsonTimeoutMs ?? declDefaults.timeoutMs,
     promptMode: jsonPromptMode ?? declaration.promptMode,
     executionMode: jsonExecutionMode ?? declaration.executionMode,
+    artifactCapture: jsonArtifactCapture,
     fallbackModels: jsonFallbackModels ?? declDefaults.fallbackModels,
     fallbackEligible,
     reserved: Object.freeze(reserved),

@@ -12,6 +12,10 @@ export function truncate(s: string, max: number): string {
   return s.length > max ? `${s.slice(0, max - 1)}\u2026` : s;
 }
 
+function singleLine(s: string): string {
+  return s.replace(/\s+/g, " ").trim();
+}
+
 interface RenderCallContext {
   readonly isError?: boolean;
   readonly isPartial?: boolean;
@@ -50,7 +54,7 @@ export function makeRenderCall(
 }
 
 /** Build a renderCall for sub-agent tools. */
-export function makeSubAgentRenderCall(icon: string, name: string, primaryKey: string) {
+export function makeSubAgentRenderCall(_icon: string, name: string, primaryKey: string) {
   return (
     args: Record<string, unknown> | null | undefined,
     theme: Theme,
@@ -58,8 +62,8 @@ export function makeSubAgentRenderCall(icon: string, name: string, primaryKey: s
   ) => {
     const safeArgs = args && typeof args === "object" ? (args as Record<string, unknown>) : {};
     const val = str(safeArgs[primaryKey]);
-    const detail = val ? theme.fg("accent", `"${truncate(val, 60)}"`) : "";
-    return renderLightweightToolCall(theme, titleCaseName(name), detail, {
+    const detail = val ? theme.fg("accent", `"${truncate(singleLine(val), 60)}"`) : "";
+    return renderLightweightToolCall(theme, `Agent: ${titleCaseName(name)} `, detail, {
       isError: context?.isError,
       isPartial: context?.isPartial,
     });

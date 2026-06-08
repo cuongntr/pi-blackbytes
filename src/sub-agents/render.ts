@@ -106,6 +106,7 @@ export function rebuildSubAgentResultComponent(
   state: RenderState,
   theme: Theme,
   seamContext = false,
+  display: "full" | "compact" | "minimal" = "full",
 ): void {
   component.clear();
 
@@ -151,18 +152,28 @@ export function rebuildSubAgentResultComponent(
     }
   }
 
-  // === TIER 2: Metrics line (cached — only rebuilt when data changes) ===
-  const dataHash = `${status}-${Math.floor((elapsedMs ?? 0) / 1000)}-${details.toolCallCount}-${details.currentTool}-${details.outputChars}-${options.expanded}-${details.usage?.cost}`;
-  if (dataHash !== state.lastDataHash) {
-    state.lastDataHash = dataHash;
-    state.cachedMetricsText = buildMetricsLine(details, elapsedMs, status, options, theme, result);
-  }
-  if (state.cachedMetricsText) {
-    component.addChild(new Text(state.cachedMetricsText, 0, 0));
-  }
-  if (!options.expanded && status === "running") {
-    for (const line of buildCollapsedToolActivity(details, theme)) {
-      component.addChild(new Text(line, 0, 0));
+  // === TIER 2: Metrics line — skipped in "minimal" mode ===
+  if (display !== "minimal") {
+    const dataHash = `${status}-${Math.floor((elapsedMs ?? 0) / 1000)}-${details.toolCallCount}-${details.currentTool}-${details.outputChars}-${options.expanded}-${details.usage?.cost}`;
+    if (dataHash !== state.lastDataHash) {
+      state.lastDataHash = dataHash;
+      state.cachedMetricsText = buildMetricsLine(
+        details,
+        elapsedMs,
+        status,
+        options,
+        theme,
+        result,
+      );
+    }
+    if (state.cachedMetricsText) {
+      component.addChild(new Text(state.cachedMetricsText, 0, 0));
+    }
+    // Collapsed tool activity — only in "full" mode
+    if (display === "full" && !options.expanded && status === "running") {
+      for (const line of buildCollapsedToolActivity(details, theme)) {
+        component.addChild(new Text(line, 0, 0));
+      }
     }
   }
 
@@ -365,8 +376,11 @@ function aggregateToolHistory(history?: readonly ToolHistoryEntry[]): string {
  * The returned callable matches Pi's `renderResult(result, options, theme, ctx)`
  * signature and is responsible for driving the live elapsed-timer redraw loop
  * while the sub-agent is still executing.
+ *
+ * @param display - Collapsed display density: "full" (identity + metrics + tool activity),
+ *   "compact" (identity + metrics only), or "minimal" (identity line only).
  */
-export function buildSubAgentRenderResult() {
+export function buildSubAgentRenderResult(display: "full" | "compact" | "minimal" = "full") {
   return (
     result: RenderResult,
     options: RenderOptions,
@@ -401,7 +415,7 @@ export function buildSubAgentRenderResult() {
     // context.lastComponent is the box, not the SubAgentResultComponent.
     const component = state.component ?? new SubAgentResultComponent();
     state.component = component;
-    rebuildSubAgentResultComponent(component, result, options, state, theme, true);
+    rebuildSubAgentResultComponent(component, result, options, state, theme, true, display);
     component.invalidate();
     // One continuous frame: the lightweight call line above carries the agent
     // identity, so the result body renders seam-style beneath it.

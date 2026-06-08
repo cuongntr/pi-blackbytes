@@ -20,6 +20,7 @@ import {
   captureAgentStartSystemPrompt,
   captureProviderSystemPrompts,
 } from "../shared/system-prompt-log.js";
+import { cleanupArtifacts } from "../sub-agents/artifacts.js";
 import { declarationToMeta } from "../sub-agents/declaration.js";
 import { setYamlDiagnostics } from "../sub-agents/diagnostics.js";
 import { exploreDeclaration } from "../sub-agents/explore.js";
@@ -99,6 +100,11 @@ export async function handleSessionStart(
   }
 
   const uiConfig = getUiConfig(config);
+  void cleanupArtifacts().catch((error: unknown) => {
+    logger.warn("Sub-agent artifact cleanup failed", {
+      error: error instanceof Error ? error.message : String(error),
+    });
+  });
 
   // Local tools
   registerHashlineEditTool(pi, { strictPatch: getHashlineEditConfig(config).strict_patch });
@@ -120,7 +126,7 @@ export async function handleSessionStart(
   // Sub-agent delegates — declaration-driven registration
   for (const decl of allDeclarations) {
     registerSubAgentMeta(declarationToMeta(decl));
-    registerSubAgent(pi, decl);
+    registerSubAgent(pi, decl, { subAgentDisplay: uiConfig.sub_agent_display });
   }
 
   // Branding widget below the editor

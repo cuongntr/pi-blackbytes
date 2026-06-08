@@ -1,5 +1,6 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { getEnabledSet } from "../config/enabled-set.js";
+import type { BlackbytesUiConfig } from "../config/schema.js";
 import { getLogger } from "../shared/logger.js";
 import { redactSecrets } from "../shared/redact.js";
 import { makeSubAgentRenderCall } from "../tools/_shared/call-render.js";
@@ -25,6 +26,8 @@ function statusFromResult(result: FallbackResult): SubAgentProgressStatus {
 export interface RegisterSubAgentOptions {
   /** Override the default spawn function (for testing). */
   spawnFn?: SpawnFn;
+  /** Collapsed sub-agent display density. */
+  subAgentDisplay?: BlackbytesUiConfig["sub_agent_display"];
 }
 
 /** Derive the primary display key from a declaration's parameter schema. */
@@ -71,7 +74,7 @@ export function registerSubAgent(
       declaration.name,
       resolvePrimaryKey(declaration),
     ),
-    renderResult: buildSubAgentRenderResult(),
+    renderResult: buildSubAgentRenderResult(options?.subAgentDisplay ?? "full"),
     execute: async (
       _toolCallId: string,
       params: Record<string, unknown>,
@@ -206,6 +209,8 @@ export function registerSubAgent(
           cwd: ctx?.cwd,
           signal,
           onUpdate: (event: PiSessionEvent) => progress.handleEvent(event),
+          captureArtifacts: snapshot?.artifactCapture ?? false,
+          artifactAgent: declaration.name,
         };
 
         let result: FallbackResult;
@@ -271,6 +276,11 @@ export function registerSubAgent(
             toolCallCount: lastDetails.toolCallCount,
             outputChars: lastDetails.outputChars,
             cost: lastDetails.usage?.cost,
+            failureKind: result.failureKind,
+            fallbackAttempts:
+              result.attemptedModels.length > 1 ? result.attemptedModels : undefined,
+            errorHint: !result.success ? (result.details ?? result.content) : undefined,
+            artifactPath: result.artifactPath,
           });
         }
 

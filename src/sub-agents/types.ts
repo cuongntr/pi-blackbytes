@@ -48,6 +48,75 @@ export interface DelegateResult {
   artifactPath?: string;
 }
 
+// ---------------------------------------------------------------------------
+// Chain executor types (REQ-005). The chain runs 1-5 existing sub-agents in
+// sequence, passing each step's output to the next under a clear heading.
+// Internal-only in Phase 2: no public delegate_chain tool, no YAML DSL, no
+// fanout, no async polling, no inter-agent chat.
+// ---------------------------------------------------------------------------
+
+/** A single sequential step in a chain. */
+export interface ChainStep {
+  /** Name of a registered, enabled sub-agent (e.g. "explore"). */
+  agent: string;
+  /** Primary task / question passed to the sub-agent as the user prompt body. */
+  question: string;
+  /** Optional additional context included under a "## Context" heading. */
+  context?: string;
+  /** Optional per-step timeout override (ms); capped by the chain's remaining budget. */
+  timeoutMs?: number;
+}
+
+/** Logical chain configuration; transport-agnostic. */
+export interface ChainOptions {
+  /** Ordered steps to execute. 1-5 allowed; 0 and >5 are rejected up front. */
+  steps: readonly ChainStep[];
+  /** Hard total timeout in ms covering the entire chain execution. */
+  totalTimeoutMs: number;
+  /**
+   * When true, the chain continues past a failed step (with its error content
+   * threaded forward under the previous-step heading). Defaults to false
+   * (stop on first failure).
+   */
+  continueOnFailure?: boolean;
+  /** Optional abort signal that cancels the chain in-flight. */
+  signal?: AbortSignal;
+  /** Working directory passed to the nested runner for each step. */
+  cwd?: string;
+}
+
+/** Per-step outcome recorded by the chain executor. */
+export interface ChainStepResult {
+  agent: string;
+  success: boolean;
+  /** Step output (success) or short error line (failure). */
+  content: string;
+  /** Optional long-form failure details (mirrors `DelegateResult.details`). */
+  details?: string;
+  /** Wall-clock duration of the step in ms. */
+  durationMs: number;
+  /** Failure classification when the step failed. */
+  failureKind?: DelegateFailureKind;
+  /** Artifact path when the underlying runner captured an artifact. */
+  artifactPath?: string;
+  /** Effective per-step timeout that was applied (ms). */
+  timeoutMs: number;
+}
+
+/** Aggregate outcome of a chain execution. */
+export interface ChainResult {
+  /** True when every step succeeded. */
+  success: boolean;
+  /** Per-step results in execution order. */
+  steps: ChainStepResult[];
+  /** Wall-clock duration of the entire chain in ms. */
+  totalDurationMs: number;
+  /** True when the chain stopped before executing all steps. */
+  stoppedEarly: boolean;
+  /** Index of the step that caused the chain to stop (undefined when stoppedEarly is false). */
+  stoppedAtStep?: number;
+}
+
 /**
  * One JSONL event emitted on stdout by `pi -p --mode json`. The shape is
  * intentionally permissive (string-keyed, unknown-valued) because we only

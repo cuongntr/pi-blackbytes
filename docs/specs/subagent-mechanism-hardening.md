@@ -1,6 +1,6 @@
 # Sub-Agent Mechanism Hardening — Product + Technical Spec
 
-> **Status**: Draft
+> **Status**: Active (Phase 2 shipped)
 > **Date**: 2026-06-07
 > **Owner**: invoker
 > **Variant**: brownfield (extends the existing Blackbytes sub-agent runtime and status surfaces)

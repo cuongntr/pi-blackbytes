@@ -1,3 +1,4 @@
+import type { Dirent } from "node:fs";
 import { mkdir, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
@@ -172,6 +173,95 @@ export async function captureArtifact(
     redactedChars: redactedContent.length,
     truncated: bounded.truncated,
   };
+}
+
+export interface ArtifactStatsRecent {
+  /** Filename of the most recent artifact (e.g. "explore-010203000.md"). */
+  readonly name: string;
+  /** POSIX-style path relative to the artifact base directory. */
+  readonly relativePath: string;
+  /** mtime of the most recent artifact, in ms since epoch. */
+  readonly timestamp: number;
+}
+
+export type ArtifactStats =
+  | {
+      readonly status: "ok";
+      /** Resolved artifact base directory. */
+      readonly directory: string;
+      /** Total `.md` artifact count across every date subdir. */
+      readonly count: number;
+      /** Most recent artifact (by mtime) or `null` when the directory is empty. */
+      readonly mostRecent: ArtifactStatsRecent | null;
+    }
+  | {
+      readonly status: "unavailable";
+      /** Resolved artifact base directory (always computable). */
+      readonly directory: string;
+      /** Reason the stats could not be read (e.g. "directory missing", "read error"). */
+      readonly reason: string;
+    };
+
+/**
+ * Best-effort summary of the artifact directory for diagnostics surfaces such
+ * as `/blackbytes-status`. Always returns the resolved base directory even
+ * when the directory does not exist or is unreadable, so the status can show
+ * the path users would inspect manually.
+ *
+ * - No content reads: only stat/readdir metadata.
+ * - Tolerates per-date-dir read failures (e.g. a single broken date dir is
+ *   skipped rather than failing the whole scan).
+ * - Secret-bearing paths are not expected (filenames are sanitized to
+ *   `[a-z0-9_-]+` in `captureArtifact`), so no redaction is applied.
+ */
+export async function getArtifactStats(): Promise<ArtifactStats> {
+  const baseDir = join(getAgentDir(), "blackbytes", "artifacts", "sub-agents");
+
+  let dateDirs: Dirent[];
+  try {
+    dateDirs = await readdir(baseDir, { withFileTypes: true });
+  } catch (error) {
+    const message =
+      error instanceof Error && "code" in error && error.code === "ENOENT"
+        ? "directory missing"
+        : "read error";
+    return { status: "unavailable", directory: baseDir, reason: message };
+  }
+
+  let count = 0;
+  let newest: ArtifactStatsRecent | null = null;
+
+  for (const dateDir of dateDirs) {
+    if (!dateDir.isDirectory()) continue;
+    const dirPath = join(baseDir, dateDir.name);
+    let files: Dirent[];
+    try {
+      files = await readdir(dirPath, { withFileTypes: true });
+    } catch {
+      // Per-date-dir failure: skip but keep going.
+      continue;
+    }
+    for (const file of files) {
+      if (!file.isFile() || !file.name.endsWith(".md")) continue;
+      count += 1;
+      const filePath = join(dirPath, file.name);
+      let info: Awaited<ReturnType<typeof stat>>;
+      try {
+        info = await stat(filePath);
+      } catch {
+        continue;
+      }
+      if (!newest || info.mtimeMs > newest.timestamp) {
+        newest = {
+          timestamp: info.mtimeMs,
+          name: file.name,
+          relativePath: `${dateDir.name}/${file.name}`,
+        };
+      }
+    }
+  }
+
+  return { status: "ok", directory: baseDir, count, mostRecent: newest };
 }
 
 export async function cleanupArtifacts(now = new Date()): Promise<number> {

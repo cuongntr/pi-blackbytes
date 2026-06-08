@@ -9,6 +9,7 @@ import {
   buildMetadataHeader,
   captureArtifact,
   cleanupArtifacts,
+  getArtifactStats,
   resolveArtifactDir,
 } from "../artifacts.js";
 
@@ -206,5 +207,95 @@ describe("cleanupArtifacts", () => {
 
     await cleanupArtifacts(new Date("2026-06-08T00:00:00Z"));
     assert.equal(await readFile(notePath, "utf8"), "keep");
+  });
+});
+
+describe("getArtifactStats", () => {
+  it("reports the resolved base directory even when the artifact dir is missing", async () => {
+    // Point PI_AGENT_DIR at a fresh empty tmpdir; no subdirs exist yet.
+    process.env.PI_AGENT_DIR = await mkdtemp(join(tmpdir(), "pi-blackbytes-stats-empty-"));
+
+    const stats = await getArtifactStats();
+    assert.equal(stats.status, "unavailable");
+    assert.equal(stats.reason, "directory missing");
+    if (stats.status === "unavailable") {
+      assert.ok(stats.directory.endsWith(join("blackbytes", "artifacts", "sub-agents")));
+    }
+  });
+
+  it("reports an empty directory as count=0 with no mostRecent", async () => {
+    // Create the artifacts base dir but no date subdirs.
+    const baseDir = join(tempAgentDir, "blackbytes", "artifacts", "sub-agents");
+    await mkdir(baseDir, { recursive: true });
+
+    const stats = await getArtifactStats();
+    assert.equal(stats.status, "ok");
+    if (stats.status === "ok") {
+      assert.equal(stats.count, 0);
+      assert.equal(stats.mostRecent, null);
+      assert.equal(stats.directory, baseDir);
+    }
+  });
+
+  it("counts .md artifacts across date subdirs and reports the most recent by mtime", async () => {
+    // Capture three artifacts in two different date subdirs, then back-date
+    // two of them so we know which one is the most recent.
+    const older = await captureArtifact({
+      agent: "explore",
+      content: "old".repeat(MIN_ARTIFACT_CHARS),
+      startedAt: Date.parse("2026-06-06T00:00:00Z"),
+      durationMs: 1,
+      now: new Date("2026-06-06T00:00:00Z"),
+    });
+    assert.ok(older);
+    const staleMtime = new Date("2026-06-06T00:00:00Z");
+    await utimes(older.path, staleMtime, staleMtime);
+
+    const medium = await captureArtifact({
+      agent: "explore",
+      content: "mid".repeat(MIN_ARTIFACT_CHARS),
+      startedAt: Date.parse("2026-06-07T00:00:00Z"),
+      durationMs: 1,
+      now: new Date("2026-06-07T00:00:00Z"),
+    });
+    assert.ok(medium);
+    await utimes(medium.path, new Date("2026-06-07T00:00:00Z"), new Date("2026-06-07T00:00:00Z"));
+
+    const newest = await captureArtifact({
+      agent: "oracle",
+      content: "new".repeat(MIN_ARTIFACT_CHARS),
+      startedAt: Date.parse("2026-06-08T00:00:00Z"),
+      durationMs: 1,
+      now: new Date("2026-06-08T00:00:00Z"),
+    });
+    assert.ok(newest);
+
+    // Drop a non-md file in one of the date dirs to confirm it's ignored.
+    const notePath = join(resolveArtifactDir(new Date("2026-06-08T00:00:00Z")), "note.txt");
+    await writeFile(notePath, "ignore me");
+
+    const stats = await getArtifactStats();
+    assert.equal(stats.status, "ok");
+    if (stats.status === "ok") {
+      assert.equal(stats.count, 3);
+      assert.ok(stats.mostRecent);
+      assert.equal(stats.mostRecent!.relativePath.startsWith("2026-06-08/"), true);
+      assert.equal(stats.mostRecent!.name, newest.path.split("/").pop());
+      assert.ok(stats.mostRecent!.timestamp >= staleMtime.getTime());
+    }
+  });
+
+  it("reports a read-error result when PI_AGENT_DIR is not a directory", async () => {
+    // Create a regular file at the path the helper would scan, so readdir
+    // fails with ENOTDIR.
+    const blocker = join(tempAgentDir, "blackbytes");
+    await mkdir(blocker, { recursive: true });
+    await writeFile(join(blocker, "artifacts"), "not a directory");
+
+    const stats = await getArtifactStats();
+    assert.equal(stats.status, "unavailable");
+    if (stats.status === "unavailable") {
+      assert.equal(stats.reason, "read error");
+    }
   });
 });

@@ -5,6 +5,7 @@ import {
   getSystemPromptLogConfig,
   resolveSystemPromptLogPath,
 } from "../shared/system-prompt-log.js";
+import { type ArtifactStats, getArtifactStats } from "../sub-agents/artifacts.js";
 import { getDelegationSummary } from "../sub-agents/delegation-log.js";
 import { buildDiagnosticsSummary } from "../sub-agents/diagnostics-summary.js";
 import type { DiagnosticsSummary } from "../sub-agents/diagnostics-summary.js";
@@ -177,6 +178,7 @@ function buildYamlDiagnosticsSection(diag: YamlDiagnostics | undefined): string[
 function buildDiagnosticsSection(
   summary: DiagnosticsSummary,
   piAvailability: PiAvailabilityResult,
+  artifactStats: ArtifactStats,
 ): string[] {
   const lines: string[] = ["### Sub-Agent Diagnostics"];
 
@@ -233,6 +235,20 @@ function buildDiagnosticsSection(
     for (const warning of summary.yamlWarnings) {
       lines.push(`  - ${warning}`);
     }
+  }
+
+  // Artifact stats (opt-in per agent; the absence of artifacts is a valid
+  // state and is rendered as such rather than as an error).
+  if (artifactStats.status === "ok") {
+    const recent = artifactStats.mostRecent;
+    const recentLine = recent
+      ? ` (latest: \`${recent.relativePath}\`, ${new Date(recent.timestamp).toISOString()})`
+      : "";
+    lines.push(
+      `- **Artifacts:** ${artifactStats.count} captured under \`${artifactStats.directory}\`${recentLine}`,
+    );
+  } else {
+    lines.push(`- **Artifacts:** ${artifactStats.reason} (\`${artifactStats.directory}\`)`);
   }
 
   return lines;
@@ -306,7 +322,11 @@ async function buildStatusSections(
   const piAvailability = options.probePiAvailability
     ? await checkPiAvailability(options.piAvailabilityProbe)
     : getCachedPiAvailability();
-  const diagnosticsLines = buildDiagnosticsSection(diagnosticsSummary, piAvailability);
+  const diagnosticsLines = buildDiagnosticsSection(
+    diagnosticsSummary,
+    piAvailability,
+    await getArtifactStats(),
+  );
   const systemPromptLog = getSystemPromptLogConfig(config);
   const systemPromptLogPath = resolveSystemPromptLogPath(systemPromptLog.path, process.cwd());
   const systemPromptLogLines = [

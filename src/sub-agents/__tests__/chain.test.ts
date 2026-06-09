@@ -833,7 +833,7 @@ describe("executeChain integration scenarios", () => {
     const controller = new AbortController();
 
     // Schedule an abort shortly after the chain starts.
-    setTimeout(() => controller.abort(), 5).unref();
+    setTimeout(() => controller.abort(), 5);
 
     // The first step's runner simulates a long-running task that the
     // controller will cut off.

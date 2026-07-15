@@ -142,7 +142,8 @@ export function evaluateContextPressure(
   });
 }
 
-function modelVisibleMessage(message: QualificationMessage): Record<string, unknown> {
+/** Canonical model-visible message projection shared by qualification and replay. */
+export function modelVisibleMessage(message: QualificationMessage): Record<string, unknown> {
   if (message.role === "toolResult") {
     return {
       role: message.role,

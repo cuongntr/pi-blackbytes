@@ -15,17 +15,31 @@ import { lstat, open, realpath, stat } from "node:fs/promises";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { createInterface } from "node:readline";
 
-import { SessionManager } from "@earendil-works/pi-coding-agent";
+import { SessionManager, buildSessionContext, convertToLlm } from "@earendil-works/pi-coding-agent";
 
 import { BranchTopologyAccumulator } from "./branch-topology.js";
-import { hmacDigest } from "./evidence-store.js";
+import { canonicalDigest, canonicalJson } from "./canonical-json.js";
+import {
+  CORPUS_KEY_FILENAME,
+  corpusKeyBytes,
+  corpusKeyDigest,
+  hmacDigest,
+} from "./evidence-store.js";
 import type { SafeRun } from "./path-safety.js";
-import { ensurePrivateDir, safeRunPath, safeRunStat } from "./path-safety.js";
+import {
+  ensurePrivateDir,
+  getSafeRunCorpusKeyDigest,
+  safeRunPath,
+  safeRunPublishExclusiveFile,
+  safeRunReadFile,
+  safeRunStat,
+  safeRunSyncDirectory,
+} from "./path-safety.js";
+import { modelVisibleMessage } from "./qualification.js";
 import {
   createSourceGuard,
   pseudonymizeGuardedValue,
   streamGuardedSourceTo,
-  validateGuardedCopyDescriptor,
   verifySourceIntegrity,
 } from "./source-guard.js";
 import type { SourceGuard } from "./source-guard.js";
@@ -906,7 +920,243 @@ export async function inventoryCorpus(
 }
 
 const COPY_DIRECTORY = "copied-sessions";
+const COPY_DESCRIPTOR_DIRECTORY = "copied-session-descriptors";
 const COPY_SUFFIX = ".jsonl";
+const COPY_DESCRIPTOR_AUTH_DOMAIN = "pi-blackbytes:context-pruning:guarded-copy-descriptor:v1";
+
+interface PersistedCopyDescriptor {
+  readonly schemaVersion: typeof SCHEMA_VERSION;
+  readonly corpusId: string;
+  readonly expectedLeafId: string;
+  readonly relativePath: string;
+  readonly sourceDigest: string;
+  readonly copyDigest: string;
+  readonly copyReferenceDigest: string;
+  readonly authenticationTag: string;
+}
+
+interface VerifiedPersistedCopy {
+  readonly descriptor: PersistedCopyDescriptor;
+  readonly copyPath: string;
+  readonly copyDirectory: string;
+}
+
+function requireDigest(value: unknown, context: string): string {
+  if (typeof value !== "string" || !/^[0-9a-f]{64}$/.test(value)) {
+    throw new EvidenceStoreError("E_EVAL_INTEGRITY", `${context} is invalid`);
+  }
+  return value;
+}
+
+async function authenticateCopyDescriptor(safeRun: SafeRun, content: Uint8Array): Promise<string> {
+  const key = (await safeRunReadFile(safeRun, CORPUS_KEY_FILENAME)).toString("utf8");
+  const keyDigest = corpusKeyDigest(key);
+  const expectedDigest = getSafeRunCorpusKeyDigest(safeRun);
+  if (!timingSafeDigestEqual(keyDigest, expectedDigest)) {
+    throw new EvidenceStoreError(
+      "E_EVAL_INTEGRITY",
+      "Run corpus key no longer matches its manifest",
+    );
+  }
+  return createHmac("sha256", corpusKeyBytes(key, "E_EVAL_INTEGRITY"))
+    .update(Buffer.from(`${COPY_DESCRIPTOR_AUTH_DOMAIN}\0`, "utf8"))
+    .update(content)
+    .digest("hex");
+}
+
+async function verifyCopyDescriptorAuthentication(
+  safeRun: SafeRun,
+  content: Uint8Array,
+  tag: string,
+): Promise<void> {
+  const expected = requireDigest(tag, "copy descriptor authentication tag");
+  const actual = await authenticateCopyDescriptor(safeRun, content);
+  if (!timingSafeDigestEqual(actual, expected)) {
+    throw new EvidenceStoreError(
+      "E_EVAL_INTEGRITY",
+      "Guarded copy descriptor authentication failed",
+    );
+  }
+}
+
+function copyDescriptorUnsigned(value: Omit<PersistedCopyDescriptor, "authenticationTag">) {
+  return {
+    schemaVersion: value.schemaVersion,
+    corpusId: value.corpusId,
+    expectedLeafId: value.expectedLeafId,
+    relativePath: value.relativePath,
+    sourceDigest: value.sourceDigest,
+    copyDigest: value.copyDigest,
+    copyReferenceDigest: value.copyReferenceDigest,
+  };
+}
+
+async function loadVerifiedPersistedCopy(
+  safeRun: SafeRun,
+  corpusId: string,
+): Promise<VerifiedPersistedCopy> {
+  const text = (
+    await safeRunReadFile(safeRun, `${COPY_DESCRIPTOR_DIRECTORY}/${corpusId}.json`)
+  ).toString("utf8");
+  let value: unknown;
+  try {
+    value = JSON.parse(text);
+  } catch {
+    throw new EvidenceStoreError("E_EVAL_INTEGRITY", "Guarded copy descriptor is not JSON");
+  }
+  if (
+    canonicalJson(value) !== text ||
+    value === null ||
+    typeof value !== "object" ||
+    Array.isArray(value)
+  ) {
+    throw new EvidenceStoreError("E_EVAL_INTEGRITY", "Guarded copy descriptor is invalid");
+  }
+  const record = value as Record<string, unknown>;
+  const fields = Object.keys(record).sort();
+  const expectedFields = [
+    "authenticationTag",
+    "copyDigest",
+    "copyReferenceDigest",
+    "corpusId",
+    "expectedLeafId",
+    "relativePath",
+    "schemaVersion",
+    "sourceDigest",
+  ];
+  if (canonicalJson(fields) !== canonicalJson(expectedFields)) {
+    throw new EvidenceStoreError(
+      "E_EVAL_INTEGRITY",
+      "Guarded copy descriptor has unexpected fields",
+    );
+  }
+  const unsigned = {
+    schemaVersion: record.schemaVersion,
+    corpusId: requireDigest(record.corpusId, "copy descriptor corpus ID"),
+    expectedLeafId: requireDigest(record.expectedLeafId, "copy descriptor leaf ID"),
+    relativePath: record.relativePath,
+    sourceDigest: requireDigest(record.sourceDigest, "copy descriptor source digest"),
+    copyDigest: requireDigest(record.copyDigest, "copy descriptor copy digest"),
+    copyReferenceDigest: requireDigest(record.copyReferenceDigest, "copy descriptor reference"),
+  };
+  if (
+    unsigned.schemaVersion !== SCHEMA_VERSION ||
+    unsigned.corpusId !== corpusId ||
+    typeof unsigned.relativePath !== "string" ||
+    !unsigned.relativePath.startsWith(`${COPY_DIRECTORY}/`)
+  ) {
+    throw new EvidenceStoreError(
+      "E_EVAL_INTEGRITY",
+      "Guarded copy descriptor is not valid for this corpus",
+    );
+  }
+  const expectedReference = canonicalDigest({
+    schemaVersion: unsigned.schemaVersion,
+    corpusId: unsigned.corpusId,
+    expectedLeafId: unsigned.expectedLeafId,
+    relativePath: unsigned.relativePath,
+    sourceDigest: unsigned.sourceDigest,
+    copyDigest: unsigned.copyDigest,
+  });
+  if (unsigned.copyReferenceDigest !== expectedReference) {
+    throw new EvidenceStoreError("E_EVAL_INTEGRITY", "Guarded copy descriptor reference mismatch");
+  }
+  const descriptor = {
+    ...unsigned,
+    authenticationTag: requireDigest(
+      record.authenticationTag,
+      "copy descriptor authentication tag",
+    ),
+  } as PersistedCopyDescriptor;
+  await verifyCopyDescriptorAuthentication(
+    safeRun,
+    Buffer.from(canonicalJson(copyDescriptorUnsigned(descriptor)), "utf8"),
+    descriptor.authenticationTag,
+  );
+  return {
+    descriptor: Object.freeze(descriptor),
+    copyPath: safeRunPath(safeRun, descriptor.relativePath),
+    copyDirectory: safeRunPath(safeRun, COPY_DIRECTORY),
+  };
+}
+
+/** Publish once, or authenticate and exactly bind a concurrent/resumed descriptor. */
+async function publishValidatedCopyDescriptor(
+  safeRun: SafeRun,
+  value: {
+    readonly corpusId: string;
+    readonly rawLeafId: string;
+    readonly relativePath: string;
+    readonly sourceDigest: string;
+    readonly copyDigest: string;
+  },
+): Promise<void> {
+  const runKey = (await safeRunReadFile(safeRun, CORPUS_KEY_FILENAME)).toString("utf8");
+  const descriptorBase = {
+    schemaVersion: SCHEMA_VERSION,
+    corpusId: value.corpusId,
+    expectedLeafId: hmacDigest(runKey, Buffer.from(value.rawLeafId, "utf8")),
+    relativePath: value.relativePath,
+    sourceDigest: value.sourceDigest,
+    copyDigest: value.copyDigest,
+    copyReferenceDigest: "",
+  };
+  const copyReferenceDigest = canonicalDigest({
+    schemaVersion: descriptorBase.schemaVersion,
+    corpusId: descriptorBase.corpusId,
+    expectedLeafId: descriptorBase.expectedLeafId,
+    relativePath: descriptorBase.relativePath,
+    sourceDigest: descriptorBase.sourceDigest,
+    copyDigest: descriptorBase.copyDigest,
+  });
+  const unsigned = { ...descriptorBase, copyReferenceDigest };
+  const authenticationTag = await authenticateCopyDescriptor(
+    safeRun,
+    Buffer.from(canonicalJson(unsigned), "utf8"),
+  );
+  const published = await safeRunPublishExclusiveFile(
+    safeRun,
+    `${COPY_DESCRIPTOR_DIRECTORY}/${value.corpusId}.json`,
+    canonicalJson({ ...unsigned, authenticationTag }),
+  );
+  if (!published) {
+    const existing = await loadVerifiedPersistedCopy(safeRun, value.corpusId);
+    if (canonicalJson(copyDescriptorUnsigned(existing.descriptor)) !== canonicalJson(unsigned)) {
+      throw new EvidenceStoreError(
+        "E_EVAL_INTEGRITY",
+        "Existing guarded copy descriptor does not bind the validated copy",
+      );
+    }
+  }
+}
+
+async function digestCopyDescriptor(
+  descriptor: import("node:fs").promises.FileHandle,
+  key: string,
+): Promise<string> {
+  const digest = createHmac("sha256", corpusKeyBytes(key, "E_EVAL_INTEGRITY"));
+  for await (const chunk of descriptor.createReadStream({ autoClose: false })) {
+    digest.update(chunk);
+  }
+  return digest.digest("hex");
+}
+
+async function verifyPersistedCopyBytes(
+  safeRun: SafeRun,
+  copy: VerifiedPersistedCopy,
+): Promise<void> {
+  const key = (await safeRunReadFile(safeRun, CORPUS_KEY_FILENAME)).toString("utf8");
+  if (!timingSafeDigestEqual(corpusKeyDigest(key), getSafeRunCorpusKeyDigest(safeRun))) {
+    throw new EvidenceStoreError(
+      "E_EVAL_INTEGRITY",
+      "Run corpus key no longer matches its manifest",
+    );
+  }
+  const bytes = await safeRunReadFile(safeRun, copy.descriptor.relativePath);
+  if (!timingSafeDigestEqual(hmacDigest(key, bytes), copy.descriptor.copyDigest)) {
+    throw new EvidenceStoreError("E_EVAL_INTEGRITY", "Guarded private copy changed");
+  }
+}
 
 export interface DisposableSessionCopy {
   readonly __brand: "DisposableSessionCopy";
@@ -939,10 +1189,26 @@ interface DisposableCopyData {
   readonly safeRun: SafeRun;
   readonly relativePath: string;
   readonly guard: SourceGuard;
+  readonly copyDigest: string;
   readonly creation: CopyIdentity;
 }
 
 const disposableCopies = new WeakMap<object, DisposableCopyData>();
+
+/** Opaque handoff derived from a guarded, branch-validated disposable session copy. */
+export interface SelectedSessionCatalogHandoff {
+  readonly __brand: "SelectedSessionCatalogHandoff";
+}
+
+const selectedSessionCatalogHandoffs = new WeakMap<
+  object,
+  {
+    readonly corpusId: string;
+    readonly selectedLeafId: string;
+    readonly entryIds: readonly string[];
+    readonly copyReferenceDigest: string;
+  }
+>();
 
 function copyValidationResult(
   corpusId: string,
@@ -1023,6 +1289,8 @@ export async function createDisposableSessionCopy(
     } finally {
       await destination.close();
     }
+    // The copied-session directory entry must be durable before any descriptor can name it.
+    await safeRunSyncDirectory(safeRun, COPY_DIRECTORY);
     const confined = await safeRunStat(safeRun, relativePath);
     const pathStats = await lstat(copyPath);
     if (
@@ -1049,6 +1317,46 @@ export async function createDisposableSessionCopy(
     throw new EvidenceStoreError("E_EVAL_INTEGRITY", "Unable to create disposable session copy");
   }
 
+  // Version 2 is migrated only during validation. Version 3 can publish its
+  // descriptor immediately after Pi confirms the selected leaf.
+  const runKey = (await safeRunReadFile(safeRun, CORPUS_KEY_FILENAME)).toString("utf8");
+  let copyDigest = hmacDigest(runKey, await safeRunReadFile(safeRun, relativePath));
+  if (record.sessionVersion !== 2) {
+    let resolvedLeaf: string | null;
+    try {
+      resolvedLeaf = SessionManager.open(
+        copyPath,
+        copyDirectory,
+        join(copyDirectory, "cwd"),
+      ).getLeafId();
+    } catch {
+      throw new EvidenceStoreError("E_EVAL_INTEGRITY", "Unable to resolve disposable copy leaf");
+    }
+    const selectedLeafMatchesInventory =
+      isNonEmptyString(resolvedLeaf) &&
+      pseudonymizeGuardedValue(metadata.guard, resolvedLeaf) === expectedLeafId;
+    const postOpen = await safeRunStat(safeRun, relativePath);
+    creation = {
+      dev: postOpen.dev,
+      ino: postOpen.ino,
+      size: postOpen.size,
+      mtimeMs: postOpen.mtimeMs,
+      mode: postOpen.mode,
+      nlink: postOpen.nlink,
+    };
+    copyDigest = hmacDigest(runKey, await safeRunReadFile(safeRun, relativePath));
+    if (selectedLeafMatchesInventory) {
+      await safeRunSyncDirectory(safeRun, COPY_DIRECTORY);
+      await publishValidatedCopyDescriptor(safeRun, {
+        corpusId: record.corpusId,
+        rawLeafId: resolvedLeaf!,
+        relativePath,
+        sourceDigest: metadata.guard.before.digest,
+        copyDigest,
+      });
+    }
+  }
+
   const copy = Object.freeze({ __brand: "DisposableSessionCopy" as const });
   disposableCopies.set(copy, {
     corpusId: record.corpusId,
@@ -1058,12 +1366,372 @@ export async function createDisposableSessionCopy(
     safeRun,
     relativePath,
     guard: metadata.guard,
+    copyDigest,
     creation,
   });
   return copy;
 }
 
-/** Validate Pi's leaf resolution against the leaf registered from the inventory record. */
+/**
+ * Re-open a persisted, authenticated private-copy descriptor and derive only Pi's
+ * currently selected branch. This is the cross-process catalog source for freeze.
+ */
+export interface AuthenticatedBranchProjection {
+  readonly corpusId: string;
+  readonly selectedLeafId: string;
+  readonly entryIds: readonly string[];
+  readonly copyReferenceDigest: string;
+  /** Pseudonymous entry IDs paired only with canonical model-visible message data. */
+  readonly messages: readonly {
+    readonly entryId: string;
+    readonly message: Record<string, unknown>;
+  }[];
+}
+
+/** Canonical Pi context immediately before each historical assistant response. */
+export interface AuthenticatedCheckpointProjection {
+  readonly corpusId: string;
+  readonly selectedLeafId: string;
+  readonly entryIds: readonly string[];
+  readonly copyReferenceDigest: string;
+  readonly candidateMessages: readonly {
+    readonly entryId: string;
+    readonly message: Record<string, unknown>;
+  }[];
+  readonly checkpoints: readonly {
+    readonly requestEntryId: string;
+    readonly messages: readonly Record<string, unknown>[];
+  }[];
+}
+
+function projectLlmMessage(value: unknown): Record<string, unknown> {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) {
+    throw new EvidenceStoreError("E_EVAL_INTEGRITY", "Pi LLM context contains an invalid message");
+  }
+  const message = value as Record<string, unknown>;
+  if (message.role !== "user" && message.role !== "assistant" && message.role !== "toolResult") {
+    throw new EvidenceStoreError(
+      "E_EVAL_INTEGRITY",
+      "Pi LLM context contains an invalid message role",
+    );
+  }
+  return modelVisibleMessage(message as unknown as Parameters<typeof modelVisibleMessage>[0]);
+}
+
+/**
+ * Pi's context builder returns AgentMessages, which can include Pi-specific roles
+ * such as compaction summaries, branch summaries, custom messages, and bash
+ * executions. Convert them with Pi's own LLM projection before removing metadata.
+ */
+function projectAgentMessages(
+  messages: Parameters<typeof convertToLlm>[0],
+): readonly Record<string, unknown>[] {
+  try {
+    return Object.freeze(convertToLlm(messages).map(projectLlmMessage));
+  } catch {
+    throw new EvidenceStoreError(
+      "E_EVAL_INTEGRITY",
+      "Pi context cannot be converted to LLM messages",
+    );
+  }
+}
+
+/**
+ * Open the authenticated guarded copy and return one canonical, model-visible projection.
+ * Raw IDs, filesystem paths, the SafeRun, and the corpus key remain module-private.
+ */
+export async function deriveAuthenticatedBranchProjection(
+  safeRun: SafeRun,
+  corpusId: string,
+): Promise<AuthenticatedBranchProjection> {
+  const copy = await loadVerifiedPersistedCopy(safeRun, corpusId);
+  await verifyPersistedCopyBytes(safeRun, copy);
+  const runKey = (await safeRunReadFile(safeRun, CORPUS_KEY_FILENAME)).toString("utf8");
+  let rawLeaf: string | null;
+  let branch: Parameters<typeof buildSessionContext>[0];
+  let contextMessages: Parameters<typeof convertToLlm>[0];
+  try {
+    const manager = SessionManager.open(
+      copy.copyPath,
+      copy.copyDirectory,
+      join(copy.copyDirectory, "cwd"),
+    );
+    rawLeaf = manager.getLeafId();
+    branch = manager.getBranch();
+    // Deliberately invoke Pi's canonical context builder rather than replaying JSONL ourselves.
+    contextMessages = buildSessionContext(branch, rawLeaf).messages;
+  } catch {
+    throw new EvidenceStoreError(
+      "E_EVAL_INTEGRITY",
+      "Guarded private copy could not be opened by Pi",
+    );
+  }
+  if (
+    !isNonEmptyString(rawLeaf) ||
+    hmacDigest(runKey, Buffer.from(rawLeaf, "utf8")) !== copy.descriptor.expectedLeafId
+  ) {
+    throw new EvidenceStoreError(
+      "E_EVAL_INTEGRITY",
+      "Pi selected leaf does not match the guarded copy",
+    );
+  }
+  const entryIds = branch.map((entry) => {
+    if (!isNonEmptyString(entry.id))
+      throw new EvidenceStoreError(
+        "E_EVAL_INTEGRITY",
+        "Pi selected branch contains an invalid entry",
+      );
+    return hmacDigest(runKey, Buffer.from(entry.id, "utf8"));
+  });
+  const sourceMessages = branch
+    .filter((entry) => entry.type === "message")
+    .map((entry) => {
+      const message = projectAgentMessages([entry.message])[0];
+      if (message === undefined) {
+        throw new EvidenceStoreError(
+          "E_EVAL_INTEGRITY",
+          "Pi selected branch message cannot be converted to an LLM message",
+        );
+      }
+      return { entryId: hmacDigest(runKey, Buffer.from(entry.id, "utf8")), message };
+    });
+  const visibleMessages = projectAgentMessages(contextMessages);
+  // Context summaries/custom entries have no unambiguous qualification source owner.
+  // Reject rather than inventing an ownership mapping.
+  if (
+    sourceMessages.length !== visibleMessages.length ||
+    sourceMessages.some(
+      (entry, index) => canonicalJson(entry.message) !== canonicalJson(visibleMessages[index]),
+    )
+  ) {
+    throw new EvidenceStoreError(
+      "E_EVAL_INTEGRITY",
+      "Pi context cannot be mapped to canonical selected-branch messages",
+    );
+  }
+  if (
+    entryIds.length === 0 ||
+    new Set(entryIds).size !== entryIds.length ||
+    !entryIds.includes(copy.descriptor.expectedLeafId)
+  ) {
+    throw new EvidenceStoreError("E_EVAL_INTEGRITY", "Pi selected branch catalog is invalid");
+  }
+  const after = await loadVerifiedPersistedCopy(safeRun, corpusId);
+  if (canonicalJson(after.descriptor) !== canonicalJson(copy.descriptor)) {
+    throw new EvidenceStoreError("E_EVAL_INTEGRITY", "Guarded copy descriptor changed during scan");
+  }
+  await verifyPersistedCopyBytes(safeRun, after);
+  return Object.freeze({
+    corpusId,
+    selectedLeafId: copy.descriptor.expectedLeafId,
+    entryIds: Object.freeze(entryIds),
+    copyReferenceDigest: copy.descriptor.copyReferenceDigest,
+    messages: Object.freeze(sourceMessages.map((entry) => Object.freeze(entry))),
+  });
+}
+
+/**
+ * Derive each teacher-forced input from Pi at the predecessor of its original
+ * assistant response.  This intentionally never projects the final leaf and
+ * therefore cannot accidentally replay a baseline response as model input.
+ */
+export async function deriveAuthenticatedCheckpointProjection(
+  safeRun: SafeRun,
+  corpusId: string,
+  references: {
+    readonly startEntryId: string;
+    readonly endEntryId: string;
+    readonly checkpointEntryIds: readonly string[];
+  },
+): Promise<AuthenticatedCheckpointProjection> {
+  const copy = await loadVerifiedPersistedCopy(safeRun, corpusId);
+  await verifyPersistedCopyBytes(safeRun, copy);
+  const runKey = (await safeRunReadFile(safeRun, CORPUS_KEY_FILENAME)).toString("utf8");
+  let rawLeaf: string | null;
+  let branch: Parameters<typeof buildSessionContext>[0];
+  try {
+    const manager = SessionManager.open(
+      copy.copyPath,
+      copy.copyDirectory,
+      join(copy.copyDirectory, "cwd"),
+    );
+    rawLeaf = manager.getLeafId();
+    branch = manager.getBranch();
+  } catch {
+    throw new EvidenceStoreError(
+      "E_EVAL_INTEGRITY",
+      "Guarded private copy could not be opened by Pi",
+    );
+  }
+  if (
+    !isNonEmptyString(rawLeaf) ||
+    hmacDigest(runKey, Buffer.from(rawLeaf, "utf8")) !== copy.descriptor.expectedLeafId
+  ) {
+    throw new EvidenceStoreError(
+      "E_EVAL_INTEGRITY",
+      "Pi selected leaf does not match the guarded copy",
+    );
+  }
+  const byId = new Map(branch.map((entry) => [entry.id, entry]));
+  const pseudonym = (id: string) => hmacDigest(runKey, Buffer.from(id, "utf8"));
+  const entryIds = branch.map((entry) => pseudonym(entry.id));
+  const start = entryIds.indexOf(references.startEntryId);
+  const end = entryIds.indexOf(references.endEntryId);
+  if (start < 0 || end < start || new Set(references.checkpointEntryIds).size !== 5) {
+    throw new EvidenceStoreError(
+      "E_EVAL_INTEGRITY",
+      "Checkpoint references are not a valid authenticated range",
+    );
+  }
+  const candidateMessages = branch
+    .slice(start, end + 1)
+    .flatMap((entry) =>
+      entry.type === "message"
+        ? projectAgentMessages([entry.message]).map((message) =>
+            Object.freeze({ entryId: pseudonym(entry.id), message }),
+          )
+        : [],
+    );
+  if (candidateMessages.length === 0) {
+    throw new EvidenceStoreError(
+      "E_EVAL_INTEGRITY",
+      "Qualified candidate has no canonical model-visible messages",
+    );
+  }
+  const checkpoints = references.checkpointEntryIds.map((requestEntryId) => {
+    const entry = branch.find((candidate) => pseudonym(candidate.id) === requestEntryId);
+    if (
+      entry === undefined ||
+      entry.type !== "message" ||
+      entry.message.role !== "assistant" ||
+      !isObject(entry.message.usage)
+    ) {
+      throw new EvidenceStoreError(
+        "E_EVAL_INTEGRITY",
+        "Frozen checkpoint is not a historical assistant response with usage",
+      );
+    }
+    // Pi's context builder at the parent is the authoritative baseline-excluding input.
+    const messages = projectAgentMessages(
+      buildSessionContext(branch, entry.parentId, byId).messages,
+    );
+    return Object.freeze({ requestEntryId, messages: Object.freeze(messages) });
+  });
+  const after = await loadVerifiedPersistedCopy(safeRun, corpusId);
+  if (canonicalJson(after.descriptor) !== canonicalJson(copy.descriptor)) {
+    throw new EvidenceStoreError(
+      "E_EVAL_INTEGRITY",
+      "Guarded copy descriptor changed during checkpoint derivation",
+    );
+  }
+  await verifyPersistedCopyBytes(safeRun, after);
+  return Object.freeze({
+    corpusId,
+    selectedLeafId: copy.descriptor.expectedLeafId,
+    entryIds: Object.freeze(entryIds),
+    copyReferenceDigest: copy.descriptor.copyReferenceDigest,
+    candidateMessages: Object.freeze(candidateMessages),
+    checkpoints: Object.freeze(checkpoints),
+  });
+}
+
+export async function deriveSelectedSessionCatalogFromPersistedCopy(
+  safeRun: SafeRun,
+  corpusId: string,
+): Promise<{
+  readonly corpusId: string;
+  readonly selectedLeafId: string;
+  readonly entryIds: readonly string[];
+  readonly copyReferenceDigest: string;
+}> {
+  const copy = await loadVerifiedPersistedCopy(safeRun, corpusId);
+  await verifyPersistedCopyBytes(safeRun, copy);
+  const runKey = (await safeRunReadFile(safeRun, CORPUS_KEY_FILENAME)).toString("utf8");
+  let rawLeaf: string | null;
+  let branch: readonly { readonly id: string }[];
+  try {
+    const manager = SessionManager.open(
+      copy.copyPath,
+      copy.copyDirectory,
+      join(copy.copyDirectory, "cwd"),
+    );
+    rawLeaf = manager.getLeafId();
+    branch = manager.getBranch();
+  } catch {
+    throw new EvidenceStoreError(
+      "E_EVAL_INTEGRITY",
+      "Guarded private copy could not be opened by Pi",
+    );
+  }
+  if (
+    !isNonEmptyString(rawLeaf) ||
+    hmacDigest(runKey, Buffer.from(rawLeaf, "utf8")) !== copy.descriptor.expectedLeafId
+  ) {
+    throw new EvidenceStoreError(
+      "E_EVAL_INTEGRITY",
+      "Pi selected leaf does not match the guarded copy",
+    );
+  }
+  const entryIds = branch.map((entry) => {
+    if (!isNonEmptyString(entry.id)) {
+      throw new EvidenceStoreError(
+        "E_EVAL_INTEGRITY",
+        "Pi selected branch contains an invalid entry",
+      );
+    }
+    return hmacDigest(runKey, Buffer.from(entry.id, "utf8"));
+  });
+  if (
+    entryIds.length === 0 ||
+    new Set(entryIds).size !== entryIds.length ||
+    !entryIds.includes(copy.descriptor.expectedLeafId)
+  ) {
+    throw new EvidenceStoreError("E_EVAL_INTEGRITY", "Pi selected branch catalog is invalid");
+  }
+  // Re-read both descriptor and private copy after Pi and branch scanning. This
+  // detects replacement/mutation and makes the descriptor a stable replay reference.
+  const after = await loadVerifiedPersistedCopy(safeRun, corpusId);
+  if (canonicalJson(after.descriptor) !== canonicalJson(copy.descriptor)) {
+    throw new EvidenceStoreError("E_EVAL_INTEGRITY", "Guarded copy descriptor changed during scan");
+  }
+  await verifyPersistedCopyBytes(safeRun, after);
+  return Object.freeze({
+    corpusId,
+    selectedLeafId: copy.descriptor.expectedLeafId,
+    entryIds: Object.freeze(entryIds),
+    copyReferenceDigest: copy.descriptor.copyReferenceDigest,
+  });
+}
+
+/** Validate Pi's leaf resolution and create an in-process opaque convenience handoff. */
+export async function createSelectedSessionCatalogHandoff(
+  copy: DisposableSessionCopy,
+): Promise<SelectedSessionCatalogHandoff> {
+  const data = disposableCopies.get(copy);
+  if (data === undefined) {
+    throw new EvidenceStoreError("E_EVAL_INTEGRITY", "Disposable copy catalog handoff denied");
+  }
+  const result = await deriveSelectedSessionCatalogFromPersistedCopy(data.safeRun, data.corpusId);
+  await verifySourceIntegrity(data.guard);
+  const handoff = Object.freeze({ __brand: "SelectedSessionCatalogHandoff" as const });
+  selectedSessionCatalogHandoffs.set(handoff, result);
+  return handoff;
+}
+
+/** Consume an opaque handoff. The guarded-copy paths and key remain private. */
+export function readSelectedSessionCatalogHandoff(handoff: SelectedSessionCatalogHandoff): {
+  readonly corpusId: string;
+  readonly selectedLeafId: string;
+  readonly entryIds: readonly string[];
+  readonly copyReferenceDigest: string;
+} {
+  const data = selectedSessionCatalogHandoffs.get(handoff);
+  if (data === undefined) {
+    throw new EvidenceStoreError("E_EVAL_INTEGRITY", "Selected session catalog handoff denied");
+  }
+  return data;
+}
+
 export async function validateDisposableSessionCopy(
   copy: DisposableSessionCopy,
 ): Promise<SessionValidation> {
@@ -1099,11 +1767,15 @@ export async function validateDisposableSessionCopy(
       if (!copyIdentityMatches(descriptorStats, data.creation)) {
         throw new EvidenceStoreError("E_EVAL_INTEGRITY", "Disposable copy validation failed");
       }
-      await validateGuardedCopyDescriptor(data.guard, descriptor);
+      const runKey = (await safeRunReadFile(data.safeRun, CORPUS_KEY_FILENAME)).toString("utf8");
+      if (!timingSafeDigestEqual(await digestCopyDescriptor(descriptor, runKey), data.copyDigest)) {
+        throw new EvidenceStoreError("E_EVAL_INTEGRITY", "Disposable copy validation failed");
+      }
     } finally {
       await descriptor.close();
     }
 
+    let resolvedLeaf: string | null = null;
     try {
       // All paths are module-private SafeRun paths; no caller value reaches Pi.
       const manager = SessionManager.open(
@@ -1112,8 +1784,8 @@ export async function validateDisposableSessionCopy(
         join(data.copyDirectory, "cwd"),
       );
       const rawLeaf = manager.getLeafId();
-      const leaf = typeof rawLeaf === "string" ? rawLeaf : "";
-      const leafId = pseudonymizeGuardedValue(data.guard, leaf);
+      resolvedLeaf = typeof rawLeaf === "string" ? rawLeaf : null;
+      const leafId = pseudonymizeGuardedValue(data.guard, resolvedLeaf ?? "");
       validation = copyValidationResult(
         data.corpusId,
         leafId === data.expectedLeafId ? "matched" : "mismatch",
@@ -1138,14 +1810,49 @@ export async function validateDisposableSessionCopy(
     ) {
       validation = copyValidationResult(data.corpusId, "copy-failed");
     }
+    if (validation.status === "matched" && isNonEmptyString(resolvedLeaf)) {
+      const updatedCreation: CopyIdentity = {
+        dev: afterConfined.dev,
+        ino: afterConfined.ino,
+        size: afterConfined.size,
+        mtimeMs: afterConfined.mtimeMs,
+        mode: afterConfined.mode,
+        nlink: afterConfined.nlink,
+      };
+      const runKey = (await safeRunReadFile(data.safeRun, CORPUS_KEY_FILENAME)).toString("utf8");
+      const updatedDigest = hmacDigest(
+        runKey,
+        await safeRunReadFile(data.safeRun, data.relativePath),
+      );
+      // Pi v2 migration can change bytes in place. Persist the copy directory before
+      // its descriptor, but verify the source as the final pre-publication step.
+      await safeRunSyncDirectory(data.safeRun, COPY_DIRECTORY);
+      try {
+        await verifySourceIntegrity(data.guard);
+      } catch {
+        return copyValidationResult(data.corpusId, "source-integrity-failed");
+      }
+      await publishValidatedCopyDescriptor(data.safeRun, {
+        corpusId: data.corpusId,
+        rawLeafId: resolvedLeaf,
+        relativePath: data.relativePath,
+        sourceDigest: data.guard.before.digest,
+        copyDigest: updatedDigest,
+      });
+      disposableCopies.set(copy, {
+        ...data,
+        copyDigest: updatedDigest,
+        creation: updatedCreation,
+      });
+    } else {
+      try {
+        await verifySourceIntegrity(data.guard);
+      } catch {
+        validation = copyValidationResult(data.corpusId, "source-integrity-failed");
+      }
+    }
   } catch {
     validation = copyValidationResult(data.corpusId, "copy-failed");
-  } finally {
-    try {
-      await verifySourceIntegrity(data.guard);
-    } catch {
-      validation = copyValidationResult(data.corpusId, "source-integrity-failed");
-    }
   }
   return validation;
 }

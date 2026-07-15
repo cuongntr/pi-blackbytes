@@ -104,20 +104,36 @@ describe("cli", () => {
     });
   });
 
+  describe("replay command", () => {
+    it("requires a private frozen snapshot and local plan input", () => {
+      const { stderr, status } = runCli(["replay"]);
+      assert.equal(status, 1);
+      const error = JSON.parse(stderr.trim());
+      assert.equal(error.code, "E_EVAL_CONFIG");
+      assert.ok(error.message.includes("--corpus-id"));
+    });
+
+    it("keeps provider replay behind an adapter-only opt-in boundary", () => {
+      const { stderr, status } = runCli(["replay", "--opt-in"]);
+      assert.equal(status, 1);
+      const error = JSON.parse(stderr.trim());
+      assert.equal(error.code, "E_EVAL_CONFIG");
+      assert.ok(error.message.includes("--input"));
+    });
+  });
+
+  describe("report, verify, and cleanup commands", () => {
+    for (const command of ["report", "verify", "cleanup"]) {
+      it(`${command} requires a private run`, () => {
+        const { stderr, status } = runCli([command]);
+        assert.equal(status, 1);
+        assert.equal(JSON.parse(stderr.trim()).code, "E_EVAL_CONFIG");
+      });
+    }
+  });
+
   describe("known but unimplemented commands", () => {
-    const commands = [
-      "init",
-      "inventory",
-      "sample",
-      "select-target",
-      "replay",
-      "score",
-      "lifecycle",
-      "decide",
-      "report",
-      "verify",
-      "cleanup",
-    ];
+    const commands = ["score", "lifecycle", "decide"];
 
     for (const cmd of commands) {
       it(`should exit 1 with E_EVAL_INCOMPLETE for '${cmd}'`, () => {

@@ -13,16 +13,49 @@ bun run evidence:context-pruning -- --help
 bun run evidence:context-pruning -- <command> [options]
 ```
 
-T-001 exposes the complete command vocabulary but does not implement evidence stages yet. A known
-stage returns a JSON `E_EVAL_INCOMPLETE` error on stderr with a non-zero exit code. A missing or unknown
-command returns `E_EVAL_CONFIG`. Only `--help` exits successfully. No stub reads session content,
-contacts a provider, or deletes data.
+The formal T-017 prerequisite implements the local-only sequence `init`, `inventory`, `sample`,
+`select-target`, and `verify` (without `--input`). It uses only the explicit approved source root,
+private evidence artifacts, and content-free stdout records; it makes no provider call. `verify --input`
+retains the T-015 report-input verification behavior. Other known stages may still return a JSON
+`E_EVAL_INCOMPLETE` error. Missing or unknown commands return `E_EVAL_CONFIG`.
+
+The formal sequence accepts only its documented exact options: `init --run-id <id> --config <file>`,
+`inventory --run-id <id> --source-root <root>`, `sample --run-id <id>`, and
+`select-target --run-id <id> --target <file>`; each optionally accepts `--pi-agent-dir <path>`.
+`verify --run-id <id>` validates the persisted terminal state. Unknown, duplicate, or missing options
+fail closed. Do not run it against a real corpus without the owner-approved command parameters.
 
 Provider-backed commands added by later beads must first produce a `--dry-run` plan digest and require
 an exact `--confirm <digest>`; `--decline <digest>` records refusal without an external call.
 `--not-applicable <upstream-hard-stop-digest>` is reserved for a verified upstream hard-stop.
 
-The `lifecycle` entry is an opt-in T-021 handoff, not evidence that the real matrix ran. It requires
+T-009B adds the exact owner-facing, generated-only sequence (the default Pi agent directory is used
+when `--pi-agent-dir` is omitted):
+
+```bash
+bun run evidence:context-pruning -- lifecycle --run-id <id> --scenario compaction-accounting --dry-run
+bun run evidence:context-pruning -- lifecycle --run-id <id> --scenario compaction-accounting --decline <plan-digest>
+# Only after owner approval; no adapter is discovered by default.
+bun run evidence:context-pruning -- lifecycle --run-id <id> --scenario compaction-accounting --confirm <plan-digest> --adapter-module <local-path>
+```
+
+Dry-run is adapter-free and writes nothing. It emits only the frozen target tuple, generated-only input
+declaration/digest, planned calls, one-retry maximum, upper cost, policy/proof/environment digests, and
+the exact confirmation/plan digest. Decline writes a content-free blocking resolution plus a
+plan-bound decline disposition and makes zero calls. Confirm rederives the same plan before loading the
+explicit local module, which must export `GeneratedCompactionProofAdapter`; there is no configured,
+default, or provider adapter lookup.
+
+Before dry-run, a local setup may call the exported `prepareT009BPrivateInputs()` with the already
+verified target, full provider policy, generated-proof policy, and environment declaration. It can write
+only these immutable SafeRun paths: `private/t009b-compaction-accounting/provider-policy.json`,
+`private/t009b-compaction-accounting/proof-policy.json`, and
+`private/t009b-compaction-accounting/environment.json`. The policy digest must exactly equal the target
+record's `providerPolicyDigest`; changing any prepared input fails closed. `verify --run-id <id>` remains
+a valid T-017 check before T-009B and, after a persisted T-009B result, additionally returns the
+content-free `compactionAccounting` outcome.
+
+The `lifecycle` entry otherwise remains an opt-in T-021 handoff, not evidence that the real matrix ran. It requires
 `--opt-in`, separate protocol pins and local installation paths in `--metadata`, a verified private
 run, `--attempt-id`, and `--event-timestamp`. T-010B validates both pinned packages, binaries, and
 `--version` probes before stopping with `E_EVAL_INCOMPLETE`; T-021 alone supplies the real isolated

@@ -3,6 +3,10 @@
 import type { ContextEvent } from "@earendil-works/pi-coding-agent";
 
 import { canonicalDigest, canonicalJson } from "../canonical-json.js";
+import {
+  type GeneratedCompactionUsageFixture,
+  createGeneratedCompactionUsageFixture,
+} from "./compaction-usage.js";
 import type {
   CandidateRange,
   ContextMessage,
@@ -62,6 +66,8 @@ export interface LifecycleFixture {
   /** Deterministic, model-visible fixture material; never copied into evidence. */
   readonly modelVisiblePayload: string;
   readonly timestampOrigin: number;
+  /** Provider-free usage-attribution fixtures attached only to native compaction. */
+  readonly compactionUsage?: GeneratedCompactionUsageFixture;
 }
 
 export interface LifecycleScenario {
@@ -179,7 +185,13 @@ function makeScenario(
   rangeStart = 0,
 ): LifecycleScenario {
   const timestampOrigin = 1_700_000_000_000 + LIFECYCLE_SCENARIO_IDS.indexOf(id) * 1_000;
-  const fixture = { modelVisiblePayload: visiblePayload(id, operation), timestampOrigin };
+  const fixture = {
+    modelVisiblePayload: visiblePayload(id, operation),
+    timestampOrigin,
+    ...(id === "native-compaction"
+      ? { compactionUsage: createGeneratedCompactionUsageFixture() }
+      : {}),
+  };
   const timestamp = fixtureClock(timestampOrigin);
   const messages = buildMessages(fixture.modelVisiblePayload, timestamp);
   const sourceProjections = messages.map((message, index) => ({

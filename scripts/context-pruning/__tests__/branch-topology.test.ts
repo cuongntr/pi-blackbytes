@@ -18,6 +18,7 @@ import { inventoryCorpus, inventorySource } from "../inventory.js";
 import {
   ensurePrivateRunRoot,
   openSafeRun,
+  safeRunFileExists,
   safeRunReadFile,
   safeRunReaddir,
   safeRunStat,
@@ -25,6 +26,8 @@ import {
 } from "../path-safety.js";
 import {
   createDisposableSessionCopy,
+  createSelectedSessionCatalogHandoff,
+  readSelectedSessionCatalogHandoff,
   validateDisposableSessionCopy,
 } from "../session-validation.js";
 import type { RunManifest } from "../types.js";
@@ -198,6 +201,25 @@ describe("final Pi branch reconstruction", () => {
     assert.equal(forged.status, "copy-failed");
   });
 
+  it("catalogs only Pi's resolved selected branch and excludes an abandoned branch", async () => {
+    const key = generateCorpusKey();
+    const path = join(root, "selected-branch-catalog.jsonl");
+    await session(path, "selected-branch-catalog", [
+      line("root", null, "user"),
+      line("abandoned", "root", "assistant"),
+      line("active", "root", "assistant"),
+      line("leaf", "active", "assistant"),
+    ]);
+    const run = await safeRun();
+    const copy = await createDisposableSessionCopy(await inventorySource(path, key), run);
+    const catalog = readSelectedSessionCatalogHandoff(
+      await createSelectedSessionCatalogHandoff(copy),
+    );
+    const runKey = (await safeRunReadFile(run, "corpus.key")).toString("utf8");
+    assert.equal(catalog.entryIds.length, 3);
+    assert.equal(catalog.entryIds.includes(hmacDigest(runKey, Buffer.from("abandoned"))), false);
+  });
+
   it("keeps immutable per-file corpus identities while sharing one lineage root identity", async () => {
     const key = generateCorpusKey();
     const parent = join(root, "identity-parent.jsonl");
@@ -361,6 +383,31 @@ describe("final Pi branch reconstruction", () => {
     assert.equal(validation.corpusId, record.corpusId);
   });
 
+  it("does not publish a v2 descriptor when final source integrity verification fails", async () => {
+    const key = generateCorpusKey();
+    const path = join(root, "copy-v2-source-integrity.jsonl");
+    await session(
+      path,
+      "copy-v2-source-integrity",
+      [line("root", null, "user"), line("last", "root", "assistant")],
+      undefined,
+      2,
+    );
+    const run = await safeRun();
+    const record = await inventorySource(path, key);
+    const copy = await createDisposableSessionCopy(record, run);
+    await writeFile(path, `${await readFile(path, "utf8")}\n`);
+
+    assert.equal((await validateDisposableSessionCopy(copy)).status, "source-integrity-failed");
+    assert.equal(
+      await safeRunFileExists(run, `copied-session-descriptors/${record.corpusId}.json`),
+      false,
+    );
+    await assert.rejects(() => createSelectedSessionCatalogHandoff(copy), {
+      code: "E_EVAL_INTEGRITY",
+    });
+  });
+
   it("allows pinned Pi to migrate a v2 copy without modifying its source", async () => {
     const key = generateCorpusKey();
     const path = join(root, "copy-v2-source.jsonl");
@@ -398,6 +445,21 @@ describe("final Pi branch reconstruction", () => {
     assert.equal(copyStatsAfter.ino, copyStatsBefore.ino);
     assert.deepEqual(await readFile(path), sourceBefore);
     assert.equal((await stat(path)).mtimeMs, sourceStatsBefore.mtimeMs);
+  });
+
+  it("rejects a resumed descriptor that binds a different validated copy", async () => {
+    const key = generateCorpusKey();
+    const path = join(root, "copy-descriptor-resume.jsonl");
+    await session(path, "copy-descriptor-resume", [line("root", null, "user")]);
+    const record = await inventorySource(path, key);
+    const run = await safeRun();
+    const copy = await createDisposableSessionCopy(record, run);
+    // Re-validation takes the exclusive-publication false path and accepts only
+    // the descriptor exactly bound to this copy.
+    assert.equal((await validateDisposableSessionCopy(copy)).status, "matched");
+    await assert.rejects(() => createDisposableSessionCopy(record, run), {
+      code: "E_EVAL_INTEGRITY",
+    });
   });
 
   it("rejects ineligible lineage records and atomically replaced SafeRun copies", async () => {

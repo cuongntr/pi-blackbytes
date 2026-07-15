@@ -1,125 +1,99 @@
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, readFile, rm, symlink, unlink } from "node:fs/promises";
+import { mkdtemp, rm, unlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, before, describe, it } from "node:test";
 
-import { canonicalDigest, canonicalJson } from "../canonical-json.js";
-import { atomicManifestWrite, corpusKeyDigest, loadOrCreateCorpusKey } from "../evidence-store.js";
+import { canonicalJson } from "../canonical-json.js";
+import {
+  atomicManifestWrite,
+  corpusKeyDigest,
+  generateCorpusKey,
+  hmacDigest,
+  loadOrCreateCorpusKey,
+} from "../evidence-store.js";
+import { createDisposableSessionCopy, inventorySource } from "../inventory.js";
 import {
   ensurePrivateRunRoot,
   openSafeRun,
+  safeRunFileExists,
   safeRunPath,
   safeRunReadFile,
+  safeRunReaddir,
   safeRunWriteFile,
 } from "../path-safety.js";
+import type { SafeRun } from "../path-safety.js";
 import {
-  assertSnapshotImmutable,
   buildSummaryGenerationAccess,
+  createPrivateGoldLedgerAccess,
   freezeSnapshot,
+  loadPrivateGoldLedger,
+  nativeContextDigest,
+  openReplaySnapshotAccess,
   persistFrozenSnapshot,
-  validateEvaluationSnapshot,
-  validateGoldLedger,
-  validateRepositoryFixture,
-  verifyFrozenBundle,
+  summaryInstructionDigest,
 } from "../snapshots.js";
-import type { FreezeSnapshotInput, FrozenSnapshotBundle, GoldFact } from "../snapshots.js";
+import type { FreezeSnapshotInput, FrozenSnapshotBundle } from "../snapshots.js";
 import type { RunManifest } from "../types.js";
 
 const digest = (character: string): string => character.repeat(64);
-const corpusId = digest("a");
-const requestIds = ["1", "2", "3", "4", "5"].map(digest);
 let root: string;
 let runCounter = 0;
 
-function qualification() {
-  return {
-    schemaVersion: 1,
-    corpusId,
-    selectedRank: 1,
-    qualifies: true,
-    criteria: {
-      parent: true,
-      pressure: true,
-      completedSegment: true,
-      fiveSubsequentRequests: true,
+function sessionJsonl(): string {
+  const header = {
+    type: "session",
+    id: "generated-session",
+    version: 3,
+    timestamp: "2026-07-15T00:00:00.000Z",
+    cwd: "/generated",
+  };
+  const entries = [
+    "root",
+    "start",
+    "closure",
+    "request-1",
+    "request-2",
+    "request-3",
+    "request-4",
+    "request-5",
+  ].map((id, index) => ({
+    type: "message",
+    id,
+    parentId:
+      index === 0
+        ? null
+        : ["root", "start", "closure", "request-1", "request-2", "request-3", "request-4"][
+            index - 1
+          ],
+    timestamp: "2026-07-15T00:00:00.000Z",
+    message: {
+      role: index >= 3 ? "assistant" : "user",
+      content:
+        ["root context", "candidate context", "closure context"][index] ??
+        `BASELINE_CANARY_${index - 2}`,
+      ...(index >= 3
+        ? {
+            usage: {
+              input: 1,
+              output: 1,
+              cacheRead: 0,
+              cacheWrite: 0,
+              totalTokens: 2,
+              cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+            },
+          }
+        : {}),
     },
-    reasonCodes: [],
-    candidate: {
-      branchLeafId: digest("6"),
-      startEntryId: digest("7"),
-      endEntryId: digest("8"),
-      closureEntryId: digest("9"),
-      startOrder: 1,
-      endOrder: 2,
-      closureOrder: 3,
-      closureEvidence: ["goal-transition"],
-      estimatedTokens: 2_048,
-      subsequentRequestIds: requestIds,
-    },
-    annotatorIds: [digest("b"), digest("c")],
-    adjudicationStatus: "resolved",
-  };
+  }));
+  return `${[header, ...entries].map((entry) => JSON.stringify(entry)).join("\n")}\n`;
 }
 
-function selection(qualificationValue = qualification()) {
-  return {
-    schemaVersion: 1,
-    corpusId: qualificationValue.corpusId,
-    selectedRank: qualificationValue.selectedRank,
-    status: "selected",
-    reasonCode: "candidate-selected",
-    annotationDigests: [digest("d"), digest("e")],
-    adjudicationDigest: digest("f"),
-    qualification: qualificationValue,
-  };
-}
-
-function exactFixture() {
-  return {
-    status: "exact",
-    executionTarget: "disposable-only",
-    commitDigest: digest("d"),
-    archiveDigest: digest("e"),
-    artifactId: digest("f"),
-  };
-}
-
-function input(patch: Partial<FreezeSnapshotInput> = {}): FreezeSnapshotInput {
-  return {
-    selection: selection(),
-    checkpoints: requestIds.map((requestEntryId, index) => ({
-      checkpointIndex: index + 1,
-      requestEntryId,
-      nativeContextDigest: digest(String(index + 1)),
-    })),
-    targetSelectionDigest: digest("1"),
-    systemPromptDigest: digest("2"),
-    toolSchemaDigest: digest("3"),
-    summaryInstructionDigest: digest("4"),
-    rubricDigest: digest("5"),
-    objectiveChecksDigest: digest("6"),
-    fixture: exactFixture(),
-    goldFacts: [
-      {
-        factId: digest("7"),
-        category: "hard-constraint",
-        sourceEntryIds: [digest("8")],
-        statement: "GENERATED_PRIVATE_GOLD_CANARY",
-        diagnosticAtCheckpoints: [true, true, false, false, true],
-      },
-    ],
-    ...patch,
-  };
-}
-
-function recomputeSnapshot(bundle: FrozenSnapshotBundle, patch: Record<string, unknown>) {
-  const withoutDigest = { ...bundle.snapshot, ...patch } as Record<string, unknown>;
-  delete withoutDigest.snapshotDigest;
-  return { ...withoutDigest, snapshotDigest: canonicalDigest(withoutDigest) };
-}
-
-async function safeRun() {
+async function preparedRun(): Promise<{
+  run: SafeRun;
+  key: string;
+  corpusId: string;
+}> {
   runCounter += 1;
   const runId = `snapshot-run-${runCounter}`;
   const agentDir = join(root, runId);
@@ -133,253 +107,241 @@ async function safeRun() {
     eventCount: 0,
   };
   await atomicManifestWrite(preRun, manifest);
-  return openSafeRun(agentDir, runId);
+  const run = await openSafeRun(agentDir, runId);
+  const source = join(root, `${runId}.jsonl`);
+  await writeFile(source, sessionJsonl());
+  const record = await inventorySource(source, generateCorpusKey());
+  await createDisposableSessionCopy(record, run);
+  return {
+    run,
+    key,
+    corpusId: record.corpusId,
+  };
+}
+
+function input(corpusId: string, runCorpusKey: string): FreezeSnapshotInput {
+  const pseudonym = (rawId: string) => hmacDigest(runCorpusKey, Buffer.from(rawId));
+  const requestIds = ["request-1", "request-2", "request-3", "request-4", "request-5"].map(
+    pseudonym,
+  );
+  return {
+    selection: {
+      schemaVersion: 1,
+      corpusId,
+      selectedRank: 1,
+      status: "selected",
+      reasonCode: "candidate-selected",
+      annotationDigests: [digest("d"), digest("e")],
+      adjudicationDigest: digest("f"),
+      qualification: {
+        schemaVersion: 1,
+        corpusId,
+        selectedRank: 1,
+        qualifies: true,
+        criteria: {
+          parent: true,
+          pressure: true,
+          completedSegment: true,
+          fiveSubsequentRequests: true,
+        },
+        reasonCodes: [],
+        candidate: {
+          branchLeafId: pseudonym("request-5"),
+          startEntryId: pseudonym("start"),
+          endEntryId: pseudonym("start"),
+          closureEntryId: pseudonym("closure"),
+          startOrder: 1,
+          endOrder: 1,
+          closureOrder: 2,
+          closureEvidence: ["goal-transition"],
+          estimatedTokens: 2048,
+          subsequentRequestIds: requestIds,
+        },
+        annotatorIds: [digest("b"), digest("c")],
+        adjudicationStatus: "resolved",
+      },
+    },
+    checkpoints: requestIds.map((requestEntryId, index) => {
+      const entry = (rawId: string, role: "user" | "assistant", content: string) => ({
+        entryId: pseudonym(rawId),
+        message: { role, content },
+      });
+      const beforeCandidate = [entry("root", "user", "root context")];
+      const candidateRange = [entry("start", "user", "candidate context")];
+      const afterCandidate = [
+        entry("closure", "user", "closure context"),
+        ...Array.from({ length: index }, (_, prior) =>
+          entry(`request-${prior + 1}`, "assistant", `BASELINE_CANARY_${prior + 1}`),
+        ),
+      ];
+      return {
+        checkpointIndex: index + 1,
+        requestEntryId,
+        nativeContextDigest: nativeContextDigest({
+          checkpointIndex: index + 1,
+          requestEntryId,
+          beforeCandidate,
+          candidateRange,
+          afterCandidate,
+        }),
+      };
+    }),
+    targetSelectionDigest: digest("1"),
+    systemPromptDigest: digest("2"),
+    toolSchemaDigest: digest("3"),
+    summaryInstruction: "Produce a concise factual summary of the candidate context.",
+    summaryInstructionDigest: summaryInstructionDigest(
+      "Produce a concise factual summary of the candidate context.",
+    ),
+    rubricDigest: digest("5"),
+    objectiveChecksDigest: digest("6"),
+    fixture: { status: "unavailable", executionTarget: "none", reasonCode: "fixture-not-captured" },
+    goldFacts: [
+      {
+        factId: digest("7"),
+        category: "goal",
+        sourceEntryIds: [pseudonym("start")],
+        statement: "GENERATED_PRIVATE_GOLD_CANARY",
+        diagnosticAtCheckpoints: [true, true, true, true, true],
+      },
+    ],
+  };
 }
 
 before(async () => {
   root = await mkdtemp(join(tmpdir(), "snapshot-test-"));
 });
-
 after(async () => {
   await rm(root, { recursive: true, force: true });
 });
 
-describe("snapshot freezing and leakage controls", () => {
-  it("freezes exactly five bound checkpoints and mutually bound gold", () => {
-    const bundle = freezeSnapshot(input());
-    assert.equal(bundle.snapshot.checkpoints.length, 5);
-    assert.deepEqual(
-      bundle.snapshot.checkpoints.map((checkpoint) => checkpoint.requestEntryId),
-      requestIds,
-    );
-    assert.equal(bundle.snapshot.goldLedgerDigest, bundle.goldLedger.ledgerDigest);
-    assert.doesNotThrow(() => verifyFrozenBundle(bundle));
-    assert.doesNotThrow(() => validateEvaluationSnapshot(bundle.snapshot));
-    assert.doesNotThrow(() => validateGoldLedger(bundle.goldLedger));
-  });
-
-  it("requires the complete selected T-007B result, not a bare qualification", () => {
-    assert.throws(() => freezeSnapshot(input({ selection: qualification() })), {
-      code: "E_EVAL_SCHEMA",
-    });
-    const duplicatedAnnotator = qualification();
-    duplicatedAnnotator.annotatorIds = [digest("b"), digest("b")];
-    assert.throws(() => freezeSnapshot(input({ selection: selection(duplicatedAnnotator) })), {
-      code: "E_EVAL_SCHEMA",
-    });
-  });
-
-  it("rejects checkpoint count, order, and horizon mismatches", () => {
-    assert.throws(() => freezeSnapshot(input({ checkpoints: input().checkpoints.slice(0, 4) })), {
-      code: "E_EVAL_SCHEMA",
-    });
-    const reordered = [...input().checkpoints].reverse();
-    assert.throws(() => freezeSnapshot(input({ checkpoints: reordered })), {
-      code: "E_EVAL_SCHEMA",
-    });
-    const wrong = input().checkpoints.map((checkpoint, index) =>
-      index === 4
-        ? { ...(checkpoint as Record<string, unknown>), requestEntryId: digest("0") }
-        : checkpoint,
-    );
-    assert.throws(() => freezeSnapshot(input({ checkpoints: wrong })), {
-      code: "E_EVAL_INTEGRITY",
-    });
-  });
-
-  it("gives the summary generator only range references and its instruction digest", () => {
-    const bundle = freezeSnapshot(input());
-    const access = buildSummaryGenerationAccess(bundle.snapshot, selection());
-    assert.deepEqual(Object.keys(access).sort(), [
-      "candidateRange",
-      "snapshotId",
-      "summaryInstructionDigest",
-    ]);
-    const serialized = JSON.stringify(access);
-    for (const forbidden of [
-      "checkpoints",
-      "gold",
-      "objectiveChecks",
-      "baseline",
-      "future",
-      "GENERATED_PRIVATE_GOLD_CANARY",
-    ]) {
-      assert.equal(serialized.includes(forbidden), false);
-    }
-  });
-
-  it("keeps private gold statements out of the primary snapshot", () => {
-    const bundle = freezeSnapshot(input());
-    assert.equal(JSON.stringify(bundle.snapshot).includes("GENERATED_PRIVATE_GOLD_CANARY"), false);
-    assert.equal(JSON.stringify(bundle.goldLedger).includes("GENERATED_PRIVATE_GOLD_CANARY"), true);
-  });
-});
-
-describe("gold ledger", () => {
-  it("requires atomic source-provenanced facts and five diagnostic statuses", () => {
-    const fact = (input().goldFacts as Record<string, unknown>[])[0];
-    assert.throws(() => freezeSnapshot(input({ goldFacts: [{ ...fact, sourceEntryIds: [] }] })), {
-      code: "E_EVAL_SCHEMA",
-    });
-    assert.throws(
-      () => freezeSnapshot(input({ goldFacts: [{ ...fact, diagnosticAtCheckpoints: [true] }] })),
-      { code: "E_EVAL_SCHEMA" },
-    );
-    assert.throws(
-      () => freezeSnapshot(input({ goldFacts: [{ ...fact, category: "unsupported" }] })),
-      { code: "E_EVAL_SCHEMA" },
-    );
-  });
-
-  it("rejects duplicate facts and detects any ledger mutation", () => {
-    const fact = input().goldFacts[0];
-    assert.throws(() => freezeSnapshot(input({ goldFacts: [fact, fact] })), {
-      code: "E_EVAL_SCHEMA",
-    });
-    const bundle = freezeSnapshot(input());
-    const mutated = structuredClone(bundle.goldLedger);
-    (mutated.facts[0] as unknown as { statement: string }).statement = "mutated";
-    assert.throws(() => validateGoldLedger(mutated), { code: "E_EVAL_INTEGRITY" });
-
-    const secondFact = {
-      ...(input().goldFacts[0] as Record<string, unknown>),
-      factId: digest("6"),
+describe("authenticated snapshot freezing", () => {
+  it("derives its catalog from a guarded disposable copy rather than caller JSON", async () => {
+    const prepared = await preparedRun();
+    const frozen = await freezeSnapshot(prepared.run, input(prepared.corpusId, prepared.key));
+    assert.equal(frozen.snapshot.copyReferenceDigest.length, 64);
+    const isolated = await preparedRun();
+    const unrelated = JSON.parse(
+      JSON.stringify(input(isolated.corpusId, isolated.key)),
+    ) as FreezeSnapshotInput & {
+      selection: { qualification: { candidate: { branchLeafId: string } } };
     };
-    const ordered = freezeSnapshot(input({ goldFacts: [input().goldFacts[0], secondFact] }));
-    const reordered = structuredClone(ordered.goldLedger);
-    (reordered.facts as GoldFact[]).reverse();
-    assert.throws(() => validateGoldLedger(reordered), { code: "E_EVAL_INTEGRITY" });
-  });
-});
-
-describe("repository fixture classification", () => {
-  it("accepts exactly exact, reconstructed, and unavailable classifications", () => {
-    assert.equal(validateRepositoryFixture(exactFixture()).status, "exact");
-    assert.equal(
-      validateRepositoryFixture({
-        status: "reconstructed",
-        executionTarget: "disposable-only",
-        commitDigest: digest("1"),
-        patchDigest: digest("2"),
-        reconstructionLogDigest: digest("3"),
-        artifactId: digest("4"),
-      }).status,
-      "reconstructed",
-    );
-    assert.equal(
-      validateRepositoryFixture({
-        status: "unavailable",
-        executionTarget: "none",
-        reasonCode: "fixture-not-captured",
-      }).status,
-      "unavailable",
-    );
-  });
-
-  it("never accepts an original repository path or execution target", () => {
-    assert.throws(
-      () => validateRepositoryFixture({ ...exactFixture(), sourcePath: "/real/repository" }),
-      { code: "E_EVAL_SCHEMA" },
-    );
-    assert.throws(
-      () => validateRepositoryFixture({ ...exactFixture(), executionTarget: "original" }),
-      { code: "E_EVAL_SCHEMA" },
-    );
-  });
-});
-
-describe("immutability and persistence", () => {
-  it("detects every post-freeze snapshot mutation", () => {
-    const bundle = freezeSnapshot(input());
-    const mutated = structuredClone(bundle.snapshot);
-    (mutated as unknown as { systemPromptDigest: string }).systemPromptDigest = digest("0");
-    assert.throws(() => validateEvaluationSnapshot(mutated), { code: "E_EVAL_INTEGRITY" });
-
-    const validMutation = recomputeSnapshot(bundle, { systemPromptDigest: digest("0") });
-    assert.throws(() => assertSnapshotImmutable(bundle.snapshot, validMutation), {
+    unrelated.selection.qualification.candidate.branchLeafId = digest("a");
+    await assert.rejects(() => freezeSnapshot(isolated.run, unrelated), {
       code: "E_EVAL_INTEGRITY",
     });
-  });
-
-  it("persists idempotently and allows exactly one primary snapshot per corpus", async () => {
-    const run = await safeRun();
-    const bundle = freezeSnapshot(input());
-    await persistFrozenSnapshot(run, bundle);
-    await persistFrozenSnapshot(run, bundle);
-    const snapshot = JSON.parse(
-      (await safeRunReadFile(run, `snapshots/${corpusId}.json`)).toString("utf8"),
-    );
-    const gold = JSON.parse((await safeRunReadFile(run, `gold/${corpusId}.json`)).toString("utf8"));
-    assert.equal(canonicalJson(snapshot), canonicalJson(bundle.snapshot));
-    assert.equal(canonicalJson(gold), canonicalJson(bundle.goldLedger));
-
-    await unlink(safeRunPath(run, `snapshots/${corpusId}.json`));
-    await unlink(safeRunPath(run, `gold/${corpusId}.json`));
-    await persistFrozenSnapshot(run, bundle);
-    assert.equal(
-      canonicalJson(
-        JSON.parse((await safeRunReadFile(run, `snapshots/${corpusId}.json`)).toString("utf8")),
-      ),
-      canonicalJson(bundle.snapshot),
-    );
-
-    const changedSnapshot = recomputeSnapshot(bundle, { systemPromptDigest: digest("0") });
     await assert.rejects(
-      () => persistFrozenSnapshot(run, { ...bundle, snapshot: changedSnapshot as never }),
+      () =>
+        freezeSnapshot(prepared.run, {
+          ...input(prepared.corpusId, prepared.key),
+          goldFacts: [
+            {
+              factId: digest("7"),
+              category: "goal",
+              sourceEntryIds: [digest("0")],
+              statement: "bad",
+              diagnosticAtCheckpoints: [true, true, true, true, true],
+            },
+          ],
+        }),
       { code: "E_EVAL_INTEGRITY" },
     );
   });
 
-  it("blocks replay-facing verification after persisted tampering", async () => {
-    const run = await safeRun();
-    const bundle = freezeSnapshot({
-      ...input(),
-      selection: selection({ ...qualification(), selectedRank: 2 }),
-    });
-    await persistFrozenSnapshot(run, bundle);
-    const path = `snapshots/${corpusId}.json`;
-    const tampered = structuredClone(bundle.snapshot);
-    (tampered as unknown as { rubricDigest: string }).rubricDigest = digest("0");
-    await safeRunWriteFile(run, path, JSON.stringify(tampered));
-    await assert.rejects(() => persistFrozenSnapshot(run, bundle), { code: "E_EVAL_INTEGRITY" });
-  });
+  it("does not publish a catalog for invalid ordering and permits a corrected retry", async () => {
+    const prepared = await preparedRun();
+    const invalid = JSON.parse(
+      JSON.stringify(input(prepared.corpusId, prepared.key)),
+    ) as FreezeSnapshotInput & {
+      selection: { qualification: { candidate: { startOrder: number } } };
+    };
+    invalid.selection.qualification.candidate.startOrder = 0;
 
-  it("rejects a pre-created frozen-directory symlink without writing private gold outside", async () => {
-    const run = await safeRun();
-    const outside = join(root, `outside-${runCounter}`);
-    await mkdir(outside, { mode: 0o700 });
-    await symlink(outside, safeRunPath(run, "frozen"), "dir");
-
-    await assert.rejects(() => persistFrozenSnapshot(run, freezeSnapshot(input())), {
+    await assert.rejects(() => freezeSnapshot(prepared.run, invalid), {
       code: "E_EVAL_INTEGRITY",
     });
-    await assert.rejects(() => readFile(join(outside, `${corpusId}.json`)), { code: "ENOENT" });
-  });
-
-  it("normalizes before queuing so caller mutation cannot poison the commit marker", async () => {
-    const run = await safeRun();
-    const mutable = structuredClone(freezeSnapshot(input()));
-    const expectedDigest = mutable.snapshot.systemPromptDigest;
-    const persistence = persistFrozenSnapshot(run, mutable);
-    (mutable.snapshot as unknown as { systemPromptDigest: string }).systemPromptDigest =
-      digest("0");
-    (mutable as unknown as Record<string, unknown>).unexpected = "not-persisted";
-    await persistence;
-
-    const persisted = JSON.parse(
-      (await safeRunReadFile(run, `frozen/${corpusId}.json`)).toString("utf8"),
+    assert.equal(
+      await safeRunFileExists(prepared.run, `catalogs/${prepared.corpusId}.json`),
+      false,
     );
-    assert.equal(persisted.snapshot.systemPromptDigest, expectedDigest);
-    assert.equal("unexpected" in persisted, false);
+
+    await freezeSnapshot(prepared.run, input(prepared.corpusId, prepared.key));
+    assert.equal(await safeRunFileExists(prepared.run, `catalogs/${prepared.corpusId}.json`), true);
   });
 
-  it("rejects non-schema bundle fields before publishing a permanent marker", async () => {
-    const run = await safeRun();
-    const bundle = { ...freezeSnapshot(input()), unexpected: "not-persisted" };
-    assert.throws(() => persistFrozenSnapshot(run, bundle as never), {
+  it("loads full bundles for replay/gold roles and keeps the gold canary out of replay", async () => {
+    const prepared = await preparedRun();
+    const frozen = await freezeSnapshot(prepared.run, input(prepared.corpusId, prepared.key));
+    await persistFrozenSnapshot(prepared.run, frozen);
+    const replay = JSON.stringify(await openReplaySnapshotAccess(prepared.run, prepared.corpusId));
+    assert.equal(replay.includes("GENERATED_PRIVATE_GOLD_CANARY"), false);
+    assert.equal(
+      (await loadPrivateGoldLedger(createPrivateGoldLedgerAccess(prepared.run, prepared.corpusId)))
+        .facts[0]?.statement,
+      "GENERATED_PRIVATE_GOLD_CANARY",
+    );
+  });
+
+  it("gives the summary role only authenticated instruction content and candidate messages", async () => {
+    const prepared = await preparedRun();
+    const freezeInput = input(prepared.corpusId, prepared.key);
+    const frozen = await freezeSnapshot(prepared.run, freezeInput);
+    await persistFrozenSnapshot(prepared.run, frozen);
+    const summary = await buildSummaryGenerationAccess(
+      await openReplaySnapshotAccess(prepared.run, prepared.corpusId),
+      freezeInput.selection,
+    );
+    assert.deepEqual(Object.keys(summary).sort(), ["candidateMessages", "instruction"]);
+    assert.equal(summary.instruction, freezeInput.summaryInstruction);
+    assert.equal(JSON.stringify(summary).includes("GENERATED_PRIVATE_GOLD_CANARY"), false);
+    assert.equal(JSON.stringify(summary).includes("BASELINE_CANARY"), false);
+  });
+
+  it("rejects missing or mutated catalog/copy artifacts before either loader projects a role", async () => {
+    const prepared = await preparedRun();
+    const frozen = await freezeSnapshot(prepared.run, input(prepared.corpusId, prepared.key));
+    await persistFrozenSnapshot(prepared.run, frozen);
+    await unlink(safeRunPath(prepared.run, `copied-session-descriptors/${prepared.corpusId}.json`));
+    await assert.rejects(() => openReplaySnapshotAccess(prepared.run, prepared.corpusId), {
       code: "E_EVAL_INTEGRITY",
     });
-    await assert.rejects(() => safeRunReadFile(run, `frozen/${corpusId}.json`), {
+    await assert.rejects(
+      () => loadPrivateGoldLedger(createPrivateGoldLedgerAccess(prepared.run, prepared.corpusId)),
+      { code: "E_EVAL_INTEGRITY" },
+    );
+    assert.equal(
+      (await safeRunReadFile(prepared.run, `gold/${prepared.corpusId}.json`))
+        .toString()
+        .includes("GENERATED_PRIVATE_GOLD_CANARY"),
+      true,
+    );
+  });
+
+  it("rejects a guarded private-copy mutation after catalog scanning", async () => {
+    const prepared = await preparedRun();
+    const frozen = await freezeSnapshot(prepared.run, input(prepared.corpusId, prepared.key));
+    await persistFrozenSnapshot(prepared.run, frozen);
+    const copyName = (await safeRunReaddir(prepared.run, "copied-sessions"))[0]?.name;
+    assert.ok(copyName);
+    await safeRunWriteFile(prepared.run, `copied-sessions/${copyName}`, "mutated\n");
+    await assert.rejects(() => openReplaySnapshotAccess(prepared.run, prepared.corpusId), {
+      code: "E_EVAL_INTEGRITY",
+    });
+  });
+
+  it("does not repair a committed bundle after a catalog mutation", async () => {
+    const prepared = await preparedRun();
+    const frozen: FrozenSnapshotBundle = await freezeSnapshot(
+      prepared.run,
+      input(prepared.corpusId, prepared.key),
+    );
+    await persistFrozenSnapshot(prepared.run, frozen);
+    await safeRunWriteFile(
+      prepared.run,
+      `catalogs/${prepared.corpusId}.json`,
+      canonicalJson({ mutated: true }),
+    );
+    await assert.rejects(() => persistFrozenSnapshot(prepared.run, frozen), {
       code: "E_EVAL_INTEGRITY",
     });
   });

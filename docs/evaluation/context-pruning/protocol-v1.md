@@ -26,6 +26,7 @@ Validation rejects unknown or missing fields, invalid stages, noncanonical diges
 - Bootstrap: exactly 10,000 snapshot-cluster resamples. Seed with `SHA256(UTF8(canonicalJSON({domain: "snapshot-cluster-bootstrap-v1", protocolSeed, sampleDigest})))`; use SHA-256 counter/rejection draws with big-endian uint32 counters and unsigned 256-bit modulo mapping. Report nearest-rank 2.5% and 97.5% ranks 250 and 9750.
 - Privacy: suppress every aggregate backed by fewer than five independent sessions or snapshots; replicates do not increase the count.
 - Provider calls: permit at most one retry after a frozen retryable failure; retain failed and retried billed attempts.
+- Replay schedule: `replicateCount` is an integer in `3..100`; the upper bound keeps provider-free plan construction hermetic and finite.
 - Provenance: each applicable scenario requires one complete qualifying range with zero false-positive ownership or boundary claims.
 
 No external-cost or evidence command is authorized by this template.

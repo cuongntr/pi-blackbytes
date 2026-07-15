@@ -21,14 +21,17 @@ import {
 } from "../evidence-store.js";
 import {
   assertSafeRunId,
+  ensurePrivateDir,
   ensurePrivateRunRoot,
   openSafeRun,
   preManifestRunPath,
   resolveEvidenceRoot,
   resolveRunRoot,
   safeRunPath,
+  safeRunPublishExclusiveFile,
   safeRunReaddir,
   safeRunStat,
+  safeRunSyncDirectory,
   validateSafeRelativePath,
 } from "../path-safety.js";
 import type { PreManifestRun, SafeRun } from "../path-safety.js";
@@ -321,6 +324,54 @@ describe("safeRunPath", () => {
 });
 
 // ── SafeRun directory listing ────────────────────────────────────────────────
+
+describe("ensurePrivateDir", () => {
+  it("syncs a validated copied-sessions directory before descriptor publication", async () => {
+    const agentDir = await testDir("sync-private-dir");
+    const runId = "sync-private-dir-run";
+    const preRun = await ensurePrivateRunRoot(agentDir, runId);
+    const key = await loadOrCreateCorpusKey(preRun);
+    await atomicManifestWrite(preRun, makeManifest(runId, corpusKeyDigest(key)));
+    const run = await openSafeRun(agentDir, runId);
+    await ensurePrivateDir(run, "copied-sessions");
+    await safeRunSyncDirectory(run, "copied-sessions");
+    assert.equal((await safeRunStat(run, "copied-sessions")).isDirectory, true);
+  });
+
+  it("creates nested private segments before publishing children", async () => {
+    const agentDir = await testDir("nested-private-dir");
+    const runId = "nested-private-dir-run";
+    const preRun = await ensurePrivateRunRoot(agentDir, runId);
+    const key = await loadOrCreateCorpusKey(preRun);
+    await atomicManifestWrite(preRun, makeManifest(runId, corpusKeyDigest(key)));
+    const run = await openSafeRun(agentDir, runId);
+
+    await ensurePrivateDir(run, "one/two/three");
+    for (const relativePath of ["one", "one/two", "one/two/three"]) {
+      const directory = await safeRunStat(run, relativePath);
+      assert.equal(directory.isDirectory, true);
+      assert.equal(directory.mode & 0o777, 0o700);
+    }
+  });
+});
+
+describe("safeRunPublishExclusiveFile", () => {
+  it("publishes a private file through a durable parent-directory entry", async () => {
+    const agentDir = await testDir("exclusive-publish");
+    const runId = "exclusive-publish-run";
+    const preRun = await ensurePrivateRunRoot(agentDir, runId);
+    const key = await loadOrCreateCorpusKey(preRun);
+    await atomicManifestWrite(preRun, makeManifest(runId, corpusKeyDigest(key)));
+    const run = await openSafeRun(agentDir, runId);
+
+    assert.equal(await safeRunPublishExclusiveFile(run, "published/value.json", "{}"), true);
+    assert.equal(
+      await safeRunPublishExclusiveFile(run, "published/value.json", "different"),
+      false,
+    );
+    assert.equal(await readFile(safeRunPath(run, "published/value.json"), "utf8"), "{}");
+  });
+});
 
 describe("safeRunReaddir", () => {
   it("lists files and directories, rejecting symlinks", async () => {

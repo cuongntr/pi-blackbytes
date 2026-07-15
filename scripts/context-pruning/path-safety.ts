@@ -119,6 +119,15 @@ function getSafeRunData(safeRun: SafeRun): SafeRunData {
  * Revalidate that the stored root still resolves to the same dev/inode.
  * This detects directory replacement attacks.
  */
+async function syncPrivateDirectory(dirPath: string): Promise<void> {
+  const handle = await open(dirPath, constants.O_RDONLY);
+  try {
+    await handle.sync();
+  } finally {
+    await handle.close();
+  }
+}
+
 async function revalidateRoot(data: SafeRunData): Promise<void> {
   let stats: import("node:fs").Stats;
   try {
@@ -632,17 +641,36 @@ export async function ensurePrivateDir(safeRun: SafeRun, relativePath: string): 
   await revalidateRoot(data);
   const dirPath = safeRunPath(safeRun, relativePath);
 
-  // Walk and validate parent components
-  const parentRelative = relativePath.includes("/")
-    ? relativePath.split("/").slice(0, -1).join("/")
-    : "";
-  if (parentRelative.length > 0) {
-    await walkComponentsWithLstat(data.root, parentRelative, data.dev);
+  // Create one component at a time so every newly linked directory entry is
+  // persisted in its parent before a deeper segment is created.
+  let current = data.root;
+  for (const component of relativePath.length === 0 ? [] : relativePath.split("/")) {
+    const next = join(current, component);
+    let created = false;
+    try {
+      await mkdir(next, { mode: 0o700 });
+      created = true;
+    } catch (error: unknown) {
+      if (
+        !(typeof error === "object" && error !== null && "code" in error && error.code === "EEXIST")
+      ) {
+        throw error;
+      }
+    }
+    const stats = await lstat(next);
+    if (stats.isSymbolicLink() || !stats.isDirectory() || stats.dev !== data.dev) {
+      throw new EvidenceStoreError("E_EVAL_INTEGRITY", "Private directory component is unsafe");
+    }
+    await chmod(next, 0o700);
+    if (created) {
+      await syncPrivateDirectory(current);
+      await syncPrivateDirectory(next);
+    }
+    current = next;
   }
-
-  await mkdir(dirPath, { recursive: true, mode: 0o700 });
   await walkComponentsWithLstat(data.root, relativePath, data.dev);
   await chmod(dirPath, 0o700);
+  await syncPrivateDirectory(dirPath);
   return dirPath;
 }
 
@@ -739,6 +767,35 @@ export async function ensurePrivateRunRoot(
 }
 
 // ── SafeRun file stat (with symlink rejection) ────────────────────────────────
+
+/** Return whether a validated SafeRun file exists, without creating parent directories. */
+export async function safeRunFileExists(safeRun: SafeRun, relativePath: string): Promise<boolean> {
+  const data = getSafeRunData(safeRun);
+  await revalidateRoot(data);
+  safeRunPath(safeRun, relativePath);
+  const components = relativePath.split("/");
+  let current = data.root;
+  for (const component of components) {
+    current = join(current, component);
+    try {
+      const stats = await lstat(current);
+      if (stats.isSymbolicLink() || stats.dev !== data.dev) {
+        throw new EvidenceStoreError("E_EVAL_INTEGRITY", "Path is not a safe regular file");
+      }
+      if (component === components.at(-1)) {
+        if (!stats.isFile()) {
+          throw new EvidenceStoreError("E_EVAL_INTEGRITY", "Path is not a safe regular file");
+        }
+      } else if (!stats.isDirectory()) {
+        throw new EvidenceStoreError("E_EVAL_INTEGRITY", "Path parent is not a safe directory");
+      }
+    } catch (error: unknown) {
+      if (error instanceof Error && "code" in error && error.code === "ENOENT") return false;
+      throw error;
+    }
+  }
+  return true;
+}
 
 /**
  * Stat a file within a SafeRun, using lstat to reject symlinks.
@@ -848,6 +905,20 @@ export async function safeRunReadFile(safeRun: SafeRun, relativePath: string): P
  * Atomically publish one file without replacing an existing destination.
  * Returns true when this caller created the destination, false when it already existed.
  */
+/** Durably persist an existing private directory after a separately synced file update. */
+export async function safeRunSyncDirectory(safeRun: SafeRun, relativePath: string): Promise<void> {
+  const data = getSafeRunData(safeRun);
+  await revalidateRoot(data);
+  safeRunPath(safeRun, relativePath);
+  await walkComponentsWithLstat(data.root, relativePath, data.dev);
+  const directory = relativePath.length === 0 ? data.root : safeRunPath(safeRun, relativePath);
+  const stats = await lstat(directory);
+  if (!stats.isDirectory() || stats.isSymbolicLink() || stats.dev !== data.dev) {
+    throw new EvidenceStoreError("E_EVAL_INTEGRITY", "Path is not a safe private directory");
+  }
+  await syncPrivateDirectory(directory);
+}
+
 export async function safeRunPublishExclusiveFile(
   safeRun: SafeRun,
   relativePath: string,
@@ -896,6 +967,10 @@ export async function safeRunPublishExclusiveFile(
   if (created) {
     await walkComponentsWithLstat(data.root, relativePath, data.dev);
     await chmod(fullPath, 0o600);
+    // Persist the directory entry after the temp file itself was fsynced.
+    await syncPrivateDirectory(
+      parentRelative.length === 0 ? data.root : safeRunPath(safeRun, parentRelative),
+    );
   }
   return created;
 }

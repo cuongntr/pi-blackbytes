@@ -32,6 +32,7 @@ import {
 } from "./protocol.js";
 import { verifyT009BIfPresent } from "./provider-runner.js";
 import {
+  SAMPLE_SIZE,
   inventoryDigest,
   isEligibleInventoryRecord,
   sampleInventory,
@@ -894,6 +895,129 @@ export async function loadVerifiedTargetSelection(
   const target = validateTargetSelectionRecord(await canonicalRunJson(safeRun, TARGET_FILE), lock);
   await verifyTargetAnchor(safeRun, target);
   return target;
+}
+
+interface SafeRepositoryConcentrationSummary {
+  readonly repositoryCount: number;
+  readonly dominantCount: number | null;
+  readonly dominantShare: number | null;
+}
+
+export interface VerifiedT017AggregateSummary {
+  readonly inventoryDigest: string;
+  readonly sampleDigest: string;
+  readonly targetSelectionDigest: string;
+  readonly corpusSummary: {
+    readonly sourceCount: number;
+    readonly eligibleFrameSize: number;
+    readonly sampleSize: number;
+    readonly sensitivity: {
+      readonly atLeast10: number;
+      readonly atLeast15: number;
+      readonly atLeast20: number;
+      readonly atLeast25: number;
+    };
+    readonly exclusionReasons: {
+      readonly malformedJsonl: number | null;
+      readonly missingParent: number | null;
+      readonly unresolvedParentSession: number | null;
+    };
+    readonly repositoryConcentration: {
+      readonly frame: SafeRepositoryConcentrationSummary;
+      readonly sample: SafeRepositoryConcentrationSummary;
+    };
+  };
+}
+
+function safeRepositoryConcentrationSummary(
+  values: readonly { readonly count: number; readonly share: number }[],
+): SafeRepositoryConcentrationSummary {
+  const dominant = values[0];
+  // Counts below the report policy's independent-n threshold remain suppressed.
+  const discloseDominant = dominant !== undefined && dominant.count >= 5;
+  return Object.freeze({
+    repositoryCount: values.length,
+    dominantCount: discloseDominant ? dominant.count : null,
+    dominantShare: discloseDominant ? dominant.share : null,
+  });
+}
+
+function suppressSmallCount(count: number): number | null {
+  return count > 0 && count < 5 ? null : count;
+}
+
+/**
+ * Revalidate T-017's persisted metadata-only artifacts without reopening a source,
+ * selected copy, provider, or subprocess. The returned summary is safe for reports.
+ */
+export async function loadVerifiedT017AggregateSummary(
+  safeRun: Awaited<ReturnType<typeof openSafeRun>>,
+): Promise<VerifiedT017AggregateSummary> {
+  const lock = await loadLock(safeRun);
+  const inventory = await latestInventory(safeRun);
+  assertInventoryBinding(inventory, lock);
+  if (!(await safeRunFileExists(safeRun, SAMPLE_FILE)))
+    fail("E_EVAL_INCOMPLETE", "Terminal report supplement requires a frozen T-017 sample");
+  const sample = validateSampleManifest(await canonicalRunJson(safeRun, SAMPLE_FILE));
+  const recomputed = sampleInventory({
+    samplingLock: lock,
+    inventoryRecords: inventory.records,
+    attemptIndex: inventory.attemptIndex,
+    now: lock.collectionWindowEndsAt,
+  });
+  if (
+    sample.runId !== lock.runId ||
+    sample.samplingLockDigest !== canonicalDigest(lock) ||
+    sample.inventoryDigest !== inventory.inventoryDigest ||
+    sample.attemptIndex !== inventory.attemptIndex ||
+    recomputed.status !== "frozen" ||
+    canonicalJson(recomputed.manifest) !== canonicalJson(sample)
+  )
+    fail("E_EVAL_INTEGRITY", "T-017 sample does not exactly recompute from structural inventory");
+  if (!(await safeRunFileExists(safeRun, TARGET_FILE)))
+    fail("E_EVAL_INCOMPLETE", "Terminal report supplement requires target selection");
+  const target = validateTargetSelectionRecord(await canonicalRunJson(safeRun, TARGET_FILE), lock);
+  await verifyTargetAnchor(safeRun, target);
+  const sampleDigest = sampleManifestDigest(sample);
+  if (
+    target.runId !== lock.runId ||
+    target.samplingLockDigest !== canonicalDigest(lock) ||
+    target.inventoryDigest !== inventory.inventoryDigest ||
+    target.sampleDigest !== sampleDigest
+  )
+    fail("E_EVAL_INTEGRITY", "T-017 target does not bind the verified inventory and sample");
+
+  const countReason = (reason: string) =>
+    inventory.records.filter((record) => record.exclusionReasons.includes(reason)).length;
+  const sensitivity = sample.sensitivity;
+  const corpusSummary = Object.freeze({
+    sourceCount: inventory.sourceCount,
+    eligibleFrameSize: sample.frameSize,
+    sampleSize: sample.entries.length,
+    sensitivity: Object.freeze({
+      atLeast10: sensitivity[0]!.frameSize,
+      atLeast15: sensitivity[1]!.frameSize,
+      atLeast20: sensitivity[2]!.frameSize,
+      atLeast25: sensitivity[3]!.frameSize,
+    }),
+    exclusionReasons: Object.freeze({
+      malformedJsonl: suppressSmallCount(countReason("malformed-jsonl")),
+      missingParent: suppressSmallCount(countReason("missing-parent")),
+      unresolvedParentSession: suppressSmallCount(countReason("unresolved-parent-session")),
+    }),
+    repositoryConcentration: Object.freeze({
+      frame: safeRepositoryConcentrationSummary(sample.repositoryConcentration.frame),
+      sample: safeRepositoryConcentrationSummary(sample.repositoryConcentration.sample),
+    }),
+  });
+  if (corpusSummary.sampleSize !== SAMPLE_SIZE)
+    fail("E_EVAL_INTEGRITY", "T-017 sample size is not the locked first-40 size");
+  return Object.freeze({
+    inventoryDigest: inventory.inventoryDigest,
+    sampleDigest,
+    targetSelectionDigest: canonicalDigest(target),
+    corpusSummary,
+  });
 }
 
 /** Full T-017 viable-state verification for every T-009B planning/execution boundary. */

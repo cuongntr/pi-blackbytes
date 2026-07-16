@@ -31,7 +31,12 @@ import {
   requireT021RealMatrixExecutor,
   runLifecycleMatrix,
 } from "./lifecycle/runner.js";
-import { openSafeRun, safeRunReadFile, safeRunWriteFile } from "./path-safety.js";
+import {
+  openSafeRun,
+  safeRunFileExists,
+  safeRunReadFile,
+  safeRunWriteFile,
+} from "./path-safety.js";
 import { validateTargetSelectionRecord } from "./protocol.js";
 import {
   createGeneratedCompactionProofPlan,
@@ -53,6 +58,15 @@ import {
   persistFrozenSnapshot,
   validateFreezeSnapshotInput,
 } from "./snapshots.js";
+import {
+  decideTerminalHardStop,
+  hasVerifiedBlockingIncomplete,
+  loadTerminalHardStopDigest,
+  recordHardStopDisposition,
+  reportTerminalHardStop,
+  verifyTerminalHardStop,
+} from "./terminal-hard-stop.js";
+import type { HardStopStage, QualificationRange } from "./terminal-hard-stop.js";
 import { EvidenceStoreError } from "./types.js";
 import type { CliCommand, EvalErrorCode, EvidenceError } from "./types.js";
 import { CLI_COMMANDS } from "./types.js";
@@ -119,10 +133,148 @@ function optionValue(args: readonly string[], name: string): string | undefined 
   return index >= 0 ? args[index + 1] : undefined;
 }
 
+function parseTerminalHardStopArguments(
+  args: readonly string[],
+  command: string,
+  requireDigest: boolean,
+  requireRanks = false,
+): {
+  readonly runId: string;
+  readonly piAgentDir: string;
+  readonly digest?: string;
+  readonly range?: QualificationRange;
+} {
+  const allowed = new Set([
+    "--run-id",
+    "--pi-agent-dir",
+    ...(requireDigest ? ["--not-applicable"] : []),
+    ...(requireRanks ? ["--ranks"] : []),
+  ]);
+  const values = new Map<string, string>();
+  for (let index = 0; index < args.length; index += 1) {
+    const option = args[index];
+    if (!allowed.has(option!) || values.has(option!)) {
+      emitError("E_EVAL_CONFIG", `${command} options are duplicated or unsupported.`);
+    }
+    const value = args[++index];
+    if (value === undefined || value.startsWith("--")) {
+      emitError("E_EVAL_CONFIG", `${command} requires a value for ${option}.`);
+    }
+    values.set(option!, value);
+  }
+  if (
+    !values.has("--run-id") ||
+    !values.has("--pi-agent-dir") ||
+    (requireDigest && !values.has("--not-applicable")) ||
+    (requireRanks && !values.has("--ranks"))
+  ) {
+    emitError(
+      "E_EVAL_CONFIG",
+      `${command} requires --run-id, --pi-agent-dir${requireDigest ? ", and --not-applicable" : ""}${requireRanks ? ", and --ranks" : ""}.`,
+    );
+  }
+  const ranks = values.get("--ranks");
+  if (requireRanks && ranks !== "1-20" && ranks !== "21-40") {
+    emitError(
+      "E_EVAL_CONFIG",
+      "qualify --not-applicable requires exactly --ranks 1-20 or --ranks 21-40.",
+    );
+  }
+  return {
+    runId: values.get("--run-id")!,
+    piAgentDir: values.get("--pi-agent-dir")!,
+    digest: values.get("--not-applicable"),
+    ...(ranks === undefined ? {} : { range: ranks as QualificationRange }),
+  };
+}
+
+/** Reject an ordinary run-bound mode before it can read an input or load an adapter. */
+async function rejectOrdinaryModeAfterBlockingIncomplete(
+  args: readonly string[],
+  effective?: { readonly runId: string; readonly piAgentDir: string },
+): Promise<void> {
+  const runId = effective?.runId ?? optionValue(args, "--run-id");
+  const piAgentDir = effective?.piAgentDir ?? optionValue(args, "--pi-agent-dir");
+  if (runId === undefined || piAgentDir === undefined) return;
+  try {
+    const safeRun = await openSafeRun(piAgentDir, runId);
+    if (await hasVerifiedBlockingIncomplete(safeRun, runId)) {
+      emitError(
+        "E_EVAL_INCOMPLETE",
+        "Verified T-009B blocking-incomplete permits only the exact terminal hard-stop commands.",
+      );
+    }
+  } catch (error: unknown) {
+    if (error instanceof EvidenceStoreError) emitError(error.code, error.message, error.recordId);
+    emitError("E_EVAL_INTEGRITY", "Run-bound hard-stop preflight failed.");
+  }
+}
+
+async function runHardStopDispositionCommand(
+  args: readonly string[],
+  stage: HardStopStage,
+): Promise<void> {
+  const options = parseTerminalHardStopArguments(args, stage, true, stage === "qualification");
+  try {
+    const safeRun = await openSafeRun(options.piAgentDir, options.runId);
+    const disposition = await recordHardStopDisposition({
+      safeRun,
+      runId: options.runId,
+      stage,
+      range: stage === "qualification" ? options.range! : null,
+      upstreamResolutionDigest: options.digest!,
+    });
+    process.stdout.write(
+      `${canonicalJson({ stage, ...(disposition.range === null ? {} : { ranks: disposition.range }), status: "not-applicable", dispositionDigest: disposition.dispositionDigest })}\n`,
+    );
+  } catch (error: unknown) {
+    if (error instanceof EvidenceStoreError) emitError(error.code, error.message, error.recordId);
+    emitError("E_EVAL_INTEGRITY", "Terminal hard-stop disposition failed.");
+  }
+}
+
+async function runTerminalHardStopCommand(
+  args: readonly string[],
+  command: "decide" | "report" | "verify",
+): Promise<void> {
+  const options = parseTerminalHardStopArguments(args, command, false);
+  try {
+    const safeRun = await openSafeRun(options.piAgentDir, options.runId);
+    const digest = await loadTerminalHardStopDigest(safeRun, options.runId);
+    if (command === "decide") {
+      const decision = await decideTerminalHardStop({
+        safeRun,
+        runId: options.runId,
+        upstreamResolutionDigest: digest,
+      });
+      process.stdout.write(
+        `${canonicalJson({ decision: decision.decision, decisionDigest: decision.decisionDigest })}\n`,
+      );
+      return;
+    }
+    if (command === "report") {
+      const report = await reportTerminalHardStop({
+        safeRun,
+        runId: options.runId,
+        upstreamResolutionDigest: digest,
+      });
+      process.stdout.write(`${canonicalJson(report.candidate)}\n`);
+      return;
+    }
+    process.stdout.write(
+      `${canonicalJson(await verifyTerminalHardStop({ safeRun, runId: options.runId, upstreamResolutionDigest: digest }))}\n`,
+    );
+  } catch (error: unknown) {
+    if (error instanceof EvidenceStoreError) emitError(error.code, error.message, error.recordId);
+    emitError("E_EVAL_INTEGRITY", "Terminal hard-stop command failed.");
+  }
+}
+
 async function runCandidateSelectionCommand(
   args: readonly string[],
   mode: "qualify" | "adjudicate",
 ): Promise<void> {
+  await rejectOrdinaryModeAfterBlockingIncomplete(args);
   const inputPath = optionValue(args, "--input");
   if (inputPath === undefined) {
     emitError("E_EVAL_CONFIG", `Command '${mode}' requires --input <path>.`);
@@ -157,6 +309,11 @@ async function runCandidateSelectionCommand(
 }
 
 async function runFreezeCommand(args: readonly string[]): Promise<void> {
+  if (args.includes("--not-applicable")) {
+    await runHardStopDispositionCommand(args, "freeze");
+    return;
+  }
+  await rejectOrdinaryModeAfterBlockingIncomplete(args);
   const inputPath = optionValue(args, "--input");
   const runId = optionValue(args, "--run-id");
   const piAgentDir = optionValue(args, "--pi-agent-dir");
@@ -296,12 +453,17 @@ async function loadExplicitLocalAdapter(modulePath: string): Promise<ProviderRep
 }
 
 async function runReplayCommand(args: readonly string[]): Promise<void> {
+  if (args.includes("--not-applicable")) {
+    await runHardStopDispositionCommand(args, "replay");
+    return;
+  }
   const providerPlanning = args.includes("--plan-provider");
   const providerExecution = args.includes("--opt-in");
   if (providerPlanning && providerExecution)
     emitError("E_EVAL_CONFIG", "choose either --plan-provider or --opt-in, not both.");
   if (!providerPlanning && !providerExecution) {
     const { inputPath, runId, piAgentDir, corpusId } = parseStrictReplayArguments(args);
+    await rejectOrdinaryModeAfterBlockingIncomplete(args);
     let value: unknown;
     try {
       value = JSON.parse(await readFile(inputPath, "utf8"));
@@ -335,6 +497,7 @@ async function runReplayCommand(args: readonly string[]): Promise<void> {
   }
   // All confirmation and frozen-input validation happens before an adapter module is imported.
   const options = providerReplayOptions(args);
+  await rejectOrdinaryModeAfterBlockingIncomplete(args);
   if (
     providerExecution &&
     (options.confirmation === undefined || options.adapterModule === undefined)
@@ -577,8 +740,13 @@ async function runT009BLifecycleCommand(
 }
 
 async function runLifecycleCommand(args: readonly string[]): Promise<void> {
+  if (args.includes("--not-applicable") && !args.includes("--scenario")) {
+    await runHardStopDispositionCommand(args, "lifecycle");
+    return;
+  }
   const t009b = t009bLifecycleOptions(args);
   if (t009b !== undefined) {
+    await rejectOrdinaryModeAfterBlockingIncomplete(args, t009b);
     try {
       await runT009BLifecycleCommand(t009b);
       return;
@@ -596,6 +764,7 @@ async function runLifecycleCommand(args: readonly string[]): Promise<void> {
       "lifecycle matrix is opt-in and reserved for T-021; pass --opt-in with pinned metadata.",
     );
   }
+  await rejectOrdinaryModeAfterBlockingIncomplete(args);
   const metadataPath = optionValue(args, "--metadata");
   const runId = optionValue(args, "--run-id");
   const piAgentDir = optionValue(args, "--pi-agent-dir");
@@ -678,6 +847,11 @@ async function loadReportKey(piAgentDir: string, runId: string) {
 }
 
 async function runReportCommand(args: readonly string[]): Promise<void> {
+  if (!args.includes("--input")) {
+    await runTerminalHardStopCommand(args, "report");
+    return;
+  }
+  await rejectOrdinaryModeAfterBlockingIncomplete(args);
   const { inputPath, runId, piAgentDir } = parseRunArguments(args, "report", true);
   try {
     const { safeRun, corpusKey } = await loadReportKey(piAgentDir, runId);
@@ -692,8 +866,31 @@ async function runReportCommand(args: readonly string[]): Promise<void> {
 
 async function runVerifyCommand(args: readonly string[]): Promise<void> {
   // T-015's report-input verifier remains deliberately separate from the formal
-  // T-017 terminal verifier, selected solely by the presence of --input.
+  // T-017 verifier. A persisted terminal hard-stop takes precedence without
+  // reopening source material.
   if (!args.includes("--input")) {
+    const runId = optionValue(args, "--run-id");
+    const explicitPiAgentDir = optionValue(args, "--pi-agent-dir");
+    const effectivePiAgentDir =
+      explicitPiAgentDir ?? process.env.PI_AGENT_DIR ?? join(homedir(), ".pi", "agent");
+    if (runId !== undefined) {
+      try {
+        const safeRun = await openSafeRun(effectivePiAgentDir, runId);
+        if (await hasVerifiedBlockingIncomplete(safeRun, runId)) {
+          if (explicitPiAgentDir === undefined)
+            emitError(
+              "E_EVAL_CONFIG",
+              "Terminal hard-stop verify requires the exact --pi-agent-dir.",
+            );
+          await runTerminalHardStopCommand(args, "verify");
+          return;
+        }
+      } catch (error: unknown) {
+        if (error instanceof EvidenceStoreError)
+          emitError(error.code, error.message, error.recordId);
+        emitError("E_EVAL_INTEGRITY", "Terminal hard-stop verification failed.");
+      }
+    }
     try {
       process.stdout.write(`${canonicalJson(await runFormalCommand("verify", args))}\n`);
       return;
@@ -703,6 +900,7 @@ async function runVerifyCommand(args: readonly string[]): Promise<void> {
       emitError("E_EVAL_INTEGRITY", "Formal verify failed.");
     }
   }
+  await rejectOrdinaryModeAfterBlockingIncomplete(args);
   const { inputPath, runId, piAgentDir } = parseRunArguments(args, "verify", true);
   try {
     const { corpusKey } = await loadReportKey(piAgentDir, runId);
@@ -794,6 +992,13 @@ async function main(): Promise<void> {
     return;
   }
   if (command === "qualify" || command === "adjudicate") {
+    if (args.slice(1).includes("--not-applicable")) {
+      await runHardStopDispositionCommand(
+        args.slice(1),
+        command === "qualify" ? "qualification" : "adjudication",
+      );
+      return;
+    }
     await runCandidateSelectionCommand(args.slice(1), command);
     return;
   }
@@ -807,6 +1012,14 @@ async function main(): Promise<void> {
   }
   if (command === "lifecycle") {
     await runLifecycleCommand(args.slice(1));
+    return;
+  }
+  if (command === "score") {
+    await rejectOrdinaryModeAfterBlockingIncomplete(args.slice(1));
+    emitError("E_EVAL_INCOMPLETE", "score is unavailable until its evidence stage is implemented.");
+  }
+  if (command === "decide") {
+    await runTerminalHardStopCommand(args.slice(1), "decide");
     return;
   }
   if (command === "report") {

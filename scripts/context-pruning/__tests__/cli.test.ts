@@ -133,9 +133,7 @@ describe("cli", () => {
   });
 
   describe("known but unimplemented commands", () => {
-    const commands = ["score", "lifecycle", "decide"];
-
-    for (const cmd of commands) {
+    for (const cmd of ["score", "lifecycle"]) {
       it(`should exit 1 with E_EVAL_INCOMPLETE for '${cmd}'`, () => {
         const { stdout, stderr, status } = runCli([cmd]);
         assert.equal(status, 1);
@@ -145,5 +143,11 @@ describe("cli", () => {
         assert.ok(err.message.includes(cmd));
       });
     }
+
+    it("requires a private run for terminal decide", () => {
+      const { stderr, status } = runCli(["decide"]);
+      assert.equal(status, 1);
+      assert.equal(JSON.parse(stderr.trim()).code, "E_EVAL_CONFIG");
+    });
   });
 });

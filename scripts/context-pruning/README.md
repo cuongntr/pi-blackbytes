@@ -29,6 +29,49 @@ Provider-backed commands added by later beads must first produce a `--dry-run` p
 an exact `--confirm <digest>`; `--decline <digest>` records refusal without an external call.
 `--not-applicable <upstream-hard-stop-digest>` is reserved for a verified upstream hard-stop.
 
+### Terminal T-009B hard-stop
+
+After a verified same-run T-009B resolution reports `blocking-incomplete`, do not open sampled
+content, run lifecycle/Pi processes, score, or replay. T-018 and T-019 are two distinct authenticated
+qualification records, so record both exact rank batches plus adjudication, freeze, lifecycle, and replay
+with the exact `resolutionDigest` emitted by T-009B, then derive the sole terminal decision and reports:
+
+```bash
+bun run evidence:context-pruning -- qualify --run-id <id> --pi-agent-dir <path> --ranks 1-20 --not-applicable <t009b-resolution-digest>
+bun run evidence:context-pruning -- qualify --run-id <id> --pi-agent-dir <path> --ranks 21-40 --not-applicable <t009b-resolution-digest>
+bun run evidence:context-pruning -- adjudicate --run-id <id> --pi-agent-dir <path> --not-applicable <t009b-resolution-digest>
+bun run evidence:context-pruning -- freeze --run-id <id> --pi-agent-dir <path> --not-applicable <t009b-resolution-digest>
+bun run evidence:context-pruning -- lifecycle --run-id <id> --pi-agent-dir <path> --not-applicable <t009b-resolution-digest>
+bun run evidence:context-pruning -- replay --run-id <id> --pi-agent-dir <path> --not-applicable <t009b-resolution-digest>
+bun run evidence:context-pruning -- decide --run-id <id> --pi-agent-dir <path>
+bun run evidence:context-pruning -- report --run-id <id> --pi-agent-dir <path>
+bun run evidence:context-pruning -- verify --run-id <id> --pi-agent-dir <path>
+```
+
+Every disposition re-authenticates the immutable formal target anchor, verified run manifest identity,
+private proof inputs, durable ledger, and exact same-run `blocking-incomplete` resolution before writing.
+Its closed schema is corpus-key HMAC authenticated over the run, stage, qualification range, target, and
+resolution binding. Unknown or duplicate options, duplicate dispositions, a wrong/cross-run digest,
+missing upstream proof, and any attempt to pass an input, provider, adapter, or subprocess option fail
+closed. Once the blocker exists, every ordinary run-bound qualification, adjudication, freeze, lifecycle,
+replay, score, report, and verify mode fails before it opens an input or loads an adapter; only the exact
+commands above are permitted. `decide` accepts no override and persists exactly one mechanically derived
+`NO-GO`: G001–G004 are explicitly unavailable/blocked by T-009B, not fabricated observations, and its
+trace records each threshold. Report publication is interruption-resumable: an identical existing sibling
+is accepted, a conflicting sibling is rejected, and a missing sibling is published. The terminal report has
+no source checks or observations: all inapplicable metrics are suppressed, while the committed-safe
+aggregate contains no local identifiers, paths, or content.
+
+For completed formal runs, `report` additionally appends the immutable canonical
+`terminal-hard-stop/report-supplement-v1.json`; it never rewrites `decision.json`, `report.local.json`,
+or `report.aggregate.json`. The supplement revalidates only persisted structural T-017 inventory/sample/
+target bindings, then records safe aggregate counts, the passed first-40 sample count, and the still-blocked
+qualification/applicability evidence. Nonzero subgroup counts below five and dominant-repository details
+backed by fewer than five sessions are represented as suppressed `null` values. Its stdout candidate
+adds the identifier-free `corpusSummary` in memory only; the existing aggregate report remains unchanged. `verify` returns `nextStage: "report"` when
+legacy primary reports are valid but this supplement is absent, so they can be upgraded append-only. No
+source session, selected copy, provider, or subprocess is opened by this upgrade.
+
 T-009B adds the exact owner-facing, generated-only sequence (the default Pi agent directory is used
 when `--pi-agent-dir` is omitted):
 

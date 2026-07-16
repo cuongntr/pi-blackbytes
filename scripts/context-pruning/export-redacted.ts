@@ -228,7 +228,14 @@ export function validateRedactedReportInput(value: unknown): RedactedReportInput
       code: diagnosticCode(item.code),
     });
   });
-  if (artifacts.length === 0 || sourceChecks.length === 0) {
+  const terminalHardStop =
+    value.outcome === "NO-GO" &&
+    sourceChecks.length === 0 &&
+    observations.length === 0 &&
+    diagnostics.length === 2 &&
+    diagnostics.some((item) => item.kind === "skip" && item.code === "upstream-hard-stop") &&
+    diagnostics.some((item) => item.kind === "skip" && item.code === "not-applicable");
+  if (artifacts.length === 0 || (sourceChecks.length === 0 && !terminalHardStop)) {
     schema("report input requires at least one artifact and one source check");
   }
   return Object.freeze({

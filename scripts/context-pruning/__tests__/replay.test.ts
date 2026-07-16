@@ -18,9 +18,15 @@ import {
   validateDisposableSessionCopy,
 } from "../inventory.js";
 import { createGeneratedCompactionUsageFixture } from "../lifecycle/compaction-usage.js";
-import { ensurePrivateRunRoot, openSafeRun, safeRunReadFile } from "../path-safety.js";
+import {
+  ensurePrivateRunRoot,
+  openSafeRun,
+  safeRunReadFile,
+  safeRunWriteFile,
+} from "../path-safety.js";
 import {
   FakeReplayAdapter,
+  GENERATED_COMPACTION_PROOF_LEDGER_PATH,
   PROVIDER_REPLAY_LEDGER_PATH,
   createGeneratedCompactionProofConfirmation,
   createGeneratedCompactionProofPlan,
@@ -806,6 +812,95 @@ describe("provider-free paired replay", () => {
       { code: "E_EVAL_INCOMPLETE" },
     );
     assert.equal(adapter.calls.length, 0);
+  });
+
+  it("persists all durable phases for a failed generated proof attempt", async () => {
+    const prepared = await preparedReplay();
+    const proofPolicy = {
+      maxRetriesPerPlannedRequest: 1 as const,
+      upperCostPerAttempt: { nativeCompaction: 0.01, followingMain: 0.02 },
+      priceCardDigest: providerPolicy.priceCardDigest,
+      cacheStrategy: "per-plan-per-request-v1" as const,
+      confirmationPolicy: "exact-generated-compaction-proof-v1" as const,
+    };
+    const environment = {
+      schemaVersion: 1 as const,
+      type: "t009b-generated-compaction-environment-v1" as const,
+      runnerVersion: "test",
+      platform: "generated",
+    };
+    const environmentDigest = t009bEnvironmentDigest(environment);
+    const confirmation = createGeneratedCompactionProofConfirmation(
+      providerTarget,
+      providerPolicy,
+      proofPolicy,
+      environmentDigest,
+    );
+    const proof = await runGeneratedCompactionProof({
+      safeRun: prepared.run,
+      targetSelection: providerTarget,
+      providerPolicy,
+      proofPolicy,
+      environmentDigest,
+      confirmation,
+      adapter: {
+        kind: "fake",
+        target: {
+          provider: "fake-provider",
+          model: "fake-model",
+          api: "fake-api",
+          reasoning: "fake-reasoning",
+        },
+        cacheCapability: {
+          configuredStrategy: "per-plan-per-request-v1",
+          observedIsolation: "isolated",
+          namespace: "failed-proof",
+        },
+        async execute() {
+          return { ok: false, billed: "unknown", failureClass: "unknown", facts: [] };
+        },
+      },
+      now: () => "2026-07-15T00:00:00.000Z",
+    });
+    assert.equal(proof.resolution.outcome, "blocking-incomplete");
+    const ledger = (await safeRunReadFile(prepared.run, GENERATED_COMPACTION_PROOF_LEDGER_PATH))
+      .toString("utf8")
+      .trim()
+      .split("\n")
+      .map((line) => JSON.parse(line) as Record<string, unknown>);
+    assert.equal(ledger.length, 4);
+    assert.deepEqual(
+      ledger.map((event) => event.type),
+      [
+        "t009b-generated-compaction-start-v1",
+        "t009b-generated-compaction-result-v1",
+        "t009b-generated-compaction-usage-v1",
+        "t009b-generated-compaction-facts-v1",
+      ],
+    );
+    assert.equal(
+      ledger.slice(1).every((event) => event.failed === true && event.error === "unknown"),
+      true,
+    );
+
+    const corrupted = ledger.map((event) => ({ ...event }));
+    delete corrupted[2]!.failed;
+    await safeRunWriteFile(
+      prepared.run,
+      GENERATED_COMPACTION_PROOF_LEDGER_PATH,
+      `${corrupted.map((event) => canonicalJson(event)).join("\n")}\n`,
+    );
+    await assert.rejects(
+      () =>
+        verifyPersistedGeneratedCompactionProof({
+          safeRun: prepared.run,
+          targetSelection: providerTarget,
+          providerPolicy,
+          proofPolicy,
+          environment,
+        }),
+      { code: "E_EVAL_INTEGRITY" },
+    );
   });
 });
 

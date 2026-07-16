@@ -1360,7 +1360,7 @@ async function appendGeneratedAttempt(
   base: RecordValue,
   now: () => string,
   extra: RecordValue,
-  failed = false,
+  failureClass?: ProviderFailureClass,
 ): Promise<void> {
   const id = generatedAttemptEventId(
     confirmation.generatedInputDigest,
@@ -1373,7 +1373,7 @@ async function appendGeneratedAttempt(
     timestamp: now(),
     type: `t009b-generated-compaction-${phase}-v1`,
     data: { ...base, ...extra },
-    ...(failed ? { failed: true, error: extra.failureClass as string } : {}),
+    ...(failureClass === undefined ? {} : { failed: true, error: failureClass }),
   });
 }
 
@@ -1393,6 +1393,7 @@ async function loadGeneratedLedgerFacts(
     ]),
   );
   const phases = new Map<string, Set<string>>();
+  const failureStates = new Map<string, ProviderFailureClass | null>();
   const facts: PiLifecycleFact[] = [];
   for (const line of raw.slice(0, -1).split("\n")) {
     let event: unknown;
@@ -1456,6 +1457,36 @@ async function loadGeneratedLedgerFacts(
     )
       fail("E_EVAL_INTEGRITY", "T-009B attempt ledger fields are invalid");
     const key = `${data.requestId}:${data.attempt}`;
+    let failureClass: ProviderFailureClass | null;
+    if (phase === "result") {
+      failureClass =
+        data.outcome === "failure" ? (data.failureClass as ProviderFailureClass) : null;
+      failureStates.set(key, failureClass);
+    } else if (phase === "usage" || phase === "facts") {
+      if (!failureStates.has(key))
+        fail("E_EVAL_INTEGRITY", "T-009B attempt ledger phases are out of order");
+      failureClass = failureStates.get(key)!;
+    } else failureClass = null;
+    exactKeys(
+      event,
+      [
+        "data",
+        "eventId",
+        "timestamp",
+        "type",
+        ...(failureClass === null ? [] : ["error", "failed"]),
+      ],
+      "T-009B attempt event has invalid closed schema",
+    );
+    if (
+      typeof event.timestamp !== "string" ||
+      Number.isNaN(Date.parse(event.timestamp)) ||
+      new Date(event.timestamp).toISOString() !== event.timestamp ||
+      (failureClass === null
+        ? event.failed !== undefined || event.error !== undefined
+        : event.failed !== true || event.error !== failureClass)
+    )
+      fail("E_EVAL_INTEGRITY", "T-009B attempt failure envelope is invalid");
     const seen = phases.get(key) ?? new Set<string>();
     if (
       seen.has(phase) ||
@@ -1613,7 +1644,7 @@ export async function runGeneratedCompactionProof(
         result.ok
           ? { phase: "result", outcome: "success" }
           : { phase: "result", outcome: "failure", failureClass: result.failureClass },
-        !result.ok,
+        result.ok ? undefined : result.failureClass,
       );
       await appendGeneratedAttempt(
         input.safeRun,
@@ -1622,7 +1653,7 @@ export async function runGeneratedCompactionProof(
         base,
         input.now,
         { phase: "usage", billedDisposition: result.billed, usageCompleteness: "facts-only" },
-        !result.ok,
+        result.ok ? undefined : result.failureClass,
       );
       await appendGeneratedAttempt(
         input.safeRun,
@@ -1631,7 +1662,7 @@ export async function runGeneratedCompactionProof(
         base,
         input.now,
         { phase: "facts", facts },
-        !result.ok,
+        result.ok ? undefined : result.failureClass,
       );
       if (result.ok) break;
       if (attempt === 1 && policy.retryableErrorClasses.includes(result.failureClass)) continue;

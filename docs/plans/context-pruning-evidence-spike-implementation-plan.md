@@ -2,7 +2,7 @@
 
 | Field | Value |
 |---|---|
-| Status | Active |
+| Status | Archived — owner-accepted `NO-GO` |
 | Owner | invoker |
 | Source PRD | [`../specs/context-pruning.md`](../specs/context-pruning.md) |
 | Source Technical Design | [`../specs/context-pruning-evaluation-design.md`](../specs/context-pruning-evaluation-design.md) |
@@ -678,18 +678,18 @@ work.
 
 | ID | Risk / Question | Mitigation / Owner | Status / blocked leaves |
 |---|---|---|---|
-| R-001 | Metadata allowlist accidentally retains content. | Canary/property tests, schema allowlist, redaction defense; owner: Bytes | open; blocks T-016/T-017 |
-| R-002 | Long-session threshold or branch heuristic biases sample. | Lock threshold/seed, sensitivity table, copied-Pi leaf validation; owner: Bytes | open; blocks T-017 |
-| R-003 | Repository/task clustering weakens generalization. | Pseudonym distribution, session-cluster uncertainty, explicit limitation; owner: invoker | open; does not change primary sample |
-| R-004 | Provider/cache drift confounds cost. | Exact target tuple, actual channels, AB/BA order, cache status, price snapshot; owner: invoker | open; blocks T-020/T-022 |
-| R-005 | Native compaction cost cannot be separated. | T-009A instrumentation + T-009B confirmed generated-fixture proof; no estimates; owner: invoker / Bytes | open; blocks T-020/T-022 |
-| R-006 | Historical repository state cannot be reconstructed. | Exact/reconstructed/unavailable classifications; blinded rubric fallback; owner: invoker | open; blocks only objective checks for affected snapshots |
-| R-007 | Solo evaluator weakens blinding. | Role-separated artifacts, opaque arm labels, second annotator/scorer decision, disclose limitation; owner: invoker | open; blocks T-018–T-020 |
-| Q-001 | Primary provider/model/API/reasoning tuple? | Select from inventory before qualification; owner: invoker | open; blocks T-020/T-022 |
-| Q-002 | Which repositories have objective historical checks? | Inventory selected repository pseudonyms, then map locally; owner: invoker | open; blocks T-020 fixture freeze only |
-| Q-003 | Independent annotator and blinded scorer? | Human or consented model, fixed before Pass B; owner: invoker | open; blocks T-018–T-020 |
-| Q-004 | Can compaction usage be captured? | Implement T-009A then run T-009B; owner: invoker / Bytes | open; blocks protocol freeze and paid replay |
-| Q-005 | Pinned “current” Pi version? | Owner selects exact install and records integrity digest; owner: invoker | open; blocks T-020/T-021 |
+| R-001 | Metadata allowlist accidentally retains content. | Canary/property tests, schema allowlist, redaction defense; owner: Bytes | closed — privacy checks passed and the committed report contains aggregates only |
+| R-002 | Long-session threshold or branch heuristic biases sample. | Lock threshold/seed, sensitivity table, copied-Pi leaf validation; owner: Bytes | closed for Phase 1 — immutable first-40 sample verified; sensitivity limitations retained |
+| R-003 | Repository/task clustering weakens generalization. | Pseudonym distribution, session-cluster uncertainty, explicit limitation; owner: invoker | retained limitation in the terminal report |
+| R-004 | Provider/cache drift confounds cost. | Exact target tuple, actual channels, AB/BA order, cache status, price snapshot; owner: invoker | terminal `not-applicable` — replay was not authorized |
+| R-005 | Native compaction cost cannot be separated. | T-009A instrumentation + T-009B confirmed generated-fixture proof; no estimates; owner: invoker / Bytes | realized — verified `blocking-incomplete`; caused terminal `NO-GO` |
+| R-006 | Historical repository state cannot be reconstructed. | Exact/reconstructed/unavailable classifications; blinded rubric fallback; owner: invoker | terminal `not-applicable` — fixture review was not authorized |
+| R-007 | Solo evaluator weakens blinding. | Role-separated artifacts, opaque arm labels, second annotator/scorer decision, disclose limitation; owner: invoker | terminal `not-applicable` — annotation/scoring was not authorized |
+| Q-001 | Primary provider/model/API/reasoning tuple? | Select from inventory before qualification; owner: invoker | resolved — `openai-codex/gpt-5.6-sol`, `openai-codex-responses`, `medium` |
+| Q-002 | Which repositories have objective historical checks? | Inventory selected repository pseudonyms, then map locally; owner: invoker | terminal `not-applicable` |
+| Q-003 | Independent annotator and blinded scorer? | Human or consented model, fixed before Pass B; owner: invoker | terminal `not-applicable` |
+| Q-004 | Can compaction usage be captured? | Implement T-009A then run T-009B; owner: invoker / Bytes | resolved `blocking-incomplete` |
+| Q-005 | Pinned “current” Pi version? | Owner selects exact install and records integrity digest; owner: invoker | terminal `not-applicable` |
 | Q-006 | Distribution license? | Deferred; owner: invoker | deferred; does not block local Phase 1 |
 
 ## 8. Beads Handoff Notes
@@ -742,8 +742,12 @@ work.
 | T-021: Run the pinned Pi lifecycle and performance evidence matrix | `pib-context-pruning-evidence-bad9.6.5` |
 | T-022: Run confirmed paid paired replay and score all qualifying snapshots | `pib-context-pruning-evidence-bad9.6.6` |
 | T-023: Produce the final aggregate report and record the owner decision | `pib-context-pruning-evidence-bad9.6.7` |
+| T-024: Implement terminal hard-stop orchestration | `pib-context-pruning-evidence-bad9.6.8` |
+| T-025: Complete immutable terminal report corpus supplement | `pib-context-pruning-evidence-bad9.6.9` |
 
-Explicit dependency edges verified: **81**. Runtime graph
+The original converted graph had **81** verified explicit dependency edges. T-024 later added one
+parent edge and one T-009B blocker edge for terminal orchestration; T-025 added one parent edge and
+one T-024 prerequisite for the Change 002 closure correction. Runtime graph
 `pib-pib-context-pruning-phase1-mydl` remains separate and deferred.
 
 ## 10. Revision History
@@ -757,3 +761,6 @@ Explicit dependency edges verified: **81**. Runtime graph
 | 2026-07-14 | Bytes | During bead conversion validation, split the combined T-018/T-019 dependency row so all four intended edges are encoded and machine-verifiable. |
 | 2026-07-14 | Bytes | Converted the Active plan into the new `pib-context-pruning-evidence-bad9` graph and recorded the validated 36-node/81-edge trace. |
 | 2026-07-14 | Bytes / invoker | Applied `context-pruning-change-001`; the baseline remains unchanged while the delta overrides affected contracts and adds four safety-ordering edges. |
+| 2026-07-16 | Bytes / invoker | Completed the verified hard-stop path: T-009B resolved `blocking-incomplete`, T-018–T-022 were authenticated as not applicable, the terminal report verified, and invoker accepted `NO-GO`. Added T-024 to close the missing public-CLI hard-stop orchestration gap. |
+| 2026-07-16 | Bytes / invoker | Applied [`context-pruning-change-002-terminal-report-completeness.md`](context-pruning-change-002-terminal-report-completeness.md): append an immutable, privacy-safe terminal report supplement for verified T-017 aggregates rather than rewriting the formal-pass-a-v4 decision or primary reports. |
+| 2026-07-16 | Bytes | Passed the feature-done gate after T-025, 1,303 tests, package-size verification, terminal supplement verification, and fresh review; archived the one-phase evidence plan in place because this repository has no archive convention. |

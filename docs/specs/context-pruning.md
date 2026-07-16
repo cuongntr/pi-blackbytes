@@ -5,9 +5,10 @@
 | Status | Accepted |
 | Owner | invoker |
 | Created | 2026-07-14 |
-| Updated | 2026-07-14 |
+| Updated | 2026-07-16 |
 | Variant | Brownfield |
-| Decision state | Runtime compression is not approved; Phase 1 is an evidence spike |
+| Decision state | Cost-first proposal ended owner-accepted `NO-GO`; its runtime plan remains deferred |
+| Successor PRD | [`agent-context-working-set.md`](agent-context-working-set.md) — separate quality-first product lineage |
 | Related plan | [`../plans/context-pruning-implementation-plan.md`](../plans/context-pruning-implementation-plan.md) (deferred; not authoritative) |
 
 ## 1. Context
@@ -258,10 +259,10 @@ No implementation plan for the runtime feature may become `Active` before a `GO`
 
 | ID | Question | Owner | Status |
 |---|---|---|---|
-| Q-001 | Are 40 representative long parent sessions available under the local-data rules? | invoker | partially answered — 351 candidate JSONL files found; frame eligibility and qualification pending |
-| Q-002 | Which repositories provide objective task-completion checks for paired evaluation? | invoker | open |
-| Q-003 | Which configured providers expose actual input, output, and cache usage needed for complete accounting? | invoker | open |
-| Q-004 | What blinded rubric and evaluator will be used when objective repository checks are unavailable? | invoker | open |
+| Q-001 | Are 40 representative long parent sessions available under the local-data rules? | invoker | resolved — 40 sessions were deterministically frozen from 182 eligible sources |
+| Q-002 | Which repositories provide objective task-completion checks for paired evaluation? | invoker | terminal `not-applicable` — T-009B blocked fixture review before sampled content was opened |
+| Q-003 | Which configured providers expose actual input, output, and cache usage needed for complete accounting? | invoker | resolved `blocking-incomplete` — the selected target did not expose completely attributable native-compaction/following-main usage |
+| Q-004 | What blinded rubric and evaluator will be used when objective repository checks are unavailable? | invoker | terminal `not-applicable` — annotation and scoring were not authorized after T-009B |
 | Q-005 | What license will govern pi-blackbytes distribution and the clean-room documentation? | invoker | deferred; does not affect Phase 1 local evidence work |
 
 ## 13. Revision History
@@ -276,3 +277,5 @@ No implementation plan for the runtime feature may become `Active` before a `GO`
 | 2026-07-14 | invoker | Accepted the evidence-first PRD; requested corpus inventory as the first Phase 1 activity. |
 | 2026-07-14 | Bytes | Completed metadata-only inventory: 351 candidate session files found with valid structural/usage data; qualification remains pending. |
 | 2026-07-14 | invoker | Activated the Phase 1 Evaluation Design; clarified that a verified hard-stop can complete Phase 1 with `NO-GO`. |
+| 2026-07-16 | Bytes / invoker | Completed the verified hard-stop path after mandatory compaction usage remained unattributable; downstream stages were authenticated as not applicable, the terminal report verified, and invoker accepted the mechanical `NO-GO`. Runtime implementation remains deferred. |
+| 2026-07-16 | Bytes / invoker | Linked the accepted [`agent-context-working-set.md`](agent-context-working-set.md) successor PRD. The new quality-first lineage does not reinterpret this cost-first `NO-GO` or reactivate its runtime plan. |

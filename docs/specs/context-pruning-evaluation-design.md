@@ -2,10 +2,10 @@
 
 | Field | Value |
 |---|---|
-| Status | Active |
+| Status | Complete — owner-accepted `NO-GO` |
 | Owner | invoker |
 | Source PRD | [`context-pruning.md`](context-pruning.md) |
-| Applied change | [`../plans/context-pruning-change-001-evidence-readiness.md`](../plans/context-pruning-change-001-evidence-readiness.md) |
+| Applied changes | [`../plans/context-pruning-change-001-evidence-readiness.md`](../plans/context-pruning-change-001-evidence-readiness.md); [`../plans/context-pruning-change-002-terminal-report-completeness.md`](../plans/context-pruning-change-002-terminal-report-completeness.md) |
 | Related ADRs | None found in this repository; Phase 1 introduces no production architecture decision |
 | Phase | Phase 1 MVP — Evidence Spike |
 | Created | 2026-07-14 |
@@ -829,11 +829,11 @@ Fixtures contain fabricated content only. Real session data is never copied into
 
 | ID | Question | Owner | Status |
 |---|---|---|---|
-| DQ-001 | Which exact provider/model/API/reasoning tuple is the primary evaluation target? | invoker | open — decide after metadata inventory, before qualification |
-| DQ-002 | Which sampled repositories can provide exact or reconstructible historical fixtures and objective checks? | invoker | open |
-| DQ-003 | Who or what serves as the independent second annotator and blinded scorer? | invoker | open |
-| DQ-004 | Can native-compaction generation usage be captured completely in replay horizons? | invoker / Bytes | blocking — resolve before protocol freeze or paid replay |
-| DQ-005 | Is global Pi 0.80.6 the version to pin as “current,” or should protocol freeze use a newer installed version? | invoker | open |
+| DQ-001 | Which exact provider/model/API/reasoning tuple is the primary evaluation target? | invoker | resolved — `openai-codex/gpt-5.6-sol`, API `openai-codex-responses`, reasoning `medium` was immutably selected before T-009B |
+| DQ-002 | Which sampled repositories can provide exact or reconstructible historical fixtures and objective checks? | invoker | terminal `not-applicable` — T-009B blocked qualification and fixture review before sampled content was opened |
+| DQ-003 | Who or what serves as the independent second annotator and blinded scorer? | invoker | terminal `not-applicable` — no annotation or scoring was authorized after T-009B blocked downstream evidence |
+| DQ-004 | Can native-compaction generation usage be captured completely in replay horizons? | invoker / Bytes | resolved `blocking-incomplete` — confirmed generated-only proof observed split-turn/duplicate native attribution and no attributable following-main usage; Pass B, protocol freeze, and paid replay remain unauthorized |
+| DQ-005 | Is global Pi 0.80.6 the version to pin as “current,” or should protocol freeze use a newer installed version? | invoker | terminal `not-applicable` — lifecycle/protocol-freeze execution was not authorized after T-009B |
 | DQ-006 | What license will govern distribution and clean-room documentation? | invoker | deferred; no effect on local Phase 1 evidence |
 
 ## 19. Revision History
@@ -848,3 +848,7 @@ Fixtures contain fabricated content only. Real session data is never copied into
 | 2026-07-14 | Bytes / invoker | Applied `context-pruning-change-001`: staged immutable locks, safe hard-stop sequencing, hermetic-versus-real lifecycle boundaries, and frozen estimator/bootstrap/privacy/retry/provenance contracts. |
 | 2026-07-14 | Bytes | Polish pass 2 fixed pre-use policy ownership, specified the dependency-free bootstrap draw stream and golden vector, and separated proof outcomes from upstream `not-applicable` stage disposition. |
 | 2026-07-14 | Bytes | Polish pass 3 defined the sole generated-proof provider exception and the bounded `underflow-pending`/`underflow-hard-stop` refresh state machine. |
+| 2026-07-16 | Bytes / invoker | Executed the owner-confirmed generated-only T-009B proof against `openai-codex/gpt-5.6-sol`. The verified artifact resolved DQ-004 as `blocking-incomplete`: native compaction exposed split-turn/duplicate attribution while the following-main request had no attributable usage, so no estimation or downstream authorization was permitted. |
+| 2026-07-16 | Bytes | Propagated the verified T-009B blocker through content-free T-018–T-022 dispositions; DQ-001 records the immutable target, while DQ-002, DQ-003, and DQ-005 are terminally not applicable because no qualification, fixture, scoring, lifecycle, or replay work was authorized. |
+| 2026-07-16 | Bytes / invoker | Generated and verified the privacy-safe terminal report with complete threshold trace; invoker accepted the mechanical `NO-GO`, completing Phase 1 while leaving runtime implementation deferred. |
+| 2026-07-16 | Bytes / invoker | Applied `context-pruning-change-002`: append-only terminal supplement reports verified T-017 structural aggregates and the passed 40/40 sample count without rewriting the immutable decision or primary reports. |

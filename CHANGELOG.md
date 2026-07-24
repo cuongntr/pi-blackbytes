@@ -1,5 +1,24 @@
 # Changelog
 
+## 2.20.2 (2026-07-24) — Production Runtime Hardening
+
+Harden direct network access, nested process lifecycle, delegate completion,
+fallback prompts, and filesystem writes without changing public tool schemas.
+
+### Fixed
+
+- Direct `web_fetch` validates literal and DNS-resolved private, loopback, and
+  link-local destinations at every manually followed redirect hop, with each
+  HTTP request receiving only the remaining timeout budget.
+- Nested Pi timeout and cancellation signal the full POSIX process group through
+  the existing `SIGTERM` → grace period → `SIGKILL` lifecycle.
+- Zero-exit nested runs require a parsed `agent_end` event before reporting
+  success, and fallback attempts select prompts for their actual model family.
+- Hashline persistence completes short writes and removes unpublished temp files
+  after pre-rename failures.
+- Oracle uses assumption-first one-shot ambiguity handling; General defers
+  verification commands and ordering to repository instructions.
+
 ## 2.18.0 (2026-06-07) — Skill-Aware Delegation & Lightweight Renderer
 
 Add a Skills prompt section to the Bytes v2 overlay, extend General sub-agent

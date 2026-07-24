@@ -16,7 +16,7 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, it } from "node:test";
 
 import { computeCID } from "../../../utils/cid.js";
-import { resolveWriteTarget, writeFileAtomically } from "../fs-write.js";
+import { resolveWriteTarget, writeBufferFully, writeFileAtomically } from "../fs-write.js";
 import { applyHashlineEdits } from "../index.js";
 
 // All atomic-write tests touch real POSIX semantics (symlinks, hard links,
@@ -255,6 +255,49 @@ describe("writeFileAtomically — byte-for-byte preservation", skipOnWindows, ()
     const payload = "\uFEFFhello\r\nworld\r\n";
     writeFileAtomically(file, 1, 0o644, payload);
     assert.equal(readFileSync(file, "utf8"), payload);
+  });
+});
+
+describe("writeBufferFully", () => {
+  it("advances by bytes written until a UTF-8 buffer is complete", () => {
+    const source = Buffer.from("a😀z", "utf8");
+    const output = Buffer.alloc(source.length);
+    const offsets: number[] = [];
+
+    writeBufferFully(1, source, (_fd, buffer, offset, length) => {
+      offsets.push(offset);
+      const written = Math.min(2, length);
+      buffer.copy(output, offset, offset, offset + written);
+      return written;
+    });
+
+    assert.deepEqual(offsets, [0, 2, 4]);
+    assert.deepEqual(output, source);
+  });
+
+  it("throws when a write makes no progress", () => {
+    assert.throws(() => writeBufferFully(1, Buffer.from("data"), () => 0), /made no progress/);
+  });
+});
+
+describe("writeFileAtomically — temp cleanup", skipOnWindows, () => {
+  let tmp: string;
+
+  beforeEach(() => {
+    tmp = mkdtempSync(join(tmpdir(), "hl-atomic-cleanup-"));
+  });
+
+  afterEach(() => {
+    rmSync(tmp, { recursive: true, force: true });
+  });
+
+  it("removes the unpublished temp and preserves the target after a pre-rename failure", () => {
+    const file = join(tmp, "f.txt");
+    writeFileSync(file, "old\n");
+
+    assert.throws(() => writeFileAtomically(file, 1, -1, "new\n"));
+    assert.equal(readFileSync(file, "utf8"), "old\n");
+    assert.deepEqual(readdirSync(tmp), ["f.txt"]);
   });
 });
 

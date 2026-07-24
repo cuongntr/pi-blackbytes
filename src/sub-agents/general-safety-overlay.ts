@@ -142,11 +142,11 @@ export async function buildGeneralSafetyOverlay(
       "outside the requested change set.",
   );
   sections.push(
-    "- **Verification gate order.** Before claiming completion run " +
-      "`typecheck → lint → test → build` (use the project-defined commands " +
-      "from AGENTS.md / `package.json` scripts). Report each gate's outcome " +
-      "and counts honestly. Never weaken or skip a gate to fabricate a green " +
-      "result.",
+    "- **Verification source of truth.** Before claiming completion, prefer " +
+      "the repository-defined full verification command from AGENTS.md or " +
+      "project scripts. If none exists, run the relevant available checks " +
+      "(lint, typecheck, build, tests) using repository conventions. Report " +
+      "outcomes honestly; never weaken or skip a gate to fabricate a green result.",
   );
 
   if (agentsMd) {

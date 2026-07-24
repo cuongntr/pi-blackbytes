@@ -70,7 +70,7 @@ Resolution rules (centralized in `src/sub-agents/prompt-builder.ts`):
 2. Prompt variant selection uses the resolved nested model string (`snapshot.model`) only. If no nested model is configured, use `systemPrompt`; do **not** fall back to the parent session's cached model family.
 3. If `snapshot.model` exists, classify it with `classifyModel(snapshot.model)`.
 4. If `systemPromptByFamily[family]` exists → use it. Otherwise fall back to `systemPrompt`.
-5. `fallbackModels` do not affect prompt selection in this iteration. The prompt body is selected from the primary resolved model and reused for fallback attempts. This is acceptable because fallback is an error-recovery path and all prompt bodies remain compatible; revisit per metrics if fallback use becomes common.
+5. **Superseded by production-readiness hardening:** each fallback attempt selects the prompt body from that attempt's actual model.
 6. The `prependSystemPrompt` runtime overlay is **always** prepended after family resolution, unchanged.
 
 All five builtin sub-agents carry `gpt` variants:
@@ -167,7 +167,7 @@ Consumers read from `routing` instead of duplicating free text:
 1. **No behavior change** when `sub_agents.oracle.model` or `sub_agents.general.model` is unset — the default `systemPrompt` body is used even if the parent session model is GPT-family.
 2. **GPT variant applies only to a configured nested GPT model.** Setting `blackbytes.sub_agents.oracle.model` or `blackbytes.sub_agents.general.model` to a GPT-family model selects the `gpt` variant for that sub-agent.
 3. **Runtime overlay precedence is unchanged.** `prependSystemPrompt` still runs after family resolution; the order is `[runtime overlay] + [family-resolved system prompt body]`.
-4. **Fallback models reuse the primary prompt body** in this iteration. This avoids a larger fallback-runner refactor and keeps the change surgical.
+4. **Superseded:** fallback attempts now select their prompt body from the actual attempt model.
 5. **`/blackbytes-status` includes a routing section** under enabled sub-agents, sourced from typed `routing` metadata. Cost classification (`low` / `medium` / `high`) is editorial — defined per-agent, not measured.
 6. **Tool description text is shorter and less duplicative.** The parent agent still sees gating rules (for example, `DO NOT use for: …`) but positive routing hints come from the metadata-driven Bytes overlay.
 7. **No regression in token budget for Claude/default users.** The default Oracle prompt body grows by ≤14 lines; General prompt body shrinks by removing the static tool list. Net default-prompt change is approximately neutral.
@@ -180,7 +180,7 @@ Consumers read from `routing` instead of duplicating free text:
 
 **MVP lock**: Oracle guardrails; GPT prompt variants for all builtin sub-agents selected only from a configured nested model; General prompt authority delegated to the runtime overlay; typed routing metadata rendered in the Bytes overlay and `/blackbytes-status`; automated coverage for the behavior.
 
-**Out of phase**: YAML `system_prompt_by_family`, per-attempt prompt switching for `fallbackModels`, additional agents/tools, Reviewer bash access, and `/blackbytes-status` redesign beyond the routing/status sections.
+**Out of phase**: YAML `system_prompt_by_family`, additional agents/tools, Reviewer bash access, and `/blackbytes-status` redesign beyond the routing/status sections.
 
 ### 6.1 Dependency graph
 
@@ -224,7 +224,7 @@ T-008 Verification + manual checks depends on T-003, T-004, T-006, T-007
 - Configured GPT-family nested model → `systemPromptByFamily.gpt` when present.
 - Configured non-GPT or missing family variant → default `systemPrompt`.
 - Existing `promptMode: "append"` fail-loud behavior remains unchanged.
-- `fallbackModels` do not alter prompt-body selection.
+- Each fallback attempt selects its prompt body from that attempt's model.
 
 **Definition of Done**: prompt-builder tests cover fallback behavior; register-level test captures `--system-prompt` and proves GPT/default selection.
 
@@ -346,7 +346,7 @@ No data migration or persistent config migration is required. Declaration fields
 |---|---|
 | Family detection mis-classifies an unknown model name. | Reuse `classifyModel()` from `src/shared/model-capability.ts`; unknown families fall back to `systemPrompt` and never throw. |
 | Parent model family accidentally changes nested prompts. | Variant selection uses `snapshot.model` only. Tests cover a GPT parent/cache with undefined `snapshot.model` and the default prompt. |
-| Fallback model receives a prompt optimized for the primary model. | Accepted for this iteration to keep fallback execution simple; prompt variants remain compatible. Revisit only if fallback metrics show meaningful usage. |
+| Fallback model receives a prompt optimized for the primary model. | Superseded: the existing runner adapter now resolves the prompt body per attempt. |
 | Routing metadata drifts from the prose in tool descriptions. | Descriptions avoid positive `useWhen` lists. Overlay and status read from `routing`, with tests generated from metadata fixtures. |
 | User YAML agents without `routing` show up empty in `/blackbytes-status`. | Render `—` placeholder; do not require `routing` (back-compat). |
 | Snapshot tests churn. | Land Phase 1 first with no prompt text changes; update snapshots in Phase 2/3/4 deliberately. |
@@ -356,7 +356,6 @@ No data migration or persistent config migration is required. Declaration fields
 
 - Reviewer gaining `bash` access (architectural decision, separate spec).
 - User-defined YAML `system_prompt_by_family` support.
-- Per-attempt prompt-body switching for `fallbackModels`.
 - `/blackbytes-status` UI redesign — just one new section.
 - Migrating user YAML agents to require typed routing.
 

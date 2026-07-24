@@ -393,7 +393,11 @@ describe("registerSubAgent", () => {
   it("returns success content on runNestedPi success", async () => {
     initEnabledSet(defaultConfig);
     const pi = makeFakePi();
-    const spawnFn = makeCapturingSpawnFn({ stdoutData: "found it!", exitCode: 0 });
+    const stdoutData = `${JSON.stringify({
+      type: "agent_end",
+      messages: [{ role: "assistant", content: [{ type: "text", text: "found it!" }] }],
+    })}\n`;
+    const spawnFn = makeCapturingSpawnFn({ stdoutData, exitCode: 0 });
 
     registerSubAgent(pi, testDecl, { spawnFn });
 
@@ -930,6 +934,69 @@ describe("registerSubAgent snapshot integration", () => {
     assert.ok(thinkingIdx >= 0, "--thinking should be passed");
     assert.equal(capturedArgs[thinkingIdx + 1], "high");
   });
+
+  for (const scenario of [
+    {
+      name: "GPT primary to non-GPT fallback",
+      primary: "gpt-5",
+      fallback: "claude-sonnet-4",
+      expectedPrompts: ["GPT prompt", "Default prompt"],
+    },
+    {
+      name: "non-GPT primary to GPT fallback",
+      primary: "claude-sonnet-4",
+      fallback: "gpt-5",
+      expectedPrompts: ["Default prompt", "GPT prompt"],
+    },
+  ]) {
+    it(`selects the prompt body per attempt for ${scenario.name}`, async () => {
+      const { _resetAgentSnapshot, initAgentSnapshot } = await import("../snapshot.js");
+      initEnabledSet(defaultConfig);
+      _resetAgentSnapshot();
+
+      const decl = defineSubAgent<{ q: string }>({
+        name: "explore",
+        toolName: "delegate_explore",
+        description: "x",
+        parameters: Type.Object({ q: Type.String() }),
+        systemPrompt: "Default prompt",
+        systemPromptByFamily: { gpt: "GPT prompt" },
+        allowedTools: ["read"],
+        mutability: "read-only",
+        buildUserPrompt: (p) => p.q,
+      });
+      initAgentSnapshot([decl], {
+        ...defaultConfig,
+        sub_agents: {
+          explore: { model: scenario.primary, fallbackModels: [scenario.fallback] },
+        },
+      });
+
+      const capturedPrompts: string[] = [];
+      let attempt = 0;
+      const spawnFn = ((_cmd: string, args: string[]) => {
+        const promptIndex = args.indexOf("--system-prompt");
+        capturedPrompts.push(args[promptIndex + 1] ?? "");
+        attempt++;
+        if (attempt === 1) {
+          return makeFakeChild({ stderrData: "model unavailable", exitCode: 1 });
+        }
+        return makeFakeChild({
+          stdoutData: `${JSON.stringify({ type: "agent_end", messages: [] })}\n`,
+          exitCode: 0,
+        });
+      }) as unknown as SpawnFn;
+
+      const pi = makeFakePi();
+      registerSubAgent(pi, decl, { spawnFn });
+      const result = await pi.registeredTools
+        .get("delegate_explore")!
+        .execute("call-fallback", { q: "q" });
+
+      assert.equal(result.details.status, "completed");
+      assert.deepEqual(capturedPrompts, scenario.expectedPrompts);
+    });
+  }
 
   it("snapshot is the source of truth even if config disk-state changes after startup", async () => {
     const { _resetAgentSnapshot, initAgentSnapshot } = await import("../snapshot.js");

@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it } from "node:test";
 import type { HttpFetchOptions, HttpResult } from "../../_shared/http.js";
-import { executeWebsearchFetch } from "../fetch.js";
+import { type ResolveHostname, executeWebsearchFetch } from "../fetch.js";
 import { executeWebsearchSearch } from "../search.js";
 
 // --- helpers ---
@@ -13,11 +13,16 @@ function makeOkResult(data: unknown, headers: Headers = new Headers()): HttpResu
   return { ok: true, status: 200, data, headers };
 }
 
-function makeErrorResult(error: string, status?: number): HttpResult {
-  return { ok: false, error, status };
+function makeErrorResult(error: string, status?: number, headers?: Headers): HttpResult {
+  return { ok: false, error, status, headers };
 }
 
 type MockFetch = (opts: HttpFetchOptions) => Promise<HttpResult>;
+const resolvePublicHostname: ResolveHostname = async () => ["93.184.216.34"];
+
+function executeTestFetch(params: Parameters<typeof executeWebsearchFetch>[0], fetchFn: MockFetch) {
+  return executeWebsearchFetch(params, fetchFn, resolvePublicHostname);
+}
 
 function restoreEnv(name: string, value: string | undefined): void {
   if (value === undefined) {
@@ -51,6 +56,10 @@ async function withoutWebEnv(fn: () => Promise<void>): Promise<void> {
     restoreEnv("EXA_API_KEY", originalExa);
     restoreEnv("TAVILY_API_KEY", originalTavily);
   }
+}
+
+async function withDirectFetch(fn: () => Promise<void>): Promise<void> {
+  await withConfig({ websearch: { provider: "tavily" } }, fn);
 }
 
 // --- web_search tests ---
@@ -223,7 +232,7 @@ describe("web_fetch", () => {
           });
         };
 
-        const result = await executeWebsearchFetch({ url: "https://example.com" }, mockFetch);
+        const result = await executeTestFetch({ url: "https://example.com" }, mockFetch);
 
         assert.equal(capturedOpts?.url, "https://api.exa.ai/contents");
         assert.equal(capturedOpts?.headers?.["x-api-key"], "test-key");
@@ -246,7 +255,7 @@ describe("web_fetch", () => {
             });
           };
 
-          const result = await executeWebsearchFetch({ url: "https://example.com" }, mockFetch);
+          const result = await executeTestFetch({ url: "https://example.com" }, mockFetch);
 
           assert.equal(capturedOpts?.url, "https://api.tavily.com/extract");
           assert.equal(capturedOpts?.headers?.Authorization, "Bearer test-key");
@@ -266,7 +275,7 @@ describe("web_fetch", () => {
             new Headers({ "content-type": "text/html" }),
           );
 
-        const result = await executeWebsearchFetch({ url: "https://example.com" }, mockFetch);
+        const result = await executeTestFetch({ url: "https://example.com" }, mockFetch);
 
         assert.ok(result.content[0].text.includes("Fetched https://example.com: HTTP 200"));
         assert.ok(result.content[0].text.includes("Provider fallback"));
@@ -287,7 +296,7 @@ describe("web_fetch", () => {
           return makeOkResult("page content");
         };
 
-        await executeWebsearchFetch({ url: "http://example.com/page" }, mockFetch);
+        await executeTestFetch({ url: "http://example.com/page" }, mockFetch);
 
         assert.ok(capturedUrl.startsWith("https://"), `Expected https://, got: ${capturedUrl}`);
         assert.equal(capturedUrl, "https://example.com/page");
@@ -300,7 +309,7 @@ describe("web_fetch", () => {
       await withConfig({}, async () => {
         const mockFetch: MockFetch = async () => makeErrorResult("Timeout");
 
-        const result = await executeWebsearchFetch({ url: "https://example.com" }, mockFetch);
+        const result = await executeTestFetch({ url: "https://example.com" }, mockFetch);
         assert.ok(result.content[0].text.includes("Fetched https://example.com: error (Timeout)"));
       });
     });
@@ -315,7 +324,7 @@ describe("web_fetch", () => {
           return makeOkResult("ok");
         };
 
-        await executeWebsearchFetch({ url: "https://example.com", timeout: 30 }, mockFetch);
+        await executeTestFetch({ url: "https://example.com", timeout: 30 }, mockFetch);
 
         assert.equal(capturedOpts?.timeoutMs, 30000);
       });
@@ -331,7 +340,7 @@ describe("web_fetch", () => {
           return makeOkResult("<p>Hello</p>", new Headers({ "content-type": "text/html" }));
         };
 
-        const result = await executeWebsearchFetch(
+        const result = await executeTestFetch(
           { url: "https://example.com", format: "text" },
           mockFetch,
         );
@@ -341,6 +350,122 @@ describe("web_fetch", () => {
         assert.equal(capturedOpts?.headers?.["Accept-Language"], "en-US,en;q=0.9");
         assert.ok(result.content[0].text.includes("Format: text"));
         assert.ok(result.content[0].text.includes("Hello"));
+      });
+    });
+  });
+
+  for (const url of ["https://127.0.0.1/admin", "https://[::1]/admin"]) {
+    it(`blocks literal private destination ${url}`, async () => {
+      await withoutWebEnv(async () => {
+        await withDirectFetch(async () => {
+          let fetched = false;
+          const result = await executeWebsearchFetch(
+            { url },
+            async () => {
+              fetched = true;
+              return makeOkResult("secret");
+            },
+            resolvePublicHostname,
+          );
+
+          assert.equal(fetched, false);
+          assert.match(result.content[0].text, /Blocked destination/);
+        });
+      });
+    });
+  }
+
+  it("blocks a hostname when any resolved address is private", async () => {
+    await withoutWebEnv(async () => {
+      await withDirectFetch(async () => {
+        const result = await executeWebsearchFetch(
+          { url: "https://example.com" },
+          async () => makeOkResult("secret"),
+          async () => ["93.184.216.34", "10.0.0.5"],
+        );
+
+        assert.match(result.content[0].text, /Blocked destination/);
+      });
+    });
+  });
+
+  it("follows relative redirects manually and validates each hop", async () => {
+    await withoutWebEnv(async () => {
+      await withDirectFetch(async () => {
+        const requests: HttpFetchOptions[] = [];
+        const mockFetch: MockFetch = async (opts) => {
+          requests.push(opts);
+          if (requests.length === 1) {
+            return makeErrorResult("HTTP 302", 302, new Headers({ location: "/docs/next" }));
+          }
+          return makeOkResult("public page");
+        };
+
+        const result = await executeTestFetch({ url: "https://example.com/start" }, mockFetch);
+
+        assert.deepEqual(
+          requests.map((request) => request.url),
+          ["https://example.com/start", "https://example.com/docs/next"],
+        );
+        assert.ok(requests.every((request) => request.redirect === "manual"));
+        assert.match(result.content[0].text, /public page/);
+      });
+    });
+  });
+
+  it("blocks a public redirect to a private destination before the next request", async () => {
+    await withoutWebEnv(async () => {
+      await withDirectFetch(async () => {
+        let requests = 0;
+        const result = await executeTestFetch({ url: "https://example.com" }, async () => {
+          requests++;
+          return makeErrorResult(
+            "HTTP 302",
+            302,
+            new Headers({ location: "https://127.0.0.1/admin" }),
+          );
+        });
+
+        assert.equal(requests, 1);
+        assert.match(result.content[0].text, /Blocked destination/);
+      });
+    });
+  });
+
+  it("stops after the fixed redirect limit", async () => {
+    await withoutWebEnv(async () => {
+      await withDirectFetch(async () => {
+        let requests = 0;
+        const result = await executeTestFetch({ url: "https://example.com/0" }, async () => {
+          requests++;
+          return makeErrorResult("HTTP 302", 302, new Headers({ location: `/next-${requests}` }));
+        });
+
+        assert.equal(requests, 6);
+        assert.match(result.content[0].text, /Too many redirects/);
+      });
+    });
+  });
+
+  it("shares one decreasing timeout budget across redirect hops", async () => {
+    await withoutWebEnv(async () => {
+      await withDirectFetch(async () => {
+        const timeouts: number[] = [];
+        const result = await executeTestFetch(
+          { url: "https://example.com/start", timeout: 1 },
+          async (opts) => {
+            timeouts.push(opts.timeoutMs ?? 0);
+            if (timeouts.length === 1) {
+              await new Promise((resolve) => setTimeout(resolve, 20));
+              return makeErrorResult("HTTP 302", 302, new Headers({ location: "/next" }));
+            }
+            return makeOkResult("done");
+          },
+        );
+
+        assert.equal(timeouts.length, 2);
+        assert.ok(timeouts[1]! < timeouts[0]!);
+        assert.match(result.content[0].text, /done/);
       });
     });
   });

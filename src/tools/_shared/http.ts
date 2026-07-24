@@ -11,6 +11,7 @@ export interface HttpFetchOptions {
   signal?: AbortSignal;
   redactKeys?: string[];
   maxBodyBytes?: number;
+  redirect?: RequestRedirect;
 }
 
 export interface HttpSuccess {
@@ -26,6 +27,7 @@ export interface HttpError {
   ok: false;
   error: string;
   status?: number;
+  headers?: Headers;
 }
 
 export type HttpResult = HttpSuccess | HttpError;
@@ -122,6 +124,7 @@ export async function httpFetch(opts: HttpFetchOptions): Promise<HttpResult> {
     signal: callerSignal,
     redactKeys: _redactKeys,
     maxBodyBytes = DEFAULT_MAX_BODY_BYTES,
+    redirect,
   } = opts;
 
   let method = opts.method;
@@ -142,6 +145,7 @@ export async function httpFetch(opts: HttpFetchOptions): Promise<HttpResult> {
     method,
     headers,
     signal: combinedSignal,
+    redirect,
   };
 
   if (body !== undefined) {
@@ -164,6 +168,7 @@ export async function httpFetch(opts: HttpFetchOptions): Promise<HttpResult> {
         ok: false,
         error: `HTTP ${response.status}: ${response.statusText}${detail}`,
         status: response.status,
+        headers: response.headers,
       };
     }
 

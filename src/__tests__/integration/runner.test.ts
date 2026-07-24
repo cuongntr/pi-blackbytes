@@ -48,6 +48,13 @@ function makeFakeChild(options: {
   return child;
 }
 
+function agentEnd(text: string): string {
+  return `${JSON.stringify({
+    type: "agent_end",
+    messages: [{ role: "assistant", content: [{ type: "text", text }] }],
+  })}\n`;
+}
+
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
@@ -70,7 +77,7 @@ describe("integration: runNestedPi runner", () => {
   it("success: runNestedPi returns DelegateResult with success=true and stdout output", async () => {
     // Arrange: mock spawn that emits stdout then closes with code 0
     const expectedOutput = "Task completed successfully.\nAll done.";
-    const fakeChild = makeFakeChild({ stdoutData: expectedOutput, exitCode: 0 });
+    const fakeChild = makeFakeChild({ stdoutData: agentEnd(expectedOutput), exitCode: 0 });
     const spawnFn = (() => fakeChild) as unknown as SpawnFn;
 
     // Act

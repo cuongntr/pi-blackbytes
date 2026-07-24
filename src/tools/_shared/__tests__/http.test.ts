@@ -95,7 +95,9 @@ describe("httpFetch", () => {
   });
 
   it("non-2xx response returns error with status", async () => {
-    globalThis.fetch = mock.fn(async () => makeResponse(404, "Not Found", "Not Found"));
+    globalThis.fetch = mock.fn(async () =>
+      makeResponse(404, "Not Found", "Not Found", { Location: "/login" }),
+    );
 
     const result = await httpFetch({ url: "https://example.com" });
 
@@ -103,6 +105,18 @@ describe("httpFetch", () => {
     if (result.ok) throw new Error("Expected error");
     assert.equal(result.status, 404);
     assert.match(result.error, /HTTP 404/);
+    assert.equal(result.headers?.get("location"), "/login");
+  });
+
+  it("passes the redirect mode to native fetch", async () => {
+    let capturedInit: RequestInit | undefined;
+    globalThis.fetch = mock.fn(async (_url: RequestInfo | URL, init?: RequestInit) => {
+      capturedInit = init;
+      return makeResponse(200, "{}");
+    }) as typeof globalThis.fetch;
+
+    await httpFetch({ url: "https://example.com", redirect: "manual" });
+    assert.equal(capturedInit?.redirect, "manual");
   });
 
   it("AbortSignal cancellation returns abort error", async () => {

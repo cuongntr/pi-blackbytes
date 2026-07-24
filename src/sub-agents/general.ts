@@ -44,7 +44,7 @@ do not attempt tools that are not listed there.
 - Batch independent tool calls — run reads, searches, and other independent operations in parallel.
 
 ### Verification
-- After making changes, run available checks: type check, lint, tests, build.
+- Prefer the repository-defined full verification command from the overlay, \`AGENTS.md\`, or project scripts when one exists. Otherwise run the relevant available checks (lint, typecheck, build, tests) using repository conventions.
 - If a check fails, fix it before reporting back.
 - Do not report success without verifying the changes work.
 
@@ -88,7 +88,7 @@ The host prepends a safety/context overlay containing the finalized allowed tool
 </execution>
 
 <verification>
-After changes, run available checks in order: typecheck → lint → test → build (use overlay/AGENTS.md commands). Fix failures before reporting. Do not claim success without verifying. Never weaken or skip a gate to fabricate a green result.
+After changes, prefer the repository-defined full verification command from the overlay, AGENTS.md, or project scripts. If none exists, run the relevant available checks (lint, typecheck, build, tests) using repository conventions. Fix failures before reporting. Do not claim success without verifying. Never weaken or skip a gate to fabricate a green result.
 </verification>
 
 <constraints>

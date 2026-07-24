@@ -121,12 +121,13 @@ export function writeFileAtomically(
   mode: number,
   content: string,
 ): void {
+  const buffer = Buffer.from(content, "utf8");
   try {
     if (hardLinkCount > 1) {
-      writeInPlaceTruncate(targetPath, mode, content);
+      writeInPlaceTruncate(targetPath, mode, buffer);
       return;
     }
-    writeViaTempRename(targetPath, mode, content);
+    writeViaTempRename(targetPath, mode, buffer);
   } catch (e) {
     const code = (e as NodeJS.ErrnoException).code;
     if (code && FRIENDLY_FS_CODES.has(code)) {
@@ -141,22 +142,33 @@ export function writeFileAtomically(
 // internals
 // ---------------------------------------------------------------------------
 
-function writeInPlaceTruncate(targetPath: string, mode: number, content: string): void {
+type WriteBuffer = (fd: number, buffer: Buffer, offset: number, length: number) => number;
+
+export function writeBufferFully(fd: number, buffer: Buffer, write: WriteBuffer = writeSync): void {
+  let offset = 0;
+  while (offset < buffer.length) {
+    const written = write(fd, buffer, offset, buffer.length - offset);
+    if (written === 0) {
+      throw new Error("Filesystem write made no progress");
+    }
+    offset += written;
+  }
+}
+
+function writeInPlaceTruncate(targetPath: string, mode: number, content: Buffer): void {
   // O_WRONLY | O_TRUNC: preserve inode (and therefore all hard-link aliases).
   // We intentionally do NOT chmod here — in-place writes preserve the existing
   // mode by construction, so a stale mode argument can't downgrade perms.
   void mode;
   const fd = openSync(targetPath, fsConstants.O_WRONLY | fsConstants.O_TRUNC);
   try {
-    if (content.length > 0) {
-      writeSync(fd, content, 0, "utf8");
-    }
+    writeBufferFully(fd, content);
   } finally {
     closeSync(fd);
   }
 }
 
-function writeViaTempRename(targetPath: string, mode: number, content: string): void {
+function writeViaTempRename(targetPath: string, mode: number, content: Buffer): void {
   const dir = dirname(targetPath);
   const base = basename(targetPath);
   const tempName = buildTempName(base);
@@ -171,15 +183,22 @@ function writeViaTempRename(targetPath: string, mode: number, content: string): 
     mode,
   );
   try {
-    if (content.length > 0) {
-      writeSync(fd, content, 0, "utf8");
+    try {
+      writeBufferFully(fd, content);
+      // `openSync(..., mode)` is subject to umask, so the on-disk mode may be
+      // narrower than `mode`. `fchmodSync` sets the mode unconditionally so
+      // the rename target receives exactly the bits the caller asked for.
+      fchmodSync(fd, mode);
+    } finally {
+      closeSync(fd);
     }
-    // `openSync(..., mode)` is subject to umask, so the on-disk mode may be
-    // narrower than `mode`. `fchmodSync` sets the mode unconditionally so
-    // the rename target receives exactly the bits the caller asked for.
-    fchmodSync(fd, mode);
-  } finally {
-    closeSync(fd);
+  } catch (e) {
+    try {
+      unlinkSync(tempPath);
+    } catch {
+      // ignore — original error is more useful
+    }
+    throw e;
   }
 
   try {

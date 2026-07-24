@@ -15,4 +15,14 @@ describe("oracle prompt contracts", () => {
     assert.ok(prompt.includes("Confidence"));
     assert.ok(prompt.includes("<output_spec>"));
   });
+
+  for (const model of [undefined, "gpt-4"] as const) {
+    it(`uses assumption-first one-shot ambiguity handling for ${model ?? "default"}`, () => {
+      const prompt = resolveSystemPromptBody(oracleDeclaration, model);
+      assert.ok(prompt.includes("one-shot consultation"));
+      assert.ok(prompt.includes("do not stop to ask clarifying questions"));
+      assert.ok(prompt.includes("state the assumption"));
+      assert.ok(prompt.includes("without waiting for a reply"));
+    });
+  }
 });

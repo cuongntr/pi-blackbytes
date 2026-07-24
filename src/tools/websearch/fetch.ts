@@ -1,3 +1,5 @@
+import { lookup } from "node:dns/promises";
+import { isIP } from "node:net";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 import { loadBlackbytesConfig } from "../../config/loader.js";
@@ -14,9 +16,15 @@ const DIRECT_FETCH_MAX_BODY_BYTES = 5 * 1024 * 1024;
 const PROVIDER_FETCH_MAX_BODY_BYTES = 2 * 1024 * 1024;
 const WEB_FETCH_COMPACT_CHARS = 6000;
 const MAX_TIMEOUT_SECONDS = 120;
+const DEFAULT_TIMEOUT_MS = 30_000;
+const MAX_DIRECT_REDIRECTS = 5;
 
 type WebFetchFormat = "text" | "markdown" | "html";
 type FetchFn = (opts: HttpFetchOptions) => ReturnType<typeof httpFetch>;
+export type ResolveHostname = (hostname: string) => Promise<readonly string[]>;
+
+const resolveHostname: ResolveHostname = async (hostname) =>
+  (await lookup(hostname, { all: true, verbatim: true })).map((entry) => entry.address);
 
 interface FetchParams {
   url: string;
@@ -54,6 +62,88 @@ function normalizeUrl(url: string): string | string[] {
   if (url.startsWith("http://")) return `https://${url.slice("http://".length)}`;
   if (url.startsWith("https://")) return url;
   return [`Invalid URL: ${url}`, "URL must start with http:// or https://."];
+}
+
+function parseIpv4(address: string): number[] | undefined {
+  if (isIP(address) !== 4) return undefined;
+  return address.split(".").map(Number);
+}
+
+function isBlockedIpv4(address: string): boolean {
+  const octets = parseIpv4(address);
+  if (!octets) return false;
+  const [a, b] = octets;
+  return (
+    a === 10 ||
+    a === 127 ||
+    (a === 169 && b === 254) ||
+    (a === 172 && b !== undefined && b >= 16 && b <= 31) ||
+    (a === 192 && b === 168)
+  );
+}
+
+function parseIpv6(address: string): number[] | undefined {
+  if (isIP(address) !== 6) return undefined;
+  let normalized = address.toLowerCase();
+  const ipv4Match = normalized.match(/(\d+\.\d+\.\d+\.\d+)$/);
+  if (ipv4Match) {
+    const octets = parseIpv4(ipv4Match[1]);
+    if (!octets) return undefined;
+    const ipv4Hextets = [
+      ((octets[0] ?? 0) << 8) | (octets[1] ?? 0),
+      ((octets[2] ?? 0) << 8) | (octets[3] ?? 0),
+    ];
+    normalized = `${normalized.slice(0, -ipv4Match[1].length)}${ipv4Hextets
+      .map((part) => part.toString(16))
+      .join(":")}`;
+  }
+
+  const halves = normalized.split("::");
+  if (halves.length > 2) return undefined;
+  const left = halves[0] ? halves[0].split(":").map((part) => Number.parseInt(part, 16)) : [];
+  const right = halves[1] ? halves[1].split(":").map((part) => Number.parseInt(part, 16)) : [];
+  const missing = 8 - left.length - right.length;
+  if ((halves.length === 1 && missing !== 0) || missing < 0) return undefined;
+  return [...left, ...Array.from({ length: missing }, () => 0), ...right];
+}
+
+function isBlockedAddress(address: string): boolean {
+  if (isBlockedIpv4(address)) return true;
+  const parts = parseIpv6(address);
+  if (!parts) return false;
+  const first = parts[0] ?? 0;
+  if (parts.slice(0, 7).every((part) => part === 0) && parts[7] === 1) return true;
+  if ((first & 0xfe00) === 0xfc00 || (first & 0xffc0) === 0xfe80) return true;
+
+  const ipv4Prefix = parts.slice(0, 6);
+  const isCompatible = ipv4Prefix.every((part) => part === 0);
+  const isMapped = parts.slice(0, 5).every((part) => part === 0) && parts[5] === 0xffff;
+  if (!isCompatible && !isMapped) return false;
+  const high = parts[6] ?? 0;
+  const low = parts[7] ?? 0;
+  return isBlockedIpv4(`${high >> 8}.${high & 0xff}.${low >> 8}.${low & 0xff}`);
+}
+
+async function validateDirectDestination(
+  url: string,
+  resolve: ResolveHostname,
+): Promise<string | undefined> {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return `Blocked destination: invalid URL ${url}`;
+  }
+  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+    return `Blocked destination: unsupported protocol ${parsed.protocol}`;
+  }
+
+  const hostname = parsed.hostname.replace(/^\[|\]$/g, "");
+  const addresses = isIP(hostname) ? [hostname] : await resolve(hostname);
+  if (addresses.some(isBlockedAddress)) {
+    return `Blocked destination: ${hostname} resolves to a private, loopback, or link-local address`;
+  }
+  return undefined;
 }
 
 function stringifyFetchedData(data: unknown): string {
@@ -181,6 +271,7 @@ async function fetchDirect(
   requestedUrl: string,
   params: FetchParams,
   fetchFn: FetchFn,
+  resolve: ResolveHostname,
   fallbackReason?: string,
 ): Promise<TextToolResult> {
   const format = params.format ?? "markdown";
@@ -188,45 +279,94 @@ async function fetchDirect(
   const normalized = normalizeUrl(requestedUrl);
   if (Array.isArray(normalized)) return textResult(normalized.join("\n"));
 
+  const totalTimeoutMs = timeoutSeconds !== undefined ? timeoutSeconds * 1000 : DEFAULT_TIMEOUT_MS;
+  const deadline = Date.now() + totalTimeoutMs;
   const request = {
     url: normalized,
     method: "GET",
     headers: directHeaders(format),
-    timeoutMs: timeoutSeconds !== undefined ? timeoutSeconds * 1000 : undefined,
+    timeoutMs: totalTimeoutMs,
     maxBodyBytes: DIRECT_FETCH_MAX_BODY_BYTES,
+    redirect: "manual",
   } satisfies HttpFetchOptions;
 
-  let result = await fetchFn(request);
-  if (!result.ok && result.status === 403) {
-    result = await fetchFn({ ...request, headers: directHeaders(format, "bytes") });
-  }
+  let currentUrl = normalized;
+  for (let redirects = 0; ; redirects++) {
+    let destinationError: string | undefined;
+    try {
+      destinationError = await validateDirectDestination(currentUrl, resolve);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      destinationError = `Blocked destination: DNS resolution failed (${message})`;
+    }
+    if (destinationError) {
+      const fallbackLine = fallbackReason ? `\nProvider fallback: ${fallbackReason}` : "";
+      return textResult(`Fetched ${currentUrl}: error (${destinationError})${fallbackLine}`);
+    }
 
-  if (!result.ok) {
-    const status = result.status !== undefined ? `error HTTP ${result.status}` : "error";
-    const fallbackLine = fallbackReason ? `\nProvider fallback: ${fallbackReason}` : "";
-    return textResult(`Fetched ${normalized}: ${status} (${result.error})${fallbackLine}`);
-  }
+    const remainingMs = deadline - Date.now();
+    if (remainingMs <= 0) {
+      return textResult(
+        `Fetched ${currentUrl}: error (Request timed out after ${totalTimeoutMs}ms)`,
+      );
+    }
 
-  const finalUrl = result.finalUrl ?? normalized;
-  const contentType = result.headers.get("content-type") ?? "unknown";
-  const rawText = stringifyFetchedData(result.data);
-  const bodyText = formatDirectContent(rawText, contentType, format);
-  const truncation = result.bodyTruncated
-    ? `\n[Response body truncated at ${DIRECT_FETCH_MAX_BODY_BYTES.toLocaleString("en-US")} bytes.]`
-    : "";
-  const fallbackLine = fallbackReason ? `Provider fallback: ${fallbackReason}` : "";
-  const fullText = [
-    `Fetched ${finalUrl}: HTTP ${result.status}`,
-    `Content-Type: ${contentType}`,
-    `Format: ${format}`,
-    fallbackLine,
-    truncation.trim(),
-    "",
-    bodyText || "(empty response body)",
-  ]
-    .filter((part, index) => index === 5 || part.length > 0)
-    .join("\n");
-  return renderFetchedText(fullText);
+    let result = await fetchFn({ ...request, url: currentUrl, timeoutMs: remainingMs });
+    if (!result.ok && result.status === 403) {
+      const retryRemainingMs = deadline - Date.now();
+      if (retryRemainingMs <= 0) {
+        return textResult(
+          `Fetched ${currentUrl}: error (Request timed out after ${totalTimeoutMs}ms)`,
+        );
+      }
+      result = await fetchFn({
+        ...request,
+        url: currentUrl,
+        headers: directHeaders(format, "bytes"),
+        timeoutMs: retryRemainingMs,
+      });
+    }
+
+    const location = result.headers?.get("location");
+    if (
+      result.status !== undefined &&
+      [301, 302, 303, 307, 308].includes(result.status) &&
+      location
+    ) {
+      if (redirects >= MAX_DIRECT_REDIRECTS) {
+        return textResult(`Fetched ${currentUrl}: error (Too many redirects)`);
+      }
+      currentUrl = new URL(location, currentUrl).toString();
+      continue;
+    }
+
+    if (!result.ok) {
+      const status = result.status !== undefined ? `error HTTP ${result.status}` : "error";
+      const fallbackLine = fallbackReason ? `\nProvider fallback: ${fallbackReason}` : "";
+      return textResult(`Fetched ${currentUrl}: ${status} (${result.error})${fallbackLine}`);
+    }
+
+    const finalUrl = result.finalUrl ?? currentUrl;
+    const contentType = result.headers.get("content-type") ?? "unknown";
+    const rawText = stringifyFetchedData(result.data);
+    const bodyText = formatDirectContent(rawText, contentType, format);
+    const truncation = result.bodyTruncated
+      ? `\n[Response body truncated at ${DIRECT_FETCH_MAX_BODY_BYTES.toLocaleString("en-US")} bytes.]`
+      : "";
+    const fallbackLine = fallbackReason ? `Provider fallback: ${fallbackReason}` : "";
+    const fullText = [
+      `Fetched ${finalUrl}: HTTP ${result.status}`,
+      `Content-Type: ${contentType}`,
+      `Format: ${format}`,
+      fallbackLine,
+      truncation.trim(),
+      "",
+      bodyText || "(empty response body)",
+    ]
+      .filter((part, index) => index === 5 || part.length > 0)
+      .join("\n");
+    return renderFetchedText(fullText);
+  }
 }
 
 async function fetchWithExa(
@@ -315,6 +455,7 @@ async function fetchWithTavily(
 export async function executeWebsearchFetch(
   params: FetchParams,
   fetchFn: FetchFn = httpFetch,
+  resolve: ResolveHostname = resolveHostname,
 ): Promise<TextToolResult> {
   const normalized = normalizeUrl(params.url);
   if (Array.isArray(normalized)) return textResult(normalized.join("\n"));
@@ -326,6 +467,7 @@ export async function executeWebsearchFetch(
       params.url,
       params,
       fetchFn,
+      resolve,
       "Tavily API key missing; set blackbytes.websearch.tavily_api_key or TAVILY_API_KEY.",
     );
   }
@@ -340,6 +482,7 @@ export async function executeWebsearchFetch(
     params.url,
     params,
     fetchFn,
+    resolve,
     `${config.provider} provider failed: ${providerResult}`,
   );
 }

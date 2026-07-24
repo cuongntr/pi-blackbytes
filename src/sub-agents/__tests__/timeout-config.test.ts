@@ -457,7 +457,11 @@ describe("runNestedPi timeout enforcement with custom timeoutMs", () => {
   });
 
   it("completes normally when process exits before custom timeoutMs", async () => {
-    const fastSpawnFn = makeCapturingSpawnFn({ stdoutData: "done", exitCode: 0, delay: 5 });
+    const stdoutData = `${JSON.stringify({
+      type: "agent_end",
+      messages: [{ role: "assistant", content: [{ type: "text", text: "done" }] }],
+    })}\n`;
+    const fastSpawnFn = makeCapturingSpawnFn({ stdoutData, exitCode: 0, delay: 5 });
 
     const result = await runNestedPi(
       {

@@ -196,6 +196,7 @@ export async function runNestedPi(
     let killGraceHandle: ReturnType<typeof setTimeout> | undefined;
     let child: ReturnType<SpawnFn>;
     let closeObserved = false;
+    let terminationUsesProcessGroup = false;
 
     let stdout = "";
     let stderr = "";
@@ -211,10 +212,27 @@ export async function runNestedPi(
       terminationReason ??= reason;
       if (terminationRequested) return;
       terminationRequested = true;
-      child.kill("SIGTERM");
+      if (process.platform !== "win32" && child.pid !== undefined) {
+        try {
+          process.kill(-child.pid, "SIGTERM");
+          terminationUsesProcessGroup = true;
+        } catch {
+          child.kill("SIGTERM");
+        }
+      } else {
+        child.kill("SIGTERM");
+      }
       killGraceHandle = setTimeout(() => {
         if (settled) return;
-        child.kill("SIGKILL");
+        if (terminationUsesProcessGroup && child.pid !== undefined) {
+          try {
+            process.kill(-child.pid, "SIGKILL");
+          } catch {
+            child.kill("SIGKILL");
+          }
+        } else {
+          child.kill("SIGKILL");
+        }
         finish(makeTerminationResult(terminationReason ?? reason));
       }, killGraceMs);
     };
@@ -254,6 +272,7 @@ export async function runNestedPi(
         cwd: cwd ?? process.cwd(),
         env: safeEnv,
         stdio: ["ignore", "pipe", "pipe"],
+        detached: process.platform !== "win32",
       });
     } catch (err) {
       finish({
@@ -282,6 +301,7 @@ export async function runNestedPi(
     let lineBuffer = "";
     let finalAssistantText = "";
     let malformedLineCount = 0;
+    let sawAgentEnd = false;
 
     const handleLine = (line: string): void => {
       const trimmed = line.trim();
@@ -301,6 +321,7 @@ export async function runNestedPi(
       // Capture the final assistant text from agent_end.messages so we can
       // return clean content (without JSONL noise) to the calling LLM.
       if (event.type === "agent_end") {
+        sawAgentEnd = true;
         const messages = event.messages;
         if (Array.isArray(messages)) {
           for (let i = messages.length - 1; i >= 0; i--) {
@@ -351,7 +372,11 @@ export async function runNestedPi(
 
     child.on("close", async (_code, killSignal) => {
       if (terminationReason) {
-        finish(makeTerminationResult(terminationReason));
+        // A detached descendant may remain after the direct child exits.
+        // Keep the grace timer alive so the whole group still receives SIGKILL.
+        if (!terminationUsesProcessGroup) {
+          finish(makeTerminationResult(terminationReason));
+        }
         return;
       }
 
@@ -379,7 +404,14 @@ export async function runNestedPi(
         return;
       }
 
-      if (_code === 0) {
+      if (_code === 0 && !sawAgentEnd) {
+        finish({
+          success: false,
+          content: "Nested Pi failed",
+          details: stderr || undefined,
+          failureKind: "malformed_jsonl",
+        });
+      } else if (_code === 0) {
         const fullContent = finalAssistantText || stdout;
         const artifactPath = await captureReturnArtifact(fullContent, {
           captureArtifacts,

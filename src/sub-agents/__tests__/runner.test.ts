@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
+import { spawn as nodeSpawn } from "node:child_process";
 import { EventEmitter } from "node:events";
-import { mkdtemp, readFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, it } from "node:test";
@@ -110,7 +111,7 @@ describe("runNestedPi", () => {
     assert.equal(result.failureKind, "recursion_refused");
   });
 
-  it("successful execution returns content from stdout", async () => {
+  it("zero exit without agent_end returns malformed_jsonl", async () => {
     const fakeChild = makeFakeChild({ stdoutData: "Hello from nested Pi", exitCode: 0 });
     const spawnFn = (() => fakeChild) as unknown as SpawnFn;
 
@@ -123,8 +124,9 @@ describe("runNestedPi", () => {
       spawnFn,
     );
 
-    assert.equal(result.success, true);
-    assert.equal(result.content, "Hello from nested Pi");
+    assert.equal(result.success, false);
+    assert.equal(result.content, "Nested Pi failed");
+    assert.equal(result.failureKind, "malformed_jsonl");
   });
 
   it("successful JSONL execution returns final assistant text", async () => {
@@ -149,6 +151,24 @@ describe("runNestedPi", () => {
 
     assert.equal(result.success, true);
     assert.equal(result.content, "Hello from agent_end");
+  });
+
+  it("agent_end without assistant text still satisfies the terminal contract", async () => {
+    const agentEndEvent = JSON.stringify({ type: "agent_end", messages: [] });
+    const fakeChild = makeFakeChild({ stdoutData: `${agentEndEvent}\n`, exitCode: 0 });
+    const spawnFn = (() => fakeChild) as unknown as SpawnFn;
+
+    const result = await runNestedPi(
+      {
+        systemPrompt: "You are helpful",
+        userPrompt: "Hello",
+        allowedTools: ["read"],
+      },
+      spawnFn,
+    );
+
+    assert.equal(result.success, true);
+    assert.equal(result.content, `${agentEndEvent}\n`);
   });
 
   it("non-zero exit code returns failure with stderr details", async () => {
@@ -251,6 +271,85 @@ describe("runNestedPi", () => {
     assert.equal(child.killed, true);
     assert.equal(result.failureKind, "cancelled");
   });
+
+  for (const reason of ["timed_out", "cancelled"] as const) {
+    it(
+      `terminates a nested descendant when ${reason}`,
+      { skip: process.platform === "win32" },
+      async () => {
+        const dir = await mkdtemp(join(tmpdir(), "pi-blackbytes-process-group-"));
+        const pidFile = join(dir, "grandchild.pid");
+        const grandchildScript = `
+          const fs = require("node:fs");
+          process.on("SIGTERM", () => {});
+          fs.writeFileSync(${JSON.stringify(pidFile)}, String(process.pid));
+          setInterval(() => {}, 1000);
+        `;
+        const parentScript = `
+          const { spawn } = require("node:child_process");
+          spawn(process.execPath, ["-e", ${JSON.stringify(grandchildScript)}], { stdio: "ignore" });
+          setInterval(() => {}, 1000);
+        `;
+        let parentPid: number | undefined;
+        let grandchildPid: number | undefined;
+
+        const spawnFn = ((_cmd: string, _args: string[], options: Parameters<SpawnFn>[2]) => {
+          const child = nodeSpawn(process.execPath, ["-e", parentScript], options);
+          parentPid = child.pid;
+          return child;
+        }) as SpawnFn;
+        const controller = new AbortController();
+
+        try {
+          const resultPromise = runNestedPi(
+            {
+              systemPrompt: "You are helpful",
+              userPrompt: "Hello",
+              allowedTools: [],
+              signal: controller.signal,
+              timeoutMs: reason === "timed_out" ? 500 : 30_000,
+              killGraceMs: 50,
+            },
+            spawnFn,
+          );
+
+          for (let i = 0; i < 100; i++) {
+            try {
+              grandchildPid = Number.parseInt(await readFile(pidFile, "utf8"), 10);
+              break;
+            } catch {
+              await new Promise((resolve) => setTimeout(resolve, 10));
+            }
+          }
+          assert.ok(grandchildPid, "grandchild fixture should report its pid");
+          if (reason === "cancelled") controller.abort();
+
+          const result = await resultPromise;
+          assert.equal(result.failureKind, reason);
+
+          let alive = true;
+          for (let i = 0; i < 100; i++) {
+            try {
+              process.kill(grandchildPid, 0);
+              await new Promise((resolve) => setTimeout(resolve, 10));
+            } catch {
+              alive = false;
+              break;
+            }
+          }
+          assert.equal(alive, false, "grandchild must not survive termination");
+        } finally {
+          for (const pid of [grandchildPid, parentPid]) {
+            if (!pid) continue;
+            try {
+              process.kill(pid, "SIGKILL");
+            } catch {}
+          }
+          await rm(dir, { recursive: true, force: true });
+        }
+      },
+    );
+  }
 
   it("env filtering only passes allowlisted vars", async () => {
     let capturedEnv: NodeJS.ProcessEnv | undefined;
@@ -856,7 +955,11 @@ describe("runNestedPi", () => {
 
   it("does not capture artifacts for under-cap successful output", async () => {
     process.env.PI_AGENT_DIR = await mkdtemp(join(tmpdir(), "pi-blackbytes-runner-artifacts-"));
-    const fakeChild = makeFakeChild({ stdoutData: "short output", exitCode: 0 });
+    const agentEndEvent = JSON.stringify({
+      type: "agent_end",
+      messages: [{ role: "assistant", content: [{ type: "text", text: "short output" }] }],
+    });
+    const fakeChild = makeFakeChild({ stdoutData: `${agentEndEvent}\n`, exitCode: 0 });
     const spawnFn = (() => fakeChild) as unknown as SpawnFn;
 
     const result = await runNestedPi(

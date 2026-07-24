@@ -87,22 +87,6 @@ export function registerSubAgent(
         // (both may be overridden via JSON config) can flow into the prompt builders.
         const snapshot = getAgentSnapshotFor(declaration.name);
 
-        const baseSystemPrompt = resolveSystemPromptBody(declaration, snapshot?.model);
-        if (baseSystemPrompt.trim().length === 0) {
-          throw new Error(`Sub-agent "${declaration.name}" has an empty systemPrompt`);
-        }
-
-        // Build the system prompt through the centralised assembler. In static
-        // mode (the only currently supported mode) this is a no-op pass-through.
-        // append mode throws immediately so callers fail loudly.
-        const builtPrompt = buildSystemPrompt({
-          basePrompt: baseSystemPrompt,
-          declaration: {
-            name: declaration.name,
-            promptMode: snapshot?.promptMode ?? declaration.promptMode,
-          },
-        });
-
         const userPrompt = declaration.buildUserPrompt(params);
 
         const rawAllowedTools =
@@ -159,8 +143,8 @@ export function registerSubAgent(
           });
         }
 
-        // Apply any declaration-level prepend overlay (e.g. General safety).
-        let finalSystemPrompt = builtPrompt;
+        // Build any declaration-level prepend overlay (e.g. General safety) once.
+        let promptOverlay: string | undefined;
         if (declaration.prependSystemPrompt) {
           try {
             const overlay = await declaration.prependSystemPrompt({
@@ -168,7 +152,7 @@ export function registerSubAgent(
               finalizedTools: allowedTools,
             });
             if (overlay && overlay.length > 0) {
-              finalSystemPrompt = `${overlay}\n\n${builtPrompt}`;
+              promptOverlay = overlay;
             }
           } catch (err) {
             getLogger().warn("Sub-agent prependSystemPrompt builder failed; using base prompt", {
@@ -177,6 +161,21 @@ export function registerSubAgent(
             });
           }
         }
+
+        const buildPromptForModel = (model: string | undefined): string => {
+          const basePrompt = resolveSystemPromptBody(declaration, model);
+          if (basePrompt.trim().length === 0) {
+            throw new Error(`Sub-agent "${declaration.name}" has an empty systemPrompt`);
+          }
+          const builtPrompt = buildSystemPrompt({
+            basePrompt,
+            declaration: {
+              name: declaration.name,
+              promptMode: snapshot?.promptMode ?? declaration.promptMode,
+            },
+          });
+          return promptOverlay ? `${promptOverlay}\n\n${builtPrompt}` : builtPrompt;
+        };
 
         // Centralized per-agent config: snapshot resolved above. Fall back to
         // the legacy dynamic resolver only when the snapshot is unavailable
@@ -200,7 +199,7 @@ export function registerSubAgent(
         progress.start();
 
         const baseRunOpts = {
-          systemPrompt: finalSystemPrompt,
+          systemPrompt: buildPromptForModel(overrides.model),
           userPrompt,
           model: overrides.model,
           reasoningEffort: overrides.reasoningEffort,
@@ -235,7 +234,7 @@ export function registerSubAgent(
               runner: (o) => {
                 // Reflect the actual model used per attempt in live progress details.
                 progress.setModel(o.model);
-                return runNestedPi(o, spawnFn);
+                return runNestedPi({ ...o, systemPrompt: buildPromptForModel(o.model) }, spawnFn);
               },
             });
           } else {

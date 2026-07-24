@@ -68,6 +68,13 @@ function makeCapturingSpawnFn(
   }) as unknown as SpawnFn;
 }
 
+function agentEnd(text: string): string {
+  return `${JSON.stringify({
+    type: "agent_end",
+    messages: [{ role: "assistant", content: [{ type: "text", text }] }],
+  })}\n`;
+}
+
 /** Parse --tools value from pi args array into a string array. */
 function extractAllowedTools(args: string[]): string[] {
   const idx = args.indexOf("--tools");
@@ -192,9 +199,12 @@ describe("delegate_explore", () => {
     const pi = makeFakePi();
 
     let capturedArgs: string[] = [];
-    const spawnFn = makeCapturingSpawnFn({ stdoutData: "found it", exitCode: 0 }, (args) => {
-      capturedArgs = args;
-    });
+    const spawnFn = makeCapturingSpawnFn(
+      { stdoutData: agentEnd("found it"), exitCode: 0 },
+      (args) => {
+        capturedArgs = args;
+      },
+    );
 
     registerDecl(pi, exploreDeclaration, spawnFn);
     const tool = pi.registeredTools.get("delegate_explore")!;
@@ -247,9 +257,12 @@ describe("delegate_oracle", () => {
     const pi = makeFakePi();
 
     let capturedArgs: string[] = [];
-    const spawnFn = makeCapturingSpawnFn({ stdoutData: "oracle answer", exitCode: 0 }, (args) => {
-      capturedArgs = args;
-    });
+    const spawnFn = makeCapturingSpawnFn(
+      { stdoutData: agentEnd("oracle answer"), exitCode: 0 },
+      (args) => {
+        capturedArgs = args;
+      },
+    );
 
     registerDecl(pi, oracleDeclaration, spawnFn);
     const tool = pi.registeredTools.get("delegate_oracle")!;
@@ -326,9 +339,12 @@ describe("delegate_librarian", () => {
     const pi = makeFakePi();
 
     let capturedArgs: string[] = [];
-    const spawnFn = makeCapturingSpawnFn({ stdoutData: "docs found", exitCode: 0 }, (args) => {
-      capturedArgs = args;
-    });
+    const spawnFn = makeCapturingSpawnFn(
+      { stdoutData: agentEnd("docs found"), exitCode: 0 },
+      (args) => {
+        capturedArgs = args;
+      },
+    );
 
     registerDecl(pi, librarianDeclaration, spawnFn);
     const tool = pi.registeredTools.get("delegate_librarian")!;

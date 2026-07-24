@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.20.3 (2026-07-24) — Release Pipeline Reliability
+
+### Fixed
+
+- Make the direct-fetch timeout test account for time spent validating the
+  destination before the request, avoiding a millisecond-level CI timing race.
+
 ## 2.20.2 (2026-07-24) — Production Runtime Hardening
 
 Harden direct network access, nested process lifecycle, delegate completion,

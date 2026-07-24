@@ -326,7 +326,8 @@ describe("web_fetch", () => {
 
         await executeTestFetch({ url: "https://example.com", timeout: 30 }, mockFetch);
 
-        assert.equal(capturedOpts?.timeoutMs, 30000);
+        assert.ok(capturedOpts?.timeoutMs !== undefined && capturedOpts.timeoutMs > 0);
+        assert.ok(capturedOpts.timeoutMs <= 30000);
       });
     });
   });

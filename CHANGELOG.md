@@ -1,5 +1,19 @@
 # Changelog
 
+## 2.21.0 (2026-07-31) — Pi 0.83 Compatibility
+
+### Changed
+
+- Raise the supported Pi peer baseline from `0.74.0` to `0.83.0` and test against
+  Pi `0.83.0` directly in local development and CI.
+- Raise the Node.js requirement from 20 to `22.19.0`, matching Pi `0.83.0`.
+- Update TypeBox to `1.3.8` and refresh both Bun and npm lockfiles.
+
+### Security
+
+- Override Pi's transitive `brace-expansion` resolution to patched version
+  `5.0.9`, removing the associated high-severity denial-of-service advisories.
+
 ## 2.20.3 (2026-07-24) — Release Pipeline Reliability
 
 ### Fixed

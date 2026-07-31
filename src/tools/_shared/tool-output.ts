@@ -86,6 +86,34 @@ export function tailPreview(
   return { lines, omittedLines };
 }
 
+export function headTailPreview(
+  text: string,
+  maxLines: number,
+  maxLineChars = DEFAULT_MAX_LINE_CHARS,
+): {
+  readonly headLines: string[];
+  readonly tailLines: string[];
+  readonly omittedLines: number;
+} {
+  const normalized = stripTrailingNoticeLines(text);
+  if (!normalized || maxLines <= 0) {
+    return { headLines: [], tailLines: [], omittedLines: countLines(normalized) };
+  }
+
+  const all = normalized.split("\n").map((line) => clampLine(line, maxLineChars));
+  if (all.length <= maxLines) {
+    return { headLines: all, tailLines: [], omittedLines: 0 };
+  }
+
+  const headCount = Math.ceil(maxLines / 2);
+  const tailCount = Math.floor(maxLines / 2);
+  return {
+    headLines: all.slice(0, headCount),
+    tailLines: tailCount > 0 ? all.slice(-tailCount) : [],
+    omittedLines: all.length - maxLines,
+  };
+}
+
 export function expandedPreview(
   text: string,
   maxLines: number,

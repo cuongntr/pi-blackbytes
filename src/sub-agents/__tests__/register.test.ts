@@ -449,7 +449,7 @@ describe("registerSubAgent", () => {
     const tool = pi.registeredTools.get("delegate_explore")!;
     const result = await tool.execute(
       "test-call",
-      { question: "test" },
+      { question: "Inspect output\nOPENAI_API_KEY=request-secret" },
       undefined,
       (update: { content: Array<{ text: string }>; details: any }) => updates.push(update),
       { cwd: "/tmp/host-workspace" },
@@ -461,6 +461,9 @@ describe("registerSubAgent", () => {
     assert.equal(updates[0]!.details.status, "starting");
     assert.equal(updates[0]!.details.cwd, "/tmp/host-workspace");
     assert.deepEqual(updates[0]!.details.allowedTools, ["ast_search", "glob", "grep", "read"]);
+    assert.match(updates[0]!.details.requestPreview, /Inspect output/);
+    assert.match(updates[0]!.details.requestPreview, /OPENAI_API_KEY=\[REDACTED\]/);
+    assert.doesNotMatch(updates[0]!.details.requestPreview, /request-secret|Test system prompt/);
 
     const running = updates.filter((u) => u.details.status === "running").at(-1)!;
     assert.match(running.content[0]!.text, /Sub-agent explore running/);
@@ -477,6 +480,7 @@ describe("registerSubAgent", () => {
     initEnabledSet(defaultConfig);
     const pi = makeFakePi();
     const hugeText = `text-head-${"x".repeat(9_000)}-text-tail`;
+    const hugeRequest = `request-head-${"y".repeat(9_000)}-request-tail`;
     const events = [
       {
         type: "message_update",
@@ -501,7 +505,7 @@ describe("registerSubAgent", () => {
     const tool = pi.registeredTools.get("delegate_explore")!;
     const result = await tool.execute(
       "test-call",
-      { question: "test" },
+      { question: hugeRequest },
       undefined,
       (update: { details: any }) => updates.push(update),
     );
@@ -513,6 +517,10 @@ describe("registerSubAgent", () => {
     assert.match(running.details.outputPreview, /text-head/);
     assert.match(running.details.outputPreview, /text-tail/);
     assert.match(running.details.outputPreview, /truncated/);
+    assert.ok(running.details.requestPreview.length <= 8_192);
+    assert.match(running.details.requestPreview, /request-head/);
+    assert.match(running.details.requestPreview, /request-tail/);
+    assert.match(running.details.requestPreview, /truncated/);
   });
 
   it("executionMode defaults to undefined (parallel) for all agents", () => {

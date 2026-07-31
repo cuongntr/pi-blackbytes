@@ -191,6 +191,7 @@ export function registerSubAgent(
         const delegationStartedAt = Date.now();
         const progress = createProgressReporter({
           agent: declaration.name,
+          request: userPrompt,
           model: overrides.model,
           cwd: ctx?.cwd,
           allowedTools,

@@ -21,6 +21,7 @@ export interface SubAgentProgressUsage {
 export interface SubAgentProgressDetails {
   readonly agent: string;
   readonly status: SubAgentProgressStatus;
+  readonly requestPreview?: string;
   readonly model?: string;
   readonly cwd?: string;
   readonly allowedTools: readonly string[];
@@ -82,6 +83,7 @@ function formatProgressSummary(details: SubAgentProgressDetails): string {
 
 export interface ProgressReporterOptions {
   readonly agent: string;
+  readonly request?: string;
   readonly model?: string;
   readonly cwd?: string;
   readonly allowedTools: readonly string[];
@@ -114,6 +116,9 @@ export function createProgressReporter(opts: ProgressReporterOptions): ProgressR
   let usage: SubAgentProgressUsage | undefined;
   let onUpdate: AgentToolUpdate | undefined = onUpdateRaw;
   let lastDetails: SubAgentProgressDetails | undefined;
+  const requestPreview = opts.request
+    ? appendBoundedRaw("", redactDelegateText(opts.request))
+    : undefined;
   // Throttle: avoid flooding the host UI with re-renders on every streaming token.
   // Only emit at most once per THROTTLE_MS for text/thinking deltas.
   const THROTTLE_MS = 300;
@@ -145,6 +150,7 @@ export function createProgressReporter(opts: ProgressReporterOptions): ProgressR
     return {
       agent: opts.agent,
       status,
+      requestPreview,
       model: currentModel,
       cwd: opts.cwd,
       allowedTools: opts.allowedTools,
@@ -237,9 +243,14 @@ export function createProgressReporter(opts: ProgressReporterOptions): ProgressR
     ]) {
       const val = args[key];
       if (typeof val === "string" && val.length > 0) {
-        if (val.length <= MAX_TOOL_ARG_SUMMARY) return val;
-        if (PATH_LIKE_KEYS.has(key)) return truncatePath(val, MAX_TOOL_ARG_SUMMARY);
-        return `${val.slice(0, MAX_TOOL_ARG_SUMMARY - 1)}\u2026`;
+        const safeValue = redactDelegateText(val)
+          .replace(/[\r\n\t]+/g, " ")
+          .replace(/\s{2,}/g, " ")
+          .trim();
+        if (!safeValue) return undefined;
+        if (safeValue.length <= MAX_TOOL_ARG_SUMMARY) return safeValue;
+        if (PATH_LIKE_KEYS.has(key)) return truncatePath(safeValue, MAX_TOOL_ARG_SUMMARY);
+        return `${safeValue.slice(0, MAX_TOOL_ARG_SUMMARY - 1)}\u2026`;
       }
     }
     return undefined;

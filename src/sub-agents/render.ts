@@ -1,5 +1,6 @@
-import { type Theme, keyText } from "@earendil-works/pi-coding-agent";
-import { Container, Text } from "@earendil-works/pi-tui";
+import { type Theme, getMarkdownTheme, keyText } from "@earendil-works/pi-coding-agent";
+import { type Component, Container, Markdown, Text } from "@earendil-works/pi-tui";
+import { redactSecrets } from "../shared/redact.js";
 import { renderLightweightToolResult } from "../tools/_shared/lightweight-render.js";
 import { SPINNER_TICK_MS, formatCost, formatDuration, getSpinnerFrame } from "./format.js";
 import { getAgentIcon } from "./icons.js";
@@ -15,6 +16,7 @@ export type { ToolHistoryEntry };
 export interface SubAgentRenderDetails {
   readonly agent?: string;
   readonly status?: "starting" | "running" | "completed" | "failed" | "cancelled" | "timed_out";
+  readonly requestPreview?: string;
   readonly model?: string;
   readonly cwd?: string;
   readonly allowedTools?: readonly string[];
@@ -60,10 +62,12 @@ interface RenderState {
   // hashing the 8KB preview + JSON-stringifying the tool history every tick.
   lastExpandedDetailsRef?: SubAgentRenderDetails;
   lastExpandedIsPartial?: boolean;
-  cachedExpandedLines?: string[];
+  cachedExpandedComponents?: readonly Component[];
 }
 
 const MAX_DISPLAY_HISTORY = 30;
+const MAX_SEMANTIC_SUMMARY_CHARS = 120;
+const MAX_COMPACT_ACTIVITY_CHARS = 80;
 
 function statusColor(
   status: SubAgentRenderDetails["status"],
@@ -91,6 +95,55 @@ function getResultText(result: RenderResult): string {
     if (part.type === "text" && typeof part.text === "string") parts.push(part.text);
   }
   return parts.join("");
+}
+
+function sanitizeCompactText(text: string): string {
+  return redactSecrets(text)
+    .replace(/[\r\n\t]+/g, " ")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+}
+
+function boundCompactText(text: string, maxChars: number): string {
+  const sanitized = sanitizeCompactText(text);
+  return sanitized.length > maxChars ? `${sanitized.slice(0, maxChars - 1)}…` : sanitized;
+}
+
+function extractSemanticSummary(result: RenderResult): string | undefined {
+  for (const rawLine of getResultText(result).split("\n")) {
+    let line = rawLine.trim();
+    if (
+      !line ||
+      /^#{1,6}\s/.test(line) ||
+      /^```/.test(line) ||
+      /^<\/?[a-z][^>]*>$/i.test(line) ||
+      /^[-*_]{3,}$/.test(line)
+    ) {
+      continue;
+    }
+    line = boundCompactText(
+      line.replace(/^[-*+]\s+/, "").replace(/^>\s*/, ""),
+      MAX_SEMANTIC_SUMMARY_CHARS,
+    );
+    if (!line) continue;
+    return line;
+  }
+  return undefined;
+}
+
+function buildCompactActivity(details: SubAgentRenderDetails, theme: Theme): string | undefined {
+  const activeEntry = [...(details.toolHistory ?? [])]
+    .reverse()
+    .find((entry) => entry.endMs === undefined);
+  if (details.currentTool && (!activeEntry || activeEntry.name !== details.currentTool)) {
+    return `  ${theme.fg("toolTitle", displayNestedToolName(details.currentTool!))} ${theme.fg("muted", "·")} ${theme.fg("accent", "Running…")}`;
+  }
+  if (!activeEntry) return undefined;
+  const safeSummary = activeEntry.summary
+    ? boundCompactText(activeEntry.summary, MAX_COMPACT_ACTIVITY_CHARS)
+    : "";
+  const summary = safeSummary ? `(${theme.fg("muted", safeSummary)})` : "";
+  return `  ${theme.fg("toolTitle", displayNestedToolName(activeEntry.name))}${summary} ${theme.fg("muted", "·")} ${theme.fg("accent", "Running…")}`;
 }
 
 /**
@@ -162,9 +215,19 @@ export function rebuildSubAgentResultComponent(
         elapsedMs,
         status,
         options,
+        display,
         theme,
         result,
       );
+    }
+    if (display === "compact" && !options.expanded) {
+      if (status === "running") {
+        const activity = buildCompactActivity(details, theme);
+        if (activity) component.addChild(new Text(activity, 0, 0));
+      } else if (status === "completed") {
+        const summary = extractSemanticSummary(result);
+        if (summary) component.addChild(new Text(`  ${theme.fg("toolOutput", summary)}`, 0, 0));
+      }
     }
     if (state.cachedMetricsText) {
       component.addChild(new Text(state.cachedMetricsText, 0, 0));
@@ -187,14 +250,14 @@ export function rebuildSubAgentResultComponent(
     const expandedDataChanged =
       details !== state.lastExpandedDetailsRef ||
       options.isPartial !== state.lastExpandedIsPartial ||
-      state.cachedExpandedLines === undefined;
+      state.cachedExpandedComponents === undefined;
     if (expandedDataChanged) {
       state.lastExpandedDetailsRef = details;
       state.lastExpandedIsPartial = options.isPartial;
-      state.cachedExpandedLines = buildExpandedBody(result, details, options, theme);
+      state.cachedExpandedComponents = buildExpandedBody(result, details, options, theme);
     }
-    for (const line of state.cachedExpandedLines ?? []) {
-      component.addChild(new Text(line, 0, 0));
+    for (const child of state.cachedExpandedComponents ?? []) {
+      component.addChild(child);
     }
   }
 }
@@ -205,10 +268,19 @@ function buildMetricsLine(
   elapsedMs: number | undefined,
   status: string,
   options: RenderOptions,
+  display: "full" | "compact" | "minimal",
   theme: Theme,
   result: RenderResult,
 ): string {
   const bits: string[] = [];
+  const isCompactCollapsed = display === "compact" && !options.expanded;
+  if (isCompactCollapsed && status === "failed") bits.push(theme.fg("error", "failed"));
+  if (isCompactCollapsed && status === "cancelled") {
+    bits.push(theme.fg("warning", "cancelled"));
+  }
+  if (isCompactCollapsed && status === "timed_out") {
+    bits.push(theme.fg("warning", "timed out"));
+  }
   if (elapsedMs !== undefined) {
     bits.push(theme.fg("muted", formatDuration(elapsedMs)));
   }
@@ -229,9 +301,17 @@ function buildMetricsLine(
   ) {
     bits.push(theme.fg("muted", formatCost(details.usage.cost)));
   }
-  if (status === "failed") {
+  if (status === "failed" || (isCompactCollapsed && status === "cancelled")) {
     const hint = extractErrorHint(result);
-    if (hint) bits.push(theme.fg("error", hint));
+    if (hint && (!isCompactCollapsed || !isGenericTerminalHint(hint, status))) {
+      bits.push(theme.fg(status === "failed" ? "error" : "warning", hint));
+    }
+  }
+  if (isCompactCollapsed && status === "timed_out") {
+    const hint = extractErrorHint(result);
+    if (hint && !isGenericTerminalHint(hint, status)) {
+      bits.push(theme.fg("warning", hint));
+    }
   }
   if (!options.expanded) {
     const key = keyText("app.tools.expand") || "ctrl+o";
@@ -273,14 +353,32 @@ function buildCollapsedToolActivity(details: SubAgentRenderDetails, theme: Theme
   return lines;
 }
 
-/** Build expanded body sections: Tool Activity timeline + Output + Footer. */
+/** Build expanded body sections: Request + Tool Activity timeline + Output + Footer. */
 function buildExpandedBody(
   result: RenderResult,
   details: SubAgentRenderDetails,
   options: RenderOptions,
   theme: Theme,
-): string[] {
-  const lines: string[] = [];
+): readonly Component[] {
+  const components: Component[] = [];
+  const markdownTheme = getMarkdownTheme();
+
+  const addSectionHeading = (icon: string, label: string): void => {
+    components.push(new Text("", 0, 0));
+    components.push(new Text(`  ${theme.bold(theme.fg("toolTitle", `${icon} ${label}`))}`, 0, 0));
+  };
+
+  // Request section. requestPreview is already bounded and redacted by the
+  // progress reporter; the declaration's system prompt and safety overlay are
+  // intentionally never included here.
+  if (details.requestPreview) {
+    addSectionHeading("📨", "Request");
+    components.push(
+      new Markdown(details.requestPreview, 4, 0, markdownTheme, {
+        color: (text) => theme.fg("toolOutput", text),
+      }),
+    );
+  }
 
   // Tool Activity section
   if (details.toolHistory && details.toolHistory.length > 0) {
@@ -289,8 +387,8 @@ function buildExpandedBody(
       history.length > MAX_DISPLAY_HISTORY ? history.slice(-MAX_DISPLAY_HISTORY) : history;
     const skipped = history.length - displayEntries.length;
 
-    lines.push("");
-    lines.push(`  ${theme.bold(theme.fg("toolTitle", "📋 Tool Activity"))}`);
+    const lines: string[] = [];
+    addSectionHeading("📋", "Tool Activity");
     if (skipped > 0) {
       lines.push(theme.fg("muted", `    [+${skipped} earlier calls]`));
     }
@@ -303,6 +401,7 @@ function buildExpandedBody(
       const hint = entry.summary ? ` ${theme.fg("muted", entry.summary)}` : "";
       lines.push(`    ${icon} ${theme.fg("toolTitle", entry.name)}${hint} ${dur}`);
     }
+    components.push(new Text(lines.join("\n"), 0, 0));
   }
 
   // Output section
@@ -310,15 +409,15 @@ function buildExpandedBody(
   const previewText = options.isPartial ? (details.outputPreview ?? "") : "";
   const bodyText = options.isPartial ? previewText : finalText;
   if (bodyText) {
-    lines.push("");
-    lines.push(`  ${theme.bold(theme.fg("toolTitle", "📝 Output"))}`);
-    for (const textLine of bodyText.split("\n")) {
-      lines.push(`    ${theme.fg("toolOutput", textLine)}`);
-    }
+    addSectionHeading("📝", "Output");
+    components.push(
+      new Markdown(bodyText, 4, 0, markdownTheme, {
+        color: (text) => theme.fg("toolOutput", text),
+      }),
+    );
   } else if (options.isPartial) {
-    lines.push("");
-    lines.push(`  ${theme.bold(theme.fg("toolTitle", "📝 Output"))}`);
-    lines.push(`    ${theme.fg("muted", "(no output captured yet)")}`);
+    addSectionHeading("📝", "Output");
+    components.push(new Text(`    ${theme.fg("muted", "(no output captured yet)")}`, 0, 0));
   }
 
   // Footer
@@ -330,17 +429,17 @@ function buildExpandedBody(
     footerBits.push(theme.fg("muted", formatCost(details.usage.cost)));
   }
   if (footerBits.length > 0) {
-    lines.push("");
-    lines.push(`  ${footerBits.join(theme.fg("muted", " · "))}`);
+    components.push(new Text("", 0, 0));
+    components.push(new Text(`  ${footerBits.join(theme.fg("muted", " · "))}`, 0, 0));
   }
 
-  return lines;
+  return components;
 }
 
 /**
  * Pull a single-line error hint from the tool result.
  *
- * On failure the first content text block typically begins with `Error: ...`
+ * On terminal failure the first content text block typically begins with `Error: ...`
  * or a `Sub-agent "xxx" failed ...` preamble; we strip the redundant prefix
  * and clamp to ~60 chars so it fits alongside other header bits.
  */
@@ -352,6 +451,14 @@ function extractErrorHint(result: RenderResult): string | undefined {
   if (!firstLine) return undefined;
   const MAX = 60;
   return firstLine.length > MAX ? `${firstLine.slice(0, MAX - 1)}\u2026` : firstLine;
+}
+
+function isGenericTerminalHint(hint: string, status: string): boolean {
+  const normalized = hint.toLowerCase().replace(/_/g, " ");
+  if (status === "timed_out") return /^nested pi timed out(?: \(timed out\))?$/.test(normalized);
+  if (status === "cancelled") return /^nested pi cancelled(?: \(cancelled\))?$/.test(normalized);
+  if (status === "failed") return /^nested pi failed(?: \(failed\))?$/.test(normalized);
+  return false;
 }
 
 /**

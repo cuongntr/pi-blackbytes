@@ -191,7 +191,7 @@ describe("registerBashWrapper", () => {
     assert.doesNotMatch(withResult, /┌|└|│/);
   });
 
-  it("renders collapsed tail preview, error color, and footer", () => {
+  it("renders collapsed error head-tail preview, error color, and footer", () => {
     const tool = registerEnabledTool({ ...ui, bash_max_preview_lines: 2 });
     assertRenderableTool(tool);
 
@@ -206,12 +206,54 @@ describe("registerBashWrapper", () => {
       ),
     );
 
-    assert.match(out, /«error:line3»/);
+    assert.match(out, /«error:line1»/);
     assert.match(out, /«error:line4»/);
-    assert.doesNotMatch(out, /line1/);
-    assert.match(out, /earlier lines hidden/);
+    assert.doesNotMatch(out, /line2|line3/);
+    assert.match(out, /middle lines hidden/);
     assert.match(out, /⏹ 12s/);
     assert.match(out, /~4 words/);
+  });
+
+  it("labels zero-line and one-line failed previews accurately", () => {
+    for (const [cap, expected, absent] of [
+      [0, "3 lines hidden", "middle lines hidden"],
+      [1, "2 later lines hidden", "middle lines hidden"],
+    ] as const) {
+      const tool = registerEnabledTool({ ...ui, bash_max_preview_lines: cap });
+      assertRenderableTool(tool);
+      const out = render(
+        tool.renderResult(
+          { content: [{ type: "text", text: "line1\nline2\nline3" }] },
+          { expanded: false },
+          theme(),
+          { isError: true },
+        ),
+      );
+
+      assert.match(out, new RegExp(expected));
+      assert.doesNotMatch(out, new RegExp(absent));
+      if (cap === 0) assert.doesNotMatch(out, /«error:line/);
+      if (cap === 1) assert.match(out, /«error:line1»/);
+    }
+  });
+
+  it("keeps collapsed successful output tail-first", () => {
+    const tool = registerEnabledTool({ ...ui, bash_max_preview_lines: 2 });
+    assertRenderableTool(tool);
+
+    const out = render(
+      tool.renderResult(
+        { content: [{ type: "text", text: "line1\nline2\nline3\nline4" }] },
+        { expanded: false },
+        theme(),
+        { args: {}, isError: false },
+      ),
+    );
+
+    assert.doesNotMatch(out, /line1|line2/);
+    assert.match(out, /line3/);
+    assert.match(out, /line4/);
+    assert.match(out, /earlier lines hidden/);
   });
 
   it("omits the timeout footer when no explicit timeout is passed", () => {

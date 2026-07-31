@@ -1,5 +1,30 @@
 # Changelog
 
+## 2.23.0 (2026-07-31) — Observable Tool & Sub-Agent UI
+
+### Added
+
+- Show the concrete, redacted task sent to a sub-agent in expanded output, bounded
+  to 8 KiB and kept separate from internal system prompts and safety overlays.
+- Surface one concise current-activity or final-summary line in compact sub-agent
+  output so delegated work remains understandable without expanding every call.
+
+### Changed
+
+- Render expanded sub-agent requests and outputs with Pi's standard Markdown
+  component, ordered as Request → Tool Activity → Output → metadata footer.
+- Make compact terminal states explicit for failed, cancelled, and timed-out runs
+  while preserving existing full, minimal, and expanded display semantics.
+- Redact, flatten, and bound compact summaries and nested tool argument previews,
+  and omit completed tools instead of presenting stale activity between calls.
+- Show both the head and tail of failed collapsed Bash output while preserving the
+  existing tail-first view for successful commands.
+
+### Fixed
+
+- Correct failed Bash omission labels and counts for zero-, one-, and odd-line
+  preview budgets.
+
 ## 2.22.0 (2026-07-31) — Transparent Bytes Communication
 
 ### Changed

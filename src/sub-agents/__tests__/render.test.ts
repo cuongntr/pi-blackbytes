@@ -1,6 +1,6 @@
 import { strict as assert } from "node:assert";
 import { describe, it } from "node:test";
-import type { Theme } from "@earendil-works/pi-coding-agent";
+import { type Theme, initTheme } from "@earendil-works/pi-coding-agent";
 import { SPINNER_FRAMES } from "../format.js";
 import { getAgentIcon } from "../icons.js";
 import {
@@ -41,6 +41,7 @@ interface RenderInput {
   readonly content?: ReadonlyArray<{ type: string; text?: string }>;
   readonly expanded?: boolean;
   readonly isPartial?: boolean;
+  readonly display?: "full" | "compact" | "minimal";
 }
 
 /**
@@ -61,6 +62,8 @@ function renderToText(input: RenderInput): string {
     { expanded: input.expanded ?? false, isPartial: input.isPartial ?? false },
     state,
     theme,
+    false,
+    input.display,
   );
   // Container exposes its children; we walk them to extract the rendered text.
   // SubAgentResultComponent extends Container; children are tui Text instances
@@ -110,18 +113,21 @@ describe("rebuildSubAgentResultComponent — header", () => {
   it("uses ✗ error icon for failed state", () => {
     const out = renderToText({
       details: { agent: "oracle", status: "failed", elapsedMs: 1_400 },
+      display: "compact",
     });
     assert.ok(out.includes("«error:✗»"));
-    assert.ok(!out.includes("failed"), "must NOT show the word 'failed'");
+    assert.ok(out.includes("«error:failed»"), "failed state must be explicit without color");
   });
 
   it("uses ⚠ warning icon for cancelled and timed_out", () => {
     for (const status of ["cancelled", "timed_out"] as const) {
       const out = renderToText({
         details: { agent: "general", status, elapsedMs: 1_000 },
+        display: "compact",
       });
       assert.ok(out.includes("«warning:⚠»"), `expected ⚠ for ${status}`);
-      assert.ok(!out.includes(status), `must NOT show word '${status}'`);
+      const label = status === "timed_out" ? "timed out" : status;
+      assert.ok(out.includes(`«warning:${label}»`), `must show '${label}' explicitly`);
     }
   });
 
@@ -157,6 +163,113 @@ describe("rebuildSubAgentResultComponent — header", () => {
       details: { agent: "my-custom-agent", status: "completed", elapsedMs: 100 },
     });
     assert.ok(out.includes("▸"), "unknown agent should get ▸ fallback icon");
+  });
+});
+
+describe("rebuildSubAgentResultComponent — compact semantics", () => {
+  it("shows one compact activity line while running", () => {
+    const out = renderToText({
+      details: {
+        agent: "explore",
+        status: "running",
+        toolHistory: [{ name: "ast_search", summary: "render status", startMs: 100 }],
+      },
+      isPartial: true,
+      display: "compact",
+    });
+
+    assert.equal(out.split("ast_search").length - 1, 1, `expected one activity line, got: ${out}`);
+    assert.ok(out.includes("render status"));
+    assert.ok(out.includes("Running…"));
+  });
+
+  it("redacts and flattens compact activity summaries", () => {
+    const out = renderToText({
+      details: {
+        agent: "explore",
+        status: "running",
+        toolHistory: [
+          {
+            name: "bash",
+            summary: "first line\nOPENAI_API_KEY=secret-token\tlast line",
+            startMs: 100,
+          },
+        ],
+      },
+      isPartial: true,
+      display: "compact",
+    });
+
+    assert.match(out, /first line OPENAI_API_KEY=\[REDACTED\] last line/);
+    assert.doesNotMatch(out, /secret-token|first line\nOPENAI/);
+  });
+
+  it("does not present a completed tool as current activity between calls", () => {
+    const out = renderToText({
+      details: {
+        agent: "explore",
+        status: "running",
+        currentTool: undefined,
+        toolHistory: [{ name: "read", summary: "src/index.ts", startMs: 100, endMs: 200 }],
+      },
+      isPartial: true,
+      display: "compact",
+    });
+
+    assert.doesNotMatch(out, /Read|src\/index\.ts|Running…/);
+  });
+
+  it("shows the first substantive final line and skips structural headings", () => {
+    const out = renderToText({
+      details: { agent: "explore", status: "completed", elapsedMs: 1_000 },
+      content: [
+        {
+          type: "text",
+          text: "## Findings\n\n- Opacity comes from compact rendering, not missing progress data.",
+        },
+      ],
+      display: "compact",
+    });
+
+    assert.ok(out.includes("«toolOutput:Opacity comes from compact rendering"), `got: ${out}`);
+    assert.ok(!out.includes("## Findings"));
+  });
+
+  it("redacts secrets from compact final summaries", () => {
+    const out = renderToText({
+      details: { agent: "explore", status: "completed" },
+      content: [{ type: "text", text: "OPENAI_API_KEY=secret-token" }],
+      display: "compact",
+    });
+
+    assert.match(out, /OPENAI_API_KEY=\[REDACTED\]/);
+    assert.doesNotMatch(out, /secret-token/);
+  });
+
+  it("keeps semantic activity and summaries out of minimal mode", () => {
+    const out = renderToText({
+      details: {
+        agent: "explore",
+        status: "completed",
+        toolHistory: [{ name: "read", summary: "src/index.ts", startMs: 0, endMs: 10 }],
+      },
+      content: [{ type: "text", text: "Material conclusion" }],
+      display: "minimal",
+    });
+
+    assert.ok(!out.includes("Material conclusion"));
+    assert.ok(!out.includes("src/index.ts"));
+  });
+
+  it("surfaces timeout details in warning color", () => {
+    const out = renderToText({
+      details: { agent: "oracle", status: "timed_out", elapsedMs: 20_000 },
+      content: [{ type: "text", text: "Error: total timeout exhausted (timed_out)" }],
+      display: "compact",
+    });
+
+    assert.ok(out.includes("«warning:timed out»"));
+    assert.ok(out.includes("«warning:total timeout exhausted (timed_out)»"));
   });
 });
 
@@ -272,21 +385,61 @@ describe("rebuildSubAgentResultComponent — failed error hint", () => {
     const out = renderToText({
       details: { agent: "explore", status: "failed" },
       content: [],
+      display: "compact",
     });
     assert.ok(out.includes("«error:✗»"), "status icon still rendered");
-    // With no extractable hint, only the status icon and agent name use error
-    // color (statusColor("failed") = "error"). Verify no extra error bit creeps in.
+    // With no extractable hint, the status icon, agent name, and textual status
+    // use error color. Verify no extra error bit creeps in.
     const errBits = [...out.matchAll(/«error:([^»]+)»/g)].map((m) => m[1]);
     assert.equal(
       errBits.length,
-      2,
-      `expected 2 error bits (icon + agent name), got: ${JSON.stringify(errBits)}`,
+      3,
+      `expected 3 error bits (icon + agent name + status), got: ${JSON.stringify(errBits)}`,
     );
     assert.ok(errBits.includes("✗"), "status icon present");
   });
 });
 
 describe("rebuildSubAgentResultComponent — expanded footer aggregate", () => {
+  it("renders Request, Tool Activity, and Output in order with Markdown formatting", () => {
+    initTheme("dark", false);
+    const out = renderToText({
+      details: {
+        agent: "explore",
+        status: "completed",
+        requestPreview: "Inspect **the renderer**:\n\n- preserve lists",
+        toolHistory: [{ name: "read", startMs: 0, endMs: 10 }],
+      },
+      content: [{ type: "text", text: "## Finding\n\nUse `Markdown`." }],
+      expanded: true,
+    });
+
+    const requestIndex = out.indexOf("📨 Request");
+    const activityIndex = out.indexOf("📋 Tool Activity");
+    const outputIndex = out.indexOf("📝 Output");
+    assert.ok(requestIndex >= 0, "Request heading must be visible");
+    assert.ok(requestIndex < activityIndex && activityIndex < outputIndex, `wrong order: ${out}`);
+    assert.match(out, /Inspect .*the renderer/);
+    assert.match(out, /preserve lists/);
+    assert.match(out, /Finding/);
+    assert.match(out, /Markdown/);
+    assert.doesNotMatch(out, /\*\*the renderer\*\*|## Finding|`Markdown`/);
+  });
+
+  it("keeps Request out of collapsed output", () => {
+    const out = renderToText({
+      details: {
+        agent: "explore",
+        status: "completed",
+        requestPreview: "private expanded request",
+      },
+      content: [{ type: "text", text: "done" }],
+      display: "compact",
+    });
+
+    assert.doesNotMatch(out, /Request|private expanded request/);
+  });
+
   it("renders model + tool aggregate + cost as a single muted footer", () => {
     const out = renderToText({
       details: {
@@ -471,7 +624,7 @@ describe("rebuildSubAgentResultComponent — expanded body cache", () => {
       startedAt: undefined as number | undefined,
       endedAt: undefined as number | undefined,
       interval: undefined as NodeJS.Timeout | undefined,
-      cachedExpandedLines: undefined as string[] | undefined,
+      cachedExpandedComponents: undefined,
     };
     const details: SubAgentRenderDetails = {
       agent: "explore",
@@ -484,15 +637,15 @@ describe("rebuildSubAgentResultComponent — expanded body cache", () => {
     const theme = makeStubTheme();
 
     rebuildSubAgentResultComponent(component, result, options, state, theme);
-    const firstLines = state.cachedExpandedLines;
-    assert.ok(firstLines, "first render must populate the expanded cache");
+    const firstComponents = state.cachedExpandedComponents;
+    assert.ok(firstComponents, "first render must populate the expanded cache");
 
     // Re-render with the identical details reference (spinner tick).
     rebuildSubAgentResultComponent(component, result, options, state, theme);
     assert.strictEqual(
-      state.cachedExpandedLines,
-      firstLines,
-      "same details reference must reuse the cached lines array (no rebuild)",
+      state.cachedExpandedComponents,
+      firstComponents,
+      "same details reference must reuse the cached component array (no rebuild)",
     );
   });
 

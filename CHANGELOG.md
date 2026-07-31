@@ -1,5 +1,21 @@
 # Changelog
 
+## 2.22.0 (2026-07-31) — Transparent Bytes Communication
+
+### Changed
+
+- Make Bytes concise without being silent: non-trivial work now starts with the
+  intended outcome and immediate approach, while longer tasks report only
+  meaningful phase changes, discoveries, blockers, and decisions.
+- Replace routine tool narration with user-relevant communication about goals,
+  results, impact, and next steps while preserving explicit verification reporting.
+- Require Bytes to surface material conclusions and blockers from delegated work
+  instead of relying on collapsed sub-agent output to communicate them.
+- Make final status detail proportional to the task, lead with the outcome, and
+  preserve material caveats instead of enforcing a fixed 2–10-line limit.
+- Align GPT, Gemini, and Kimi prompt variants with the shared visibility contract
+  and extend cross-family regression coverage to Kimi.
+
 ## 2.21.0 (2026-07-31) — Pi 0.83 Compatibility
 
 ### Changed

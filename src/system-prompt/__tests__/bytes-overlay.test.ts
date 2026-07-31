@@ -11,7 +11,7 @@ import { createBytesPromptRenderContext } from "../bytes/shared.js";
 import { renderBytesPrompt } from "../loader.js";
 
 function renderPrompt(
-  family: "claude" | "gpt" | "gemini",
+  family: "claude" | "gpt" | "gemini" | "kimi",
   enabledTools: string[],
   enabledSubAgents: string[],
 ): string {
@@ -35,7 +35,7 @@ beforeEach(() => {
 
 describe("bytes overlay rendering", () => {
   it("renders full-capability sessions across model families", () => {
-    for (const family of ["claude", "gpt", "gemini"] as const) {
+    for (const family of ["claude", "gpt", "gemini", "kimi"] as const) {
       const prompt = renderPrompt(
         family,
         ["hashline_edit", "web_search", "web_fetch", "docs_resolve", "docs_query", "gh_search"],
@@ -55,6 +55,37 @@ describe("bytes overlay rendering", () => {
       assert.ok(prompt.includes("`general`"));
       assert.ok(prompt.includes("`reviewer`"));
     }
+  });
+
+  it("renders the concise visibility contract across model families", () => {
+    for (const family of ["claude", "gpt", "gemini", "kimi"] as const) {
+      const prompt = renderPrompt(family, [], []);
+
+      assert.ok(prompt.includes("implement rather than stopping at a description"));
+      assert.ok(prompt.includes("Be direct and concise, not silent"));
+      assert.ok(prompt.includes("intended outcome and immediate approach"));
+      assert.ok(prompt.includes("meaningful phase changes"));
+      assert.ok(prompt.includes("important discoveries"));
+      assert.ok(prompt.includes("blockers"));
+    }
+  });
+
+  it("requires Bytes to surface material delegated results", () => {
+    const withDelegation = renderPrompt("claude", [], ["explore"]);
+    assert.ok(withDelegation.includes("Never rely on collapsed sub-agent output"));
+
+    const withoutDelegation = renderPrompt("claude", [], []);
+    assert.ok(!withoutDelegation.includes("collapsed sub-agent output"));
+  });
+
+  it("uses a proportional completion contract without a hard line cap", () => {
+    const prompt = renderPrompt("claude", [], []);
+
+    assert.ok(prompt.includes("State the outcome first"));
+    assert.ok(prompt.includes("proportional to the work"));
+    assert.ok(prompt.includes("analysis or no-change tasks"));
+    assert.ok(prompt.includes("never omit a material fact"));
+    assert.ok(!prompt.includes("2–10 lines"));
   });
 
   it("renders skill-loading and atomic-unit delegation guidance", () => {

@@ -12,6 +12,6 @@ export function buildBytesKimiPrompt(sections: PromptSectionMap): string {
   return renderMarkdownPrompt(sections, {
     heading: (_index, title) => `## ${title}`,
     afterFirstSection:
-      "Be terse and direct. No filler, no flattery. State the answer first, justify second when justification is asked for.",
+      "Be terse and direct. No filler or flattery. For non-trivial work, state the intended outcome first; then report only meaningful progress, discoveries, blockers, and results.",
   });
 }

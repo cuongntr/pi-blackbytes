@@ -16,7 +16,7 @@ const GPT_FOOTER = [
 ].join("\n");
 
 const GPT_AFTER_FIRST =
-  'NEVER open with filler: "Great question!", "Sure!", "Of course!", "Absolutely!", "Let me help with that!", "I\'d be happy to help!". Start with substance.';
+  'NEVER open with filler: "Great question!", "Sure!", "Of course!", "Absolutely!", "Let me help with that!", "I\'d be happy to help!". For non-trivial work, start with the intended outcome and immediate approach; otherwise start with the answer.';
 
 export function buildBytesGptPrompt(sections: PromptSectionMap): string {
   const body = renderMarkdownPrompt(sections, {

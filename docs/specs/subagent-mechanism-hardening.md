@@ -6,6 +6,7 @@
 > **Variant**: brownfield (extends the existing Blackbytes sub-agent runtime and status surfaces)
 > **Source / Motivation**: comparative review of `tintinweb/pi-subagents`, `nicobailon/pi-subagents`, and the current `pi-blackbytes` sub-agent implementation
 > **Related docs**: [`README.md`](../../README.md), [`AGENTS.md`](../../AGENTS.md), [`prompt-system-hardening.md`](prompt-system-hardening.md)
+> **Supersession (2026-08-03)**: The builtin Reviewer was later removed and its difficult-review contract merged into Oracle. See the current [`README`](../../README.md) and [`CHANGELOG`](../../CHANGELOG.md). Historical requirements below retain the five-agent phase wording.
 
 ---
 

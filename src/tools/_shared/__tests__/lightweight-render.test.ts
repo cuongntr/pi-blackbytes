@@ -53,7 +53,7 @@ describe("lightweight tool renderer", () => {
       { icon: "🧠", name: "oracle", primaryKey: "question", expected: "Agent: Oracle" },
       { icon: "📚", name: "librarian", primaryKey: "question", expected: "Agent: Librarian" },
       { icon: "⚡", name: "general", primaryKey: "task", expected: "Agent: General" },
-      { icon: "📋", name: "reviewer", primaryKey: "request", expected: "Agent: Reviewer" },
+      { icon: "📋", name: "yaml-auditor", primaryKey: "request", expected: "Agent: Yaml-auditor" },
     ] as const;
 
     for (const c of cases) {

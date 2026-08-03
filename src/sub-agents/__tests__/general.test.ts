@@ -32,6 +32,26 @@ describe("general prompt contracts", () => {
       assert.ok(prompt.includes("repository-defined full verification command"));
       assert.ok(!prompt.includes("typecheck → lint → test → build"));
     });
+
+    it(`owns the self-review and verification loop for ${model ?? "default"}`, () => {
+      const prompt = resolveSystemPromptBody(generalDeclaration, model);
+      assert.ok(prompt.includes("git status --short"));
+      assert.ok(prompt.includes("unstaged") && prompt.includes("staged diff"));
+      assert.ok(prompt.includes("untracked target files"));
+      assert.ok(prompt.includes("Before any edit"));
+      assert.ok(prompt.includes("immutable ownership boundary"));
+      assert.ok(prompt.includes("target/in-scope files"));
+      assert.ok(prompt.includes("delta created by this invocation"));
+      assert.ok(
+        prompt.includes("never modify or revert") || prompt.includes("Never modify or revert"),
+      );
+      assert.ok(
+        prompt.includes("cannot establish") || prompt.includes("cannot establish the baseline"),
+      );
+      assert.ok(prompt.includes("report") && prompt.includes("caveat"));
+      assert.ok(prompt.includes("implement → self-review → fix → verify"));
+      assert.ok(prompt.includes("without delegation") || prompt.includes("do not delegate"));
+    });
   }
 
   it("safety overlay defers verification order to repository conventions", async () => {

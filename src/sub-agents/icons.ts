@@ -8,7 +8,6 @@ export const SUB_AGENT_ICONS: Record<string, string> = {
   oracle: "🧠",
   librarian: "📚",
   general: "⚡",
-  reviewer: "📋",
 };
 
 /** Resolve agent icon with a neutral fallback for unknown / YAML agents. */

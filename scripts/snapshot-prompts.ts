@@ -3,7 +3,7 @@
  * Per-agent + Bytes-overlay prompt baseline snapshot.
  *
  * Writes a short report (char count, section count, top headings) for:
- *   - Every builtin sub-agent system prompt (explore/oracle/librarian/general/reviewer)
+ *   - Every builtin sub-agent system prompt (explore/oracle/librarian/general)
  *   - The Bytes overlay rendered for each provider variant (claude/gpt/gemini/kimi-when-available)
  *
  * Used as the Phase 0 baseline before Bytes v2 rework.
@@ -13,7 +13,6 @@ import { exploreDeclaration } from "../src/sub-agents/explore.js";
 import { generalDeclaration } from "../src/sub-agents/general.js";
 import { librarianDeclaration } from "../src/sub-agents/librarian.js";
 import { oracleDeclaration } from "../src/sub-agents/oracle.js";
-import { reviewerDeclaration } from "../src/sub-agents/reviewer.js";
 import { createBytesPromptRenderContext } from "../src/system-prompt/bytes/shared.js";
 import { renderBytesPrompt } from "../src/system-prompt/loader.js";
 
@@ -40,7 +39,6 @@ const subAgentDecls = [
   oracleDeclaration,
   librarianDeclaration,
   generalDeclaration,
-  reviewerDeclaration,
 ];
 
 const subAgentStats = subAgentDecls.map((d) => statsFor(d.name, d.systemPrompt));
@@ -50,7 +48,7 @@ const overlayStats = FAMILIES.map((family) => {
   const ctx = createBytesPromptRenderContext(
     family,
     new Set(["hashline_edit", "web_search", "web_fetch", "docs_resolve", "docs_query", "gh_search"]),
-    new Set(["explore", "oracle", "librarian", "general", "reviewer"]),
+    new Set(["explore", "oracle", "librarian", "general"]),
   );
   return statsFor(`bytes-overlay/${family}`, renderBytesPrompt(ctx));
 });

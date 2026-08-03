@@ -11,7 +11,6 @@ import { generalDeclaration } from "../general.js";
 import { librarianDeclaration } from "../librarian.js";
 import { oracleDeclaration } from "../oracle.js";
 import { registerSubAgent } from "../register.js";
-import { reviewerDeclaration } from "../reviewer.js";
 import type { SpawnFn } from "../runner.js";
 
 // ---------------------------------------------------------------------------
@@ -461,7 +460,6 @@ describe("builtin description length (T-007)", () => {
     oracleDeclaration,
     librarianDeclaration,
     generalDeclaration,
-    reviewerDeclaration,
   ];
 
   for (const decl of allBuiltins) {

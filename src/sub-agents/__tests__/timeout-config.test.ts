@@ -25,7 +25,6 @@ import { generalDeclaration } from "../general.js";
 import { librarianDeclaration } from "../librarian.js";
 import { oracleDeclaration } from "../oracle.js";
 import { registerSubAgent } from "../register.js";
-import { reviewerDeclaration } from "../reviewer.js";
 import type { SpawnFn } from "../runner.js";
 import { runNestedPi } from "../runner.js";
 import { _resetAgentSnapshot, initAgentSnapshot, resolveAgentSnapshot } from "../snapshot.js";
@@ -141,11 +140,6 @@ describe("timeoutMs builtin defaults", () => {
   it("general has default timeoutMs=1800000", () => {
     const snap = resolveAgentSnapshot(generalDeclaration, defaultConfig);
     assert.equal(snap.timeoutMs, 1_800_000);
-  });
-
-  it("reviewer has default timeoutMs=900000", () => {
-    const snap = resolveAgentSnapshot(reviewerDeclaration, defaultConfig);
-    assert.equal(snap.timeoutMs, 900_000);
   });
 });
 

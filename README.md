@@ -10,7 +10,7 @@ Blackbytes extends Pi with:
 
 - **Bytes v2 system prompt overlay** — capability-aware, per-model-family prompt with 15 sections covering identity, precedence, autonomy, investigation rules, session capabilities, skill-loading guidance, engineering boundaries, work defaults, tool-use protocol, verification contracts, careful-action gates, workflow guidance, markdown format, file references, and completion contracts. The Conditional Workflows section includes a metadata-driven delegation routing matrix built from typed `SubAgentRoutingMetadata` on each sub-agent declaration, with skill/workflow-aware General delegation triggers. Four provider variants: `claude` (semantic XML tags), `gpt` (Markdown + Parallel Execution Policy footer), `gemini` (numbered headings + worked examples), and `kimi` (terse instruction-dense Markdown).
 - **Strict Librarian gating** — `delegate_librarian` requires ALL of (a) external information, (b) multiple independent sources or current-year authority, (c) direct tools individually insufficient — plus an explicit anti-pattern denylist.
-- **Five builtin sub-agents** — Explore (with Tour Mode for flow walk-throughs), Oracle (with long-context handling and high-risk self-check guardrails), Librarian, General, and Reviewer, each with typed declarations, typed routing metadata, runtime overlays, model fallback chains (read-only agents), per-model-family prompt variants (all five carry GPT-optimized prompt bodies), and per-agent timeout/model/reasoning configuration.
+- **Four builtin sub-agents** — Explore (with Tour Mode for flow walk-throughs), Oracle (including difficult code, plan, and architecture review), Librarian, and General (implementation, self-review, and verification), each with typed declarations, routing metadata, runtime overlays, model fallback chains (read-only agents), per-model-family prompt variants, and per-agent configuration.
 - **Typed routing metadata** — each sub-agent declaration carries a `SubAgentRoutingMetadata` object with `category`, `cost`, `useWhen`, `avoidWhen`, and optional `keyTrigger` fields. This metadata drives the Bytes overlay routing matrix and the `/blackbytes-status` Sub-Agent Routing section, replacing hardcoded routing prose.
 - **Delegation ROI tracking** — in-memory session-scoped delegation log with per-agent metrics (call count, success rate, average duration, cost). Visible via `/blackbytes-status`.
 - **Redacted artifact capture** — opt-in per-agent persistence of large redacted sub-agent outputs to `$PI_AGENT_DIR/blackbytes/artifacts/sub-agents/<YYYY-MM-DD>/<agent>-<HHmmssSSS>.md` (512 KiB cap, 7-day retention). Surfaces the artifact directory, total count, and most recent artifact under `/blackbytes-status` Sub-Agent Diagnostics. Enable with `sub_agents.<name>.artifactCapture: true`.
@@ -26,7 +26,7 @@ Blackbytes extends Pi with:
 | Codebase exploration | `read`/`grep`/`glob` | + `delegate_explore` (parallel, scoped, fluent links, Tour Mode) |
 | Reasoning consultation | (manual) | `delegate_oracle` (Effort estimate, self-contained reply) |
 | External research | (manual) | `delegate_librarian` (strict gate, multi-source) |
-| Code review | (manual) | `delegate_reviewer` (severity verdict, abstraction-fit eval) |
+| Difficult/high-risk code review | (manual) | `delegate_oracle` (read-only severity findings and verdict; caller supplies diff and verification results) |
 | Heavy implementation | (manual) | `delegate_general` (verification gates, AGENTS.md aware) |
 | Image inspection | (none) | `look_at` (PNG/JPG/GIF/WebP/BMP/SVG, multi-image compare) |
 | Edit workflow | `edit`/`write` | + `hashline_edit` (anchor-based) |
@@ -122,7 +122,7 @@ Running `/blackbytes-status` opens an interactive section picker rather than pri
 A compact summary line is always shown first regardless of which section is selected:
 
 ```
-Tools: **10** enabled | Agents: **5** enabled | Skills: **2** enabled
+Tools: **10** enabled | Agents: **4** enabled | Skills: **2** enabled
 ```
 
 ### Section picker
@@ -211,7 +211,7 @@ Blackbytes reads the top-level `blackbytes` object from the Pi settings file.
 | Key | Type | Meaning |
 |---|---|---|
 | `disabled_tools` | `string[]` | Disables specific public tool names for the entire session |
-| `disabled_sub_agents` | `("explore" \| "oracle" \| "librarian" \| "general" \| "reviewer")[]` | Disables delegate tools by agent name |
+| `disabled_sub_agents` | `("explore" \| "oracle" \| "librarian" \| "general")[]` | Disables delegate tools by agent name |
 | `hashline_edit` | `boolean` \| `{ enabled?: boolean, strict_patch?: boolean }` | Enables hashline rewriting for Pi `read`/`write` tool results. Object form exposes `strict_patch` (default `true`) — `lines` payloads containing accidental `LINE#ID\|` prefixes are rejected with `[E_INVALID_PATCH]`. Set `strict_patch: false` to restore the legacy silent-strip behaviour. |
 | `websearch.provider` | `"exa" \| "tavily"` | Selects the web backend. Defaults to `exa` when omitted. |
 | `websearch.exa_api_key` | `string` | Exa credential. Overrides `EXA_API_KEY` when set. |
@@ -226,7 +226,7 @@ Blackbytes reads the top-level `blackbytes` object from the Pi settings file.
 | `system_prompt_log.dedupe` | `boolean` | Avoid repeated identical prompt entries per session/source/provider shape. Defaults to `true`. |
 | `sub_agents.<name>.model` | `string` | Per-agent model override, preferably the canonical Pi model reference `provider/model-id` selected by `/setup-models`. Omit/clear to inherit the host Pi model. |
 | `sub_agents.<name>.reasoningEffort` | `string` | Per-agent reasoning override passed to nested sessions |
-| `sub_agents.<name>.timeoutMs` | `integer` (1..3600000) | Per-agent execution timeout in milliseconds. Builtin defaults: explore=600000, librarian=900000, oracle=1200000, general=1800000, reviewer=900000. YAML equivalent: `timeout_ms`. |
+| `sub_agents.<name>.timeoutMs` | `integer` (1..3600000) | Per-agent execution timeout in milliseconds. Builtin defaults: explore=600000, librarian=900000, oracle=1200000, general=1800000. YAML equivalent: `timeout_ms`. |
 | `sub_agents.<name>.fallbackModels` | `string[]` (max 5) | Ordered list of fallback models tried on `provider_or_model_unavailable` failures. Read-only agents only (`general` and mutating YAML agents are ineligible). YAML equivalent: `fallback_models`. |
 | `sub_agents.<name>.executionMode` | `"sequential" \| "parallel"` | Per-agent tool execution mode override. `"sequential"` serializes tool calls within a batch; omitted uses Pi's default parallel behavior. YAML equivalent: `execution_mode`. |
 | `sub_agents.<name>.promptMode` | `"static" \| "append"` | **RESERVED / PARTIALLY IMPLEMENTED** - `"static"` (default) is the only safe value. `"append"` is accepted by the schema but throws at runtime ("not yet supported"). YAML equivalent: `prompt_mode`. |
@@ -238,7 +238,7 @@ Blackbytes reads the top-level `blackbytes` object from the Pi settings file.
 - Per-agent config (model, reasoningEffort, reserved fields) is resolved once at `session_start` into an immutable snapshot. Changes to `settings.json` after startup take effect on the next session only.
 - Unknown keys inside `blackbytes` are preserved by the parser, so wizard-managed passthrough values can coexist with the validated Blackbytes settings.
 - `disabled_tools` uses public tool names such as `hashline_edit` or `docs_query`. Disabled tools are enforced through every nested delegate path - builtin agents, and both the default and allowlist/denylist forms of YAML agents.
-- `disabled_sub_agents` uses agent names, not tool names: `explore`, `oracle`, `librarian`, `general`, `reviewer`.
+- `disabled_sub_agents` uses agent names, not tool names: `explore`, `oracle`, `librarian`, `general`.
 - `system_prompt_log` is intentionally opt-in. The `agent_start` capture is the canonical Pi-effective prompt; provider capture is only for verifying serialization and extracts system-like fields instead of dumping the full provider payload.
 - `temperature` is accepted by the schema for forward-compatibility but is NOT applied. See `/blackbytes-status` → "Reserved / Unsupported Settings" for details.
 - All Blackbytes tools and sub-agents render through a single lightweight, borderless renderer; there is no on/off toggle. `ui.bash_wrapper_enabled` defaults to `true`, so the built-in `bash` tool also renders through the lightweight wrapper (set it to `false` to leave Pi's built-in `bash` untouched), while the built-in `read` renderer keeps displayed content anchor-free and preserves `LINE#ID|` anchors in conversation history.
@@ -291,7 +291,6 @@ When `blackbytes.ui.bash_wrapper_enabled` is true, Pi's built-in `bash` tool ren
 | `delegate_oracle` | 🧠 | Read-only high-reasoning consultation for difficult debugging or design questions |
 | `delegate_librarian` | 📚 | Read-only docs, web, and cross-repository research |
 | `delegate_general` | ⚡ | Full-access execution for well-scoped multi-file implementation work |
-| `delegate_reviewer` | 📋 | Read-only code reviewer for diffs, patches, and PRs; produces severity-classified findings (High/Medium/Low) and a Verdict |
 
 ### YAML sub-agents
 
@@ -300,15 +299,15 @@ User-defined sub-agents can be placed in `$PI_AGENT_DIR/sub-agents/*.{yaml,yml}`
 Additional optional YAML fields: `model`, `reasoning_effort`, `timeout_ms`, `mutability`, `prompt_mode`, `fallback_models`, `execution_mode`, `routing`.
 
 ```yaml
-# ~/.pi/agent/sub-agents/deep-reviewer.yaml
-name: deep-reviewer
+# ~/.pi/agent/sub-agents/custom-auditor.yaml
+name: custom-auditor
 description: Deep code review specialist
 allowed_tools:
   - read
   - grep
   - glob
 system_prompt: |
-  You are a senior code reviewer.
+  You are a user-defined specialist auditor.
 timeout_ms: 180000          # per-agent timeout in ms (1..3600000)
 fallback_models:            # read-only agents only; at most 5 entries
   - anthropic/claude-opus-4
@@ -345,9 +344,9 @@ Each builtin sub-agent receives a multi-layer system prompt:
 
 Prompt body resolution uses `resolveSystemPromptBody()` in `src/sub-agents/prompt-builder.ts`. When a nested model is explicitly configured via `sub_agents.<name>.model`, the model is classified into a `ModelFamily` (`claude`, `gpt`, `gemini`, `kimi`, `other`). If a matching family entry exists in `systemPromptByFamily`, that variant is used; otherwise the default `systemPrompt` applies. The parent session's cached model family is never consulted — only the explicitly configured nested model drives variant selection.
 
-All five builtin sub-agents (Explore, Oracle, Librarian, General, Reviewer) carry GPT-optimized prompt variants (`systemPromptByFamily.gpt`) used only when the nested model is a GPT-family model (e.g. `gpt-4o`, `o3-mini`, `o4-mini`). The GPT variants follow OpenAI's GPT-5.x prompting guidance: outcome-first and shorter than the defaults, top-level `#` headings for prompt architecture with `<xml>` tags delimiting the semantic behavioural blocks (tool rules, search/review contracts, output specs, stop rules, citation policy), an explicit opener blacklist to suppress filler preambles, and fewer redundant negative rules. Each variant preserves the default persona's contract — read-only/full-access guarantees, tool allowlists, output formats (including the literal `## Findings` / `### High` / `## Verdict` headings the host parses from Reviewer), no-fabrication and citation-precision rules, and verification-gate discipline.
+All four builtin sub-agents (Explore, Oracle, Librarian, General) carry GPT-optimized prompt variants (`systemPromptByFamily.gpt`) used only when the nested model is a GPT-family model. Each variant preserves the default persona's mutability, tool allowlist, evidence, output, and verification contracts. Oracle conditionally produces severity findings and a Verdict for difficult bounded reviews; General owns implementation, self-review, fixes, and verification.
 
-**Read-only sub-agent runtime overlay (~4 KB)** — applied to Explore, Oracle, Librarian, and Reviewer via `prependSystemPrompt`. Contains:
+**Read-only sub-agent runtime overlay (~4 KB)** — applied to Explore, Oracle, and Librarian via `prependSystemPrompt`. Contains:
 
 - Current date (ISO YYYY-MM-DD and current year), so date-sensitive queries always use the correct year
 - Working directory for the nested session
@@ -391,10 +390,9 @@ Builtin routing metadata:
 | Agent | Category | Cost | Key Trigger |
 |---|---|---|---|
 | explore | exploration | medium | Deep contextual grep across multiple files |
-| oracle | reasoning | high | Deep analytical reasoning on hard problems |
+| oracle | reasoning | high | Deep reasoning or difficult high-risk code review |
 | librarian | research | high | Multi-source external research requiring triangulation |
 | general | implementation | high | Heavy multi-file implementation with verifiable outcome |
-| reviewer | review | medium | Severity-classified code review with verdict |
 
 The Bytes overlay Conditional Workflows section uses `buildOverlayRoutingMatrix()` to render a concise one-line routing entry per enabled agent from this metadata. `/blackbytes-status` uses `buildRoutingSummary()` to display the full routing table including category, cost, use-when, and avoid-when details. Both helpers live in `src/sub-agents/routing.ts`, consume runtime `SubAgentMeta[]` (not builtin declarations directly), sort alphabetically for deterministic output, and produce placeholder entries for YAML agents without routing.
 
@@ -426,7 +424,7 @@ On failure:
 Header elements (left to right):
 
 - **Status indicator**: a braille spinner (`⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏`) animating at 10 fps while running, `✓` (success), `✗` (failure), or `⚠` (cancelled / timed out) once complete. The status word (`completed`, `failed`, etc.) is omitted because the glyph carries the meaning.
-- **Agent identity**: the agent icon (🔭 explore, 🧠 oracle, 📚 librarian, ⚡ general, 📋 reviewer; `▸` for YAML-defined agents) followed by the bold agent name colored to match the status (red for failed, accent for running, success for completed).
+- **Agent identity**: the agent icon (🔭 explore, 🧠 oracle, 📚 librarian, ⚡ general; `▸` for YAML-defined agents) followed by the bold agent name colored to match the status (red for failed, accent for running, success for completed).
 - **Elapsed time**: live-ticking wall-clock counter with progressive precision — `<1ms`, `47ms`, `3.2s`, `2m 7s`, or `1h 12m`.
 - **Tool call count**: total number of tool invocations by the sub-agent.
 - **Current tool** (running only): `🔧 read …/sub-agents/render.ts` — the active tool name with a truncated argument summary. The wrench icon is accent-colored, the tool name uses the `toolTitle` token, and the argument hint is muted. Between calls (after one tool completes but before the next starts), the last finished tool is kept visible as `◷ <name>` in muted color so the row never goes silent.
@@ -530,16 +528,15 @@ Collapsed view shows `✓ <summary> · ctrl+o to expand` for success and `✗ <s
 ## Delegation model
 
 - **Explore** locates files, symbols, and call sites in the local repository. In Tour Mode, it traces execution flows and returns numbered `[file#L-L](file://…)` steps with `what · why` annotations — use it when you need to understand *how* a flow works, not just where files live. Accepts an optional `context` parameter to scope the search.
-- **Oracle** handles hard architectural reasoning and elevated debugging. Includes long-context handling guardrails (anchoring claims to specific files when input is large) and a high-risk self-check (re-scanning for unstated assumptions before finalising architecture/security/performance answers). When the configured nested model is a GPT-family model, a GPT-optimized prompt variant with prose-first output and an explicit opener blacklist is used.
+- **Oracle** handles hard architectural reasoning, elevated debugging, and difficult code, plan, or architecture review. For bounded code review it produces severity-classified findings and a Verdict; the caller supplies the diff and verification results because Oracle cannot run git or tests. It includes long-context handling and high-risk self-check guardrails and remains read-only.
 - **Librarian** researches external APIs, official docs, and public code examples.
-- **General** executes large, well-defined implementation tasks with the session's enabled tool set. The routing metadata supports self-contained implementation units from loaded workflows or skills; when a workflow or skill defines atomic work units, each unit is delegated as a separate `delegate_general` call. The prompt defers to the runtime safety overlay for the authoritative tool list. When the configured nested model is a GPT-family model, a GPT-optimized prompt variant is used.
-- **Reviewer** reviews changed code—diffs, patches, and PR descriptions—and produces severity-classified findings (High/Medium/Low) with a Verdict. The caller must supply the diff or file list; the Reviewer cannot run git itself.
+- **General** executes large, well-defined implementation tasks with the session's enabled tool set and owns implementation, final-diff self-review, in-scope fixes, and repository-defined verification in one invocation. Workflow/skill-defined atomic units remain separate `delegate_general` calls.
 
 Nested delegation is limited to one level. Delegate sessions do not receive the `delegate_*` tools again, so recursion is blocked at runtime rather than by prompt text alone.
 
 ### Model fallback
 
-Read-only agents (`explore`, `oracle`, `librarian`, `reviewer`, and YAML agents that do not include mutating tools) support an optional `fallbackModels` chain. When the primary model returns a `provider_or_model_unavailable` failure, Blackbytes retries each model in the chain in order, all within a single shared timeout budget (minimum 1 s per attempt). No other failure kinds trigger a retry (`timed_out`, `cancelled`, `failed`, `spawn_error`, etc. are surfaced immediately). The attempted-models chain is appended to the user-visible failure message.
+Read-only agents (`explore`, `oracle`, `librarian`, and YAML agents that do not include mutating tools) support an optional `fallbackModels` chain. When the primary model returns a `provider_or_model_unavailable` failure, Blackbytes retries each model in the chain in order, all within a single shared timeout budget (minimum 1 s per attempt). No other failure kinds trigger a retry (`timed_out`, `cancelled`, `failed`, `spawn_error`, etc. are surfaced immediately). The attempted-models chain is appended to the user-visible failure message.
 
 `general` is never fallback-eligible because its full-access mutability means partial retries could leave the workspace in an inconsistent state. YAML agents that include any mutating tool in `allowed_tools` are also ineligible.
 

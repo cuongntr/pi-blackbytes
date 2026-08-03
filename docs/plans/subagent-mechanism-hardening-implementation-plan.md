@@ -9,6 +9,8 @@
 | Related ADRs | None present in this repo |
 | Phase | Phase 1 MVP |
 
+> **Supersession (2026-08-03)**: The builtin Reviewer was later removed and its difficult-review contract merged into Oracle. See the current [`README`](../../README.md) and [`CHANGELOG`](../../CHANGELOG.md). This plan retains its historical five-agent acceptance wording.
+
 ---
 
 ## 1. MVP-Lock

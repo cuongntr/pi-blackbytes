@@ -6,14 +6,12 @@ import { exploreDeclaration } from "../explore.js";
 import { generalDeclaration } from "../general.js";
 import { librarianDeclaration } from "../librarian.js";
 import { oracleDeclaration } from "../oracle.js";
-import { reviewerDeclaration } from "../reviewer.js";
 
 const BUILTIN_DECLARATIONS = [
   exploreDeclaration,
   oracleDeclaration,
   librarianDeclaration,
   generalDeclaration,
-  reviewerDeclaration,
 ];
 
 describe("builtin sub-agent metadata consistency", () => {

@@ -86,7 +86,7 @@ function buildConditionalWorkflowsBody(context: BytesPromptRenderContext): strin
     }
     if (context.enabledSubAgents.has("oracle")) {
       lines.push(
-        "  - You've failed a fix twice, or face a complex architecture question pre-implementation → Oracle.",
+        "  - You've failed a fix twice, face a complex architecture question, or need difficult/high-risk code review → Oracle (not for routine trivial review).",
       );
     }
     if (context.enabledSubAgents.has("general")) {
@@ -102,12 +102,6 @@ function buildConditionalWorkflowsBody(context: BytesPromptRenderContext): strin
         "  - User needs non-trivial external library/API behavior verified against multiple sources or official docs → Librarian.",
       );
     }
-    if (context.enabledSubAgents.has("reviewer")) {
-      lines.push(
-        "  - After significant implementation or before commit/PR → Reviewer for fresh-eyes review.",
-      );
-    }
-
     lines.push(
       "- **Cost awareness**: each delegation adds token/latency overhead. For tasks finishable in 1–2 direct tool calls, do it yourself.",
     );
@@ -116,9 +110,15 @@ function buildConditionalWorkflowsBody(context: BytesPromptRenderContext): strin
     );
   }
 
-  if (context.enabledSubAgents.has("reviewer")) {
+  if (context.enabledSubAgents.has("oracle")) {
     lines.push(
-      "- **Reviewer pre-fetch**: run `git diff --merge-base origin/HEAD HEAD` and pass the diff as `context`. The reviewer has no `bash`/`git` access.",
+      "- **Oracle review context**: pre-fetch the bounded diff and verification summary; Oracle has no `bash`/`git` access.",
+    );
+    const remediation = context.enabledSubAgents.has("general")
+      ? "Fix localized findings directly or group material findings into one General remediation"
+      : "Fix confirmed findings directly";
+    lines.push(
+      `- **Avoid review ping-pong**: default to one Oracle review pass per logical change. An architecture consultation does not automatically require post-implementation review and does not consume the justified review pass. ${remediation}; do not automatically re-review. Re-review only for High severity or a materially changed design/public/security contract, and close with deterministic verification.`,
     );
   }
 

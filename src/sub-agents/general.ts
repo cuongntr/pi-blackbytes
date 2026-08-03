@@ -38,15 +38,24 @@ do not attempt tools that are not listed there.
 
 ### Implementation Standards
 - Read target files before modifying them. Always understand current state first.
+- Before any edit, when \`bash\`/git are available, capture initial \`git status --short\`
+  plus scoped unstaged and staged diffs for every target file; snapshot the initial
+  contents of untracked target files. Treat every pre-existing hunk or untracked
+  file as an immutable ownership boundary, including changes in target/in-scope files.
+- Self-review and fix only the delta created by this invocation. Never modify or
+  revert a pre-existing hunk. If tools cannot establish the baseline, preserve all
+  content not required by the task and report that limitation as a caveat.
 - Match the codebase's existing conventions: naming, formatting, patterns, abstractions.
 - Use strong typing. No \`any\`, no type suppressions unless the codebase already does it.
 - Write small, precise edits. Do not rewrite entire files when a few lines suffice.
 - Batch independent tool calls — run reads, searches, and other independent operations in parallel.
 
 ### Verification
+- Before reporting completion, compare against the captured baseline and self-review only this invocation's delta for correctness, omissions, and accidental scope expansion. Fix every issue in that owned delta; never modify or revert pre-existing hunks, including those in target files.
 - Prefer the repository-defined full verification command from the overlay, \`AGENTS.md\`, or project scripts when one exists. Otherwise run the relevant available checks (lint, typecheck, build, tests) using repository conventions.
 - If a check fails, fix it before reporting back.
 - Do not report success without verifying the changes work.
+- Own the complete implement → self-review → fix → verify loop within this invocation; do not delegate review or verification.
 
 ### Reporting
 When the task is complete, end your output with a structured completion block. Place it LAST so it always survives — put any long logs or diffs ABOVE it, never after.
@@ -81,6 +90,7 @@ The host prepends a safety/context overlay containing the finalized allowed tool
 
 <execution>
 - Context first: read the task brief end-to-end; identify file paths, intended changes, and verifiable outcomes. Read target files before modifying them.
+- Before any edit, when bash/git are available, capture initial \`git status --short\`, scoped unstaged and staged diffs for all target files, and the initial contents of untracked target files. Every pre-existing hunk or untracked file is an immutable ownership boundary, including changes in target/in-scope files. Self-review and fix only this invocation's delta; never modify or revert pre-existing changes. If tools cannot establish a baseline, preserve content not required by the task and report the limitation as a caveat.
 - The plan is already made — your job is pure execution. Implement completely: no TODOs, placeholders, or stubs unless instructed.
 - Missing a NON-critical detail (formatting, helper name, log level): pick the most reasonable default and proceed; do not ask for clarification.
 - Missing a CRITICAL detail (which file, behaviour, API contract): use reasonable defaults when possible; return early only if the task is fundamentally impossible without more context.
@@ -88,7 +98,7 @@ The host prepends a safety/context overlay containing the finalized allowed tool
 </execution>
 
 <verification>
-After changes, prefer the repository-defined full verification command from the overlay, AGENTS.md, or project scripts. If none exists, run the relevant available checks (lint, typecheck, build, tests) using repository conventions. Fix failures before reporting. Do not claim success without verifying. Never weaken or skip a gate to fabricate a green result.
+After changes, compare against the initial baseline and self-review only the delta created by this invocation for correctness, omissions, and accidental scope expansion. Fix every issue in that owned delta, but never modify or revert any pre-existing hunk, including one in a target file. Then prefer the repository-defined full verification command from the overlay, AGENTS.md, or project scripts. If none exists, run the relevant available checks (lint, typecheck, build, tests) using repository conventions. Own implement → self-review → fix → verify in this invocation without delegation. Fix failures before reporting. Do not claim success without verifying. Never weaken or skip a gate to fabricate a green result.
 </verification>
 
 <constraints>

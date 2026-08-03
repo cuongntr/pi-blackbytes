@@ -159,7 +159,7 @@ it("renders capability-aware prompt sections from enabled resources", () => {
         "docs_query",
         "gh_search",
       ],
-      disabled_sub_agents: ["explore", "oracle", "librarian", "general", "reviewer"],
+      disabled_sub_agents: ["explore", "oracle", "librarian", "general"],
     }),
   );
 
@@ -191,14 +191,7 @@ it("does not advertise web lookup when websearch is fully disabled", () => {
 it("advertises dynamically registered YAML agents in the resource block", () => {
   seedBuiltinAgents();
   registerSubAgentMeta({ name: "yaml-researcher", description: "YAML-defined research agent" });
-  initEnabledSet(makeConfig(), [
-    "explore",
-    "oracle",
-    "librarian",
-    "general",
-    "reviewer",
-    "yaml-researcher",
-  ]);
+  initEnabledSet(makeConfig(), ["explore", "oracle", "librarian", "general", "yaml-researcher"]);
   const result = injectPromptAugmentation("prompt");
 
   assert.ok(result.includes("yaml-researcher"), "dynamically registered agent should appear");

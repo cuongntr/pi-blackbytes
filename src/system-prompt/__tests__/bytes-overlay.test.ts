@@ -6,7 +6,6 @@ import { exploreDeclaration } from "../../sub-agents/explore.js";
 import { generalDeclaration } from "../../sub-agents/general.js";
 import { librarianDeclaration } from "../../sub-agents/librarian.js";
 import { oracleDeclaration } from "../../sub-agents/oracle.js";
-import { reviewerDeclaration } from "../../sub-agents/reviewer.js";
 import { createBytesPromptRenderContext } from "../bytes/shared.js";
 import { renderBytesPrompt } from "../loader.js";
 
@@ -27,7 +26,6 @@ beforeEach(() => {
     oracleDeclaration,
     librarianDeclaration,
     generalDeclaration,
-    reviewerDeclaration,
   ]) {
     registerSubAgentMeta(declarationToMeta(decl));
   }
@@ -39,7 +37,7 @@ describe("bytes overlay rendering", () => {
       const prompt = renderPrompt(
         family,
         ["hashline_edit", "web_search", "web_fetch", "docs_resolve", "docs_query", "gh_search"],
-        ["explore", "oracle", "librarian", "general", "reviewer"],
+        ["explore", "oracle", "librarian", "general"],
       );
 
       assert.ok(prompt.includes("Precedence"));
@@ -53,7 +51,7 @@ describe("bytes overlay rendering", () => {
       assert.ok(prompt.includes("`explore`"));
       assert.ok(prompt.includes("`oracle`"));
       assert.ok(prompt.includes("`general`"));
-      assert.ok(prompt.includes("`reviewer`"));
+      assert.ok(prompt.includes("difficult/high-risk code review"));
     }
   });
 
@@ -116,13 +114,17 @@ describe("bytes overlay rendering", () => {
   });
 
   it("renders sub-agent trigger guidance only for enabled sub-agents", () => {
-    const withReviewer = renderPrompt("claude", [], ["reviewer"]);
-    assert.ok(withReviewer.includes("`reviewer`"));
-    assert.ok(!withReviewer.includes("`oracle`"));
-
     const withOracle = renderPrompt("claude", [], ["oracle"]);
     assert.ok(withOracle.includes("`oracle`"));
-    assert.ok(!withOracle.includes("`reviewer`"));
+    assert.ok(withOracle.includes("Oracle review context"));
+    assert.ok(withOracle.includes("default to one Oracle review pass"));
+    assert.ok(withOracle.includes("architecture consultation"));
+    assert.ok(withOracle.includes("does not automatically require post-implementation review"));
+    assert.ok(withOracle.includes("does not consume the justified review pass"));
+    assert.ok(withOracle.includes("Fix confirmed findings directly"));
+    assert.ok(!withOracle.includes("General remediation"));
+    assert.ok(withOracle.includes("do not automatically re-review"));
+    assert.ok(withOracle.includes("deterministic verification"));
 
     const withExplore = renderPrompt("claude", [], ["explore"]);
     assert.ok(withExplore.includes("`explore`"));
@@ -131,6 +133,13 @@ describe("bytes overlay rendering", () => {
     const withGeneral = renderPrompt("claude", [], ["general"]);
     assert.ok(withGeneral.includes("`general`"));
     assert.ok(!withGeneral.includes("`explore`"));
+    assert.ok(!withGeneral.includes("Oracle review pass"));
+    assert.ok(!withGeneral.includes("Avoid review ping-pong"));
+    assert.ok(!withGeneral.includes("architecture consultation"));
+
+    const withOracleAndGeneral = renderPrompt("claude", [], ["oracle", "general"]);
+    assert.ok(withOracleAndGeneral.includes("one General remediation"));
+    assert.ok(withOracleAndGeneral.includes("one Oracle review pass"));
   });
 
   it("omits delegation guidance when sub-agents are unavailable", () => {
@@ -144,7 +153,7 @@ describe("bytes overlay rendering", () => {
     assert.ok(!prompt.includes("`explore`"));
     assert.ok(!prompt.includes("`oracle`"));
     assert.ok(!prompt.includes("`general`"));
-    assert.ok(!prompt.includes("`reviewer`"));
+    assert.ok(!prompt.includes("Oracle review context"));
     assert.ok(prompt.includes("Hashline Edit Workflow"));
   });
 

@@ -44,7 +44,7 @@ describe("enabled-set", () => {
     assert.equal(set.tools.size, 10);
     assert.ok(set.subAgents.has("explore"));
     assert.ok(set.subAgents.has("oracle"));
-    assert.equal(set.subAgents.size, 5);
+    assert.equal(set.subAgents.size, 4);
     assert.ok(set.skills.has("implementing-beads"));
     assert.equal(set.skills.size, 9);
   });
@@ -70,7 +70,7 @@ describe("enabled-set", () => {
     assert.ok(!set.subAgents.has("explore"));
     assert.ok(!set.subAgents.has("oracle"));
     assert.ok(set.subAgents.has("librarian"));
-    assert.equal(set.subAgents.size, 3);
+    assert.equal(set.subAgents.size, 2);
   });
 
   it("computeEnabledSet accepts dynamic agent names", () => {
@@ -182,7 +182,7 @@ describe("enabled-set", () => {
           "docs_query",
           "gh_search",
         ],
-        disabled_sub_agents: ["explore", "oracle", "librarian", "general", "reviewer"],
+        disabled_sub_agents: ["explore", "oracle", "librarian", "general"],
       });
       const flags = derivePromptFeatureFlags(set.tools, set.subAgents);
 

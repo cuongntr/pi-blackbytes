@@ -8,7 +8,6 @@ import { exploreDeclaration } from "../explore.js";
 import { generalDeclaration } from "../general.js";
 import { librarianDeclaration } from "../librarian.js";
 import { oracleDeclaration } from "../oracle.js";
-import { reviewerDeclaration } from "../reviewer.js";
 
 beforeEach(() => {
   _resetSubAgentRegistry();
@@ -17,7 +16,6 @@ beforeEach(() => {
     oracleDeclaration,
     librarianDeclaration,
     generalDeclaration,
-    reviewerDeclaration,
   ]) {
     registerSubAgentMeta(declarationToMeta(decl));
   }

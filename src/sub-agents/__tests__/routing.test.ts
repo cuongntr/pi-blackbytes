@@ -66,15 +66,15 @@ describe("buildRoutingSummary", () => {
     assert.ok(result.includes("—"));
   });
 
-  it("includes all 5 builtins when all enabled", () => {
+  it("includes four builtins plus a YAML fixture when all enabled", () => {
     const metas = [
       makeMeta("explore", exploreRouting),
       makeMeta("general", { ...oracleRouting, category: "implementation" }),
       makeMeta("librarian", { ...oracleRouting, category: "research" }),
       makeMeta("oracle", oracleRouting),
-      makeMeta("reviewer", { ...exploreRouting, category: "review" }),
+      makeMeta("yaml-auditor", { ...exploreRouting, category: "review" }),
     ];
-    const all = new Set(["explore", "general", "librarian", "oracle", "reviewer"]);
+    const all = new Set(["explore", "general", "librarian", "oracle", "yaml-auditor"]);
     const result = buildRoutingSummary(metas, all);
     for (const name of all) {
       assert.ok(result.includes(name), `${name} must appear in summary`);

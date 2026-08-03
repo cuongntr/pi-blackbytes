@@ -1,5 +1,29 @@
 # Changelog
 
+## 3.0.0 (2026-08-03) — Four-Agent Delegation Model
+
+### Changed
+
+- Consolidate the builtin sub-agent set from five roles to four: Oracle now owns
+  difficult bounded code review while remaining read-only, and General owns the
+  complete implementation, final-diff self-review, in-scope fix, and verification
+  loop within one invocation.
+- Add capability-aware routing guidance that defaults to one Oracle judgment per
+  logical change, groups material remediation into at most one General pass, and
+  closes routine fixes with deterministic verification instead of automatic
+  re-review.
+
+### Removed
+
+- Remove the redundant builtin Reviewer persona and `delegate_reviewer` tool.
+
+### Migration
+
+- Replace `delegate_reviewer` calls with `delegate_oracle` and provide a bounded
+  diff plus verification results for difficult code reviews.
+- Move any still-needed `sub_agents.reviewer` model, reasoning, timeout, fallback,
+  or artifact settings to `sub_agents.oracle`; stale Reviewer settings are ignored.
+
 ## 2.23.0 (2026-07-31) — Observable Tool & Sub-Agent UI
 
 ### Added

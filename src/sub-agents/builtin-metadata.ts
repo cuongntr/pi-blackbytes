@@ -28,22 +28,22 @@ export const EXPLORE_METADATA = {
 export const ORACLE_METADATA = {
   name: "oracle",
   description:
-    "Delegate a hard reasoning or architecture problem to the Oracle " +
-    "sub-agent — a high-IQ read-only consultation specialist. " +
-    "The sub-agent has read-only access and uses elevated reasoning effort.",
+    "Delegate hard reasoning, architecture, or a difficult bounded code review to Oracle. " +
+    "It is read-only with no bash/git; provide the diff and verification results for reviews.",
   routing: {
     category: "reasoning",
     cost: "high",
     useWhen: [
       "Hard architecture or debugging decisions",
       "Security or performance trade-off analysis",
+      "Difficult or high-risk bounded code review",
       "After 2 failed attempts at solving a problem",
     ],
     avoidWhen: [
       "Simple questions answerable from local code",
       "Tasks that need file writes or bash execution",
     ],
-    keyTrigger: "Deep analytical reasoning on hard problems",
+    keyTrigger: "Deep reasoning or difficult high-risk code review",
   },
 } as const satisfies BuiltinSubAgentMetadata;
 
@@ -98,29 +98,9 @@ export const GENERAL_METADATA = {
   },
 } as const satisfies BuiltinSubAgentMetadata;
 
-export const REVIEWER_METADATA = {
-  name: "reviewer",
-  description:
-    "Delegate a code review to a read-only Reviewer that produces " +
-    "severity-classified findings (High/Medium/Low) and a verdict. " +
-    "Caller MUST include diff, patch, or changed-file list in `context`.",
-  routing: {
-    category: "review",
-    cost: "medium",
-    useWhen: [
-      "After significant implementation, before commits/PRs",
-      "When user asks for fresh eyes on changes",
-      "Pre-merge code quality and correctness check",
-    ],
-    avoidWhen: ["Trivial or single-line changes", "When no diff or change context is available"],
-    keyTrigger: "Severity-classified code review with verdict",
-  },
-} as const satisfies BuiltinSubAgentMetadata;
-
 export const BUILTIN_SUB_AGENT_METADATA = [
   EXPLORE_METADATA,
   ORACLE_METADATA,
   LIBRARIAN_METADATA,
   GENERAL_METADATA,
-  REVIEWER_METADATA,
 ] as const;

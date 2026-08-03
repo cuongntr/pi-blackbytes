@@ -4,6 +4,7 @@
 > **Spec**: `docs/specs/subagent-mechanism-hardening.md`
 > **Phase 1 status**: Complete (REQ-001, REQ-002, REQ-003 shipped)
 > **Date**: 2026-06-08
+> **Supersession (2026-08-03)**: The builtin Reviewer was later removed and its difficult-review contract merged into Oracle. See the current [`README`](../../README.md) and [`CHANGELOG`](../../CHANGELOG.md). Historical examples below describe the original phase.
 
 ## Scope
 

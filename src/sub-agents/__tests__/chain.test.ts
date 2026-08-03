@@ -62,7 +62,8 @@ function makeEnabledSet(names: readonly string[]): (agent: string) => boolean {
   return (agent: string) => set.has(agent);
 }
 
-const ALL_AGENTS = ["explore", "oracle", "librarian", "general", "reviewer"] as const;
+// Fifth name intentionally models a user-defined YAML agent for max-chain coverage.
+const ALL_AGENTS = ["explore", "oracle", "librarian", "general", "yaml-auditor"] as const;
 const DEFAULT_RESOLVER = makeResolver(
   Object.fromEntries(
     ALL_AGENTS.map((name) => [name, { systemPrompt: `system:${name}`, allowedTools: ["read"] }]),
@@ -157,7 +158,7 @@ describe("executeChain validation", () => {
             { agent: "oracle", question: "q2" },
             { agent: "librarian", question: "q3" },
             { agent: "general", question: "q4" },
-            { agent: "reviewer", question: "q5" },
+            { agent: "yaml-auditor", question: "q5" },
             { agent: "explore", question: "q6" },
           ],
           totalTimeoutMs: 60_000,
@@ -270,7 +271,7 @@ describe("executeChain sequential execution", () => {
       steps: [
         { agent: "explore", question: "first" },
         { agent: "oracle", question: "second" },
-        { agent: "reviewer", question: "third" },
+        { agent: "yaml-auditor", question: "third" },
       ],
       totalTimeoutMs: 60_000,
     });
@@ -279,7 +280,7 @@ describe("executeChain sequential execution", () => {
     assert.equal(result.steps.length, 3);
     assert.deepEqual(
       result.steps.map((s) => s.agent),
-      ["explore", "oracle", "reviewer"],
+      ["explore", "oracle", "yaml-auditor"],
     );
     assert.deepEqual(
       result.steps.map((s) => s.content),
@@ -402,7 +403,7 @@ describe("executeChain sequential execution", () => {
         { agent: "oracle", question: "q2" },
         { agent: "librarian", question: "q3" },
         { agent: "general", question: "q4" },
-        { agent: "reviewer", question: "q5" },
+        { agent: "yaml-auditor", question: "q5" },
       ],
       totalTimeoutMs: 60_000,
     });
@@ -432,7 +433,7 @@ describe("executeChain failure semantics", () => {
       steps: [
         { agent: "explore", question: "q1" },
         { agent: "oracle", question: "q2" },
-        { agent: "reviewer", question: "q3" },
+        { agent: "yaml-auditor", question: "q3" },
       ],
       totalTimeoutMs: 60_000,
     });
@@ -468,7 +469,7 @@ describe("executeChain failure semantics", () => {
       steps: [
         { agent: "explore", question: "q1" },
         { agent: "oracle", question: "q2" },
-        { agent: "reviewer", question: "q3" },
+        { agent: "yaml-auditor", question: "q3" },
       ],
       totalTimeoutMs: 60_000,
     });
@@ -501,7 +502,7 @@ describe("executeChain failure semantics", () => {
       steps: [
         { agent: "explore", question: "q1" },
         { agent: "oracle", question: "q2" },
-        { agent: "reviewer", question: "q3" },
+        { agent: "yaml-auditor", question: "q3" },
       ],
       totalTimeoutMs: 60_000,
     });
@@ -534,7 +535,7 @@ describe("executeChain timeout budgeting", () => {
       steps: [
         { agent: "explore", question: "q1" },
         { agent: "oracle", question: "q2" },
-        { agent: "reviewer", question: "q3" },
+        { agent: "yaml-auditor", question: "q3" },
       ],
       totalTimeoutMs: 60_000,
     });
@@ -619,7 +620,7 @@ describe("executeChain timeout budgeting", () => {
       steps: [
         { agent: "explore", question: "q1" },
         { agent: "oracle", question: "q2" },
-        { agent: "reviewer", question: "q3" },
+        { agent: "yaml-auditor", question: "q3" },
       ],
       totalTimeoutMs: 6_000,
     });
@@ -628,7 +629,7 @@ describe("executeChain timeout budgeting", () => {
     assert.equal(calls.length, 2);
     // Third step was synthesised as a controlled timed-out step.
     assert.equal(result.steps.length, 3);
-    assert.equal(result.steps[2]!.agent, "reviewer");
+    assert.equal(result.steps[2]!.agent, "yaml-auditor");
     assert.equal(result.steps[2]!.success, false);
     assert.equal(result.steps[2]!.failureKind, "timed_out");
     assert.ok(result.steps[2]!.content.includes("total timeout budget exhausted"));
@@ -661,7 +662,7 @@ describe("executeChain abort handling", () => {
       steps: [
         { agent: "explore", question: "q1" },
         { agent: "oracle", question: "q2" },
-        { agent: "reviewer", question: "q3" },
+        { agent: "yaml-auditor", question: "q3" },
       ],
       totalTimeoutMs: 60_000,
     });
@@ -734,7 +735,7 @@ describe("executeChain integration scenarios", () => {
       [
         { success: true, content: "explore-out", artifactPath: "/artifacts/explore.md" },
         failureResult("timed_out", "Nested Pi timed out", "stderr line"),
-        { success: true, content: "reviewer-out" },
+        { success: true, content: "auditor-out" },
       ],
       calls,
     );
@@ -748,7 +749,7 @@ describe("executeChain integration scenarios", () => {
       steps: [
         { agent: "explore", question: "q1" },
         { agent: "oracle", question: "q2" },
-        { agent: "reviewer", question: "q3" },
+        { agent: "yaml-auditor", question: "q3" },
       ],
       totalTimeoutMs: 60_000,
     });
@@ -764,7 +765,7 @@ describe("executeChain integration scenarios", () => {
     assert.equal(result.steps[1]!.details, "stderr line");
 
     assert.equal(result.steps[2]!.success, true);
-    assert.equal(result.steps[2]!.content, "reviewer-out");
+    assert.equal(result.steps[2]!.content, "auditor-out");
 
     // Continue-on-failure semantics: all 3 steps ran, none were stopped early.
     assert.equal(result.success, false);
@@ -778,7 +779,7 @@ describe("executeChain integration scenarios", () => {
       [
         successResult("EXPLORE_FINDINGS\nline1\nline2"),
         successResult("ORACLE_VERDICT: do X"),
-        successResult("REVIEWER_OK\napproved"),
+        successResult("AUDITOR_OK\napproved"),
       ],
       calls,
     );
@@ -789,7 +790,7 @@ describe("executeChain integration scenarios", () => {
       explore: { systemPrompt: "EXPLORE_SYS", allowedTools: ["read", "glob"] },
       oracle: { systemPrompt: "ORACLE_SYS", allowedTools: ["read"] },
       general: { systemPrompt: "GENERAL_SYS", allowedTools: ["read", "bash", "edit"] },
-      reviewer: { systemPrompt: "REVIEWER_SYS", allowedTools: ["read"] },
+      "yaml-auditor": { systemPrompt: "AUDITOR_SYS", allowedTools: ["read"] },
     });
 
     await executeChain({
@@ -801,7 +802,7 @@ describe("executeChain integration scenarios", () => {
         { agent: "explore", question: "find the bug" },
         { agent: "oracle", question: "analyse", context: "see prior findings" },
         { agent: "general", question: "fix it" },
-        { agent: "reviewer", question: "verify" },
+        { agent: "yaml-auditor", question: "verify" },
       ],
       totalTimeoutMs: 60_000,
     });
@@ -902,7 +903,7 @@ describe("executeChain integration scenarios", () => {
       steps: [
         { agent: "explore", question: "q1" },
         { agent: "oracle", question: "q2" },
-        { agent: "reviewer", question: "q3" },
+        { agent: "yaml-auditor", question: "q3" },
       ],
       totalTimeoutMs: 60_000,
     });
@@ -939,7 +940,7 @@ describe("executeChain integration scenarios", () => {
       steps: [
         { agent: "explore", question: "q1" },
         { agent: "oracle", question: "q2" },
-        { agent: "reviewer", question: "q3" },
+        { agent: "yaml-auditor", question: "q3" },
       ],
       totalTimeoutMs: 60_000,
     });

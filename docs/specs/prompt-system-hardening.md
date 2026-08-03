@@ -2,6 +2,7 @@
 
 > **Status**: ✅ Done
 > **Date**: 2026-05-26
+> **Supersession (2026-08-03)**: The builtin Reviewer was later removed and its difficult-review contract merged into Oracle. See the current [`README`](../../README.md) and [`CHANGELOG`](../../CHANGELOG.md). Historical wording below describes this phase as shipped.
 > **Goal**: Close concrete gaps in the 5 builtin sub-agent prompts surfaced by a side-by-side review against `../oc-blackbytes`, while preserving the existing runtime-overlay contract and avoiding prompt-size growth for default users.
 
 ---

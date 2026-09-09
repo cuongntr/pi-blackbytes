@@ -22,6 +22,11 @@
  * without losing user config.
  */
 
+import {
+  normalizeFallbackModels,
+  normalizeModelSelector,
+  normalizeReasoningEffort,
+} from "../config/model-settings.js";
 import type { BlackbytesConfig } from "../config/schema.js";
 import type { ModelOverrides, SubAgentDeclaration } from "./declaration.js";
 import {
@@ -42,15 +47,6 @@ const KNOWN_AGENT_FIELDS = new Set([
   "executionMode",
   "artifactCapture",
 ]);
-
-/** Pi CLI accepted thinking levels (packages/coding-agent/src/cli/args.ts). */
-const PI_VALID_THINKING_LEVELS = new Set(["off", "minimal", "low", "medium", "high", "xhigh"]);
-
-/** Coerce invalid legacy reasoning-effort values to undefined. */
-function normalizeReasoningEffort(value: string | undefined): string | undefined {
-  if (!value) return undefined;
-  return PI_VALID_THINKING_LEVELS.has(value) ? value : undefined;
-}
 
 /** Summarized allowed-tools for display in /blackbytes-status. */
 export type AllowedToolsSummary =
@@ -183,7 +179,7 @@ export function resolveAgentSnapshot(
 
   if (jsonForAgent && typeof jsonForAgent === "object") {
     const obj = jsonForAgent as Record<string, unknown>;
-    if (typeof obj.model === "string") jsonModel = obj.model;
+    if (typeof obj.model === "string") jsonModel = normalizeModelSelector(obj.model);
     if (typeof obj.reasoningEffort === "string") rawJsonReasoning = obj.reasoningEffort;
     if (isValidTimeoutMs(obj.timeoutMs)) jsonTimeoutMs = obj.timeoutMs;
     if (obj.temperature !== undefined) reserved.temperature = obj.temperature;
@@ -194,11 +190,8 @@ export function resolveAgentSnapshot(
       jsonExecutionMode = obj.executionMode;
     }
     if (typeof obj.artifactCapture === "boolean") jsonArtifactCapture = obj.artifactCapture;
-    if (
-      Array.isArray(obj.fallbackModels) &&
-      obj.fallbackModels.every((s: unknown) => typeof s === "string" && s.length > 0)
-    ) {
-      jsonFallbackModels = obj.fallbackModels as string[];
+    if (obj.fallbackModels !== undefined) {
+      jsonFallbackModels = normalizeFallbackModels(obj.fallbackModels as readonly string[]);
     }
     for (const [k, v] of Object.entries(obj)) {
       if (!KNOWN_AGENT_FIELDS.has(k)) extra[k] = v;
@@ -230,13 +223,13 @@ export function resolveAgentSnapshot(
     name: declaration.name,
     source: declaration.source ?? "builtin",
     sourcePath: declaration.sourcePath,
-    model: jsonModel ?? declDefaults.model,
+    model: jsonModel ?? normalizeModelSelector(declDefaults.model),
     reasoningEffort: jsonReasoning ?? defaultReasoning,
     timeoutMs: jsonTimeoutMs ?? declDefaults.timeoutMs,
     promptMode: jsonPromptMode ?? declaration.promptMode,
     executionMode: jsonExecutionMode ?? declaration.executionMode,
     artifactCapture: jsonArtifactCapture,
-    fallbackModels: jsonFallbackModels ?? declDefaults.fallbackModels,
+    fallbackModels: jsonFallbackModels ?? normalizeFallbackModels(declDefaults.fallbackModels),
     fallbackEligible,
     reserved: Object.freeze(reserved),
     extra: Object.freeze(extra),

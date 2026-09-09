@@ -1,11 +1,12 @@
 import * as fs from "node:fs/promises";
-import * as os from "node:os";
 import * as path from "node:path";
 import { Type } from "typebox";
 import { parse as parseYaml } from "yaml";
 import { z } from "zod";
 import { getEnabledSet } from "../config/enabled-set.js";
+import { normalizeModelSelector, normalizeReasoningEffort } from "../config/model-settings.js";
 import { getLogger } from "../shared/logger.js";
+import { getAgentHome } from "../shared/session-state.js";
 import { type SubAgentDeclaration, defineSubAgent } from "./declaration.js";
 import {
   type AgentMutability,
@@ -49,8 +50,11 @@ const YamlSubAgentSchema = z
     system_prompt: z.string().min(1),
     allowed_tools: z.array(z.string()).optional(),
     denied_tools: z.array(z.string()).optional(),
-    model: z.string().optional(),
-    reasoning_effort: z.string().optional(),
+    model: z.string().transform(normalizeModelSelector).optional(),
+    reasoning_effort: z
+      .string()
+      .transform((value): string | undefined => normalizeReasoningEffort(value))
+      .optional(),
     timeout_ms: z
       .number()
       .int("timeout_ms must be an integer")
@@ -76,7 +80,7 @@ const YamlSubAgentSchema = z
      * Mirrors `ModelOverrides.fallbackModels`. Folded into `staticOverrides` by the loader.
      */
     fallback_models: z
-      .array(z.string().min(1, "fallback_models entries must be non-empty strings"))
+      .array(z.string().trim().min(1, "fallback_models entries must be non-empty strings"))
       .max(5, "fallback_models must not exceed 5 entries")
       .refine((arr) => new Set(arr).size === arr.length, {
         message: "fallback_models must not contain duplicate entries",
@@ -103,11 +107,7 @@ type YamlSubAgentInput = z.infer<typeof YamlSubAgentSchema>;
 // ---------------------------------------------------------------------------
 
 function resolveSubAgentDir(): string {
-  const agentDir = process.env.PI_AGENT_DIR;
-  if (agentDir) {
-    return path.join(agentDir, "sub-agents");
-  }
-  return path.join(os.homedir(), ".pi", "agent", "sub-agents");
+  return path.join(getAgentHome().path, "sub-agents");
 }
 
 // ---------------------------------------------------------------------------
@@ -255,7 +255,7 @@ export interface LoadYamlDeclarationsResult {
 }
 
 /**
- * Loads YAML sub-agent declarations from `$PI_AGENT_DIR/sub-agents/*.yaml`.
+ * Loads YAML sub-agent declarations from `<selected agent home>/sub-agents/*.yaml`.
  * Invalid files are logged as warnings and skipped.
  * Duplicate names (against `reservedNames` builtins or earlier YAML files)
  * are skipped with diagnostics rather than throwing.

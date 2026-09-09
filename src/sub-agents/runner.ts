@@ -1,6 +1,7 @@
 import { spawn as nodeSpawn } from "node:child_process";
 import type { SpawnOptions } from "node:child_process";
 import { redactSecrets } from "../shared/redact.js";
+import { getAgentHome } from "../shared/session-state.js";
 import { captureArtifact } from "./artifacts.js";
 import type { DelegateResult, PiSessionEvent, RunNestedPiOptions } from "./types.js";
 
@@ -13,15 +14,7 @@ export type SpawnFn = (
   options: SpawnOptions,
 ) => ReturnType<typeof nodeSpawn>;
 
-const SAFE_ENV_VARS = [
-  "PATH",
-  "HOME",
-  "USER",
-  "SHELL",
-  "TERM",
-  "PI_AGENT_DIR",
-  "NODE_ENV",
-] as const;
+const SAFE_ENV_VARS = ["PATH", "HOME", "USER", "SHELL", "TERM", "NODE_ENV"] as const;
 
 const MAX_STREAM_CHARS = 8_192;
 const MAX_DISPLAY_DETAIL_CHARS = 6_144;
@@ -122,6 +115,9 @@ function buildSafeEnv(): Record<string, string> {
       env[key] = val;
     }
   }
+  const home = getAgentHome().path;
+  env.PI_CODING_AGENT_DIR = home;
+  env.PI_AGENT_DIR = home;
   // Always set depth to 1 for the child
   env.PI_NESTED_DEPTH = "1";
   return env;

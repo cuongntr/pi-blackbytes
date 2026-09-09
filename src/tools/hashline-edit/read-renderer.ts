@@ -12,6 +12,7 @@ import {
 } from "@earendil-works/pi-coding-agent";
 import { type Component, Container, Text } from "@earendil-works/pi-tui";
 import type { BlackbytesUiConfig } from "../../config/schema.js";
+import { getAgentHome } from "../../shared/session-state.js";
 import { renderLightweightToolResult } from "../_shared/lightweight-render.js";
 import { countLines, getTextOutput, stripTrailingNoticeLines } from "../_shared/tool-output.js";
 
@@ -237,7 +238,7 @@ export function registerCleanReadRenderer(
 ): void {
   let readOptions: { autoResizeImages?: boolean } = {};
   try {
-    const settings = SettingsManager.create(cwd, process.env.PI_AGENT_DIR);
+    const settings = SettingsManager.create(cwd, getAgentHome().path);
     readOptions = { autoResizeImages: settings.getImageAutoResize() };
   } catch {
     // ignore

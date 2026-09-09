@@ -1,6 +1,8 @@
 import { type EnabledSet, getEnabledSet } from "../config/enabled-set.js";
 import { loadBlackbytesConfig } from "../config/loader.js";
 import { getRegisteredSubAgents } from "../config/resource-metadata.js";
+import { getAgentHomeGuidance } from "../shared/agent-home-guidance.js";
+import { getAgentHome } from "../shared/session-state.js";
 import {
   getSystemPromptLogConfig,
   resolveSystemPromptLogPath,
@@ -180,7 +182,14 @@ function buildDiagnosticsSection(
   piAvailability: PiAvailabilityResult,
   artifactStats: ArtifactStats,
 ): string[] {
-  const lines: string[] = ["### Sub-Agent Diagnostics"];
+  const home = getAgentHome();
+  const lines: string[] = [
+    "### Sub-Agent Diagnostics",
+    `Agent home source: ${home.source}; alias conflict: ${home.conflict ? "yes" : "no"}.`,
+  ];
+  if (home.diagnostic) lines.push(home.diagnostic);
+  const guidance = getAgentHomeGuidance(home);
+  if (guidance) lines.push(guidance);
 
   // Pi availability
   const statusIcon =

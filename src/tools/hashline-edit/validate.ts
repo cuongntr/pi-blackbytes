@@ -149,7 +149,7 @@ export function normalizeLines(
         error: formatError(
           ERROR_CODES.E_INVALID_PATCH,
           `lines[${problem.index}] starts with a LINE#ID prefix, which should not be included in patch content`,
-          `Offending line: ${problem.preview}\n\nHint: drop the leading "LINE#ID|" — the tool only expects raw content. To restore the legacy silent-strip behaviour, set hashline_edit.strict_patch=false in ~/.pi/agent/settings.json.`,
+          `Offending line: ${problem.preview}\n\nHint: drop the leading "LINE#ID|" — the tool only expects raw content. To restore the legacy silent-strip behaviour, set blackbytes.hashline_edit.strict_patch=false in the selected Pi home's settings.json.`,
         ),
       };
     }

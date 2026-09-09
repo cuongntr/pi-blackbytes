@@ -1,8 +1,8 @@
 import type { Dirent } from "node:fs";
 import { mkdir, readdir, rm, stat, writeFile } from "node:fs/promises";
-import { homedir } from "node:os";
 import { join } from "node:path";
 import { redactSecrets } from "../shared/redact.js";
+import { getAgentHome } from "../shared/session-state.js";
 import type { DelegateFailureKind } from "./types.js";
 
 export const MAX_ARTIFACT_BYTES = 512 * 1024;
@@ -39,7 +39,7 @@ export interface CapturedArtifact {
 }
 
 function getAgentDir(): string {
-  return process.env.PI_AGENT_DIR ?? join(homedir(), ".pi", "agent");
+  return getAgentHome().path;
 }
 
 function formatDateSegment(date: Date): string {

@@ -27,7 +27,7 @@
   ],
   "scripts": {
     "build": "rm -rf dist && bun run build:js && bun run build:types",
-    "build:js": "bun build src/index.ts --outfile dist/index.js --target node --packages external",
+    "build:js": "bun build src/index.ts --outfile dist/index.js --target node --packages external && bun build src/sub-agents/sdk-child.ts --outfile dist/sdk-child.js --target node --packages external",
     "build:types": "tsc --emitDeclarationOnly",
     "typecheck": "tsc --noEmit",
     "test": "node scripts/run-tests.mjs",

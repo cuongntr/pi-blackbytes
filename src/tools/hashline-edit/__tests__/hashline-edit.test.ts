@@ -227,6 +227,15 @@ describe("hashline_edit", () => {
 
     assert.equal(result.success, false);
     assert.ok("error" in result && result.error.startsWith("[E_INVALID_PATCH]"));
+    assert.ok("error" in result);
+    assert.ok(
+      result.error.includes(
+        "set blackbytes.hashline_edit.strict_patch=false in the selected Pi home's settings.json",
+      ),
+    );
+    assert.ok(!result.error.includes("~/.pi/agent"));
+    assert.ok(!result.error.includes(tmpDir));
+    assert.ok(result.error.length < 600);
     // File untouched on rejection
     assert.equal(readTmp(), "foo\nbar\nbaz\n");
   });

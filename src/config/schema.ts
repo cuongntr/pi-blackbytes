@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { normalizeModelSelector, normalizeReasoningEffort } from "./model-settings.js";
 
 export const BlackbytesConfigSchema = z
   .object({
@@ -69,8 +70,11 @@ export const BlackbytesConfigSchema = z
         z.string(),
         z
           .object({
-            model: z.string().optional(),
-            reasoningEffort: z.string().optional(),
+            model: z.string().transform(normalizeModelSelector).optional(),
+            reasoningEffort: z
+              .string()
+              .transform((value): string | undefined => normalizeReasoningEffort(value))
+              .optional(),
             timeoutMs: z
               .number()
               .int("timeoutMs must be an integer")
@@ -78,7 +82,7 @@ export const BlackbytesConfigSchema = z
               .max(3_600_000, "timeoutMs must not exceed 3600000 (1 hour)")
               .optional(),
             fallbackModels: z
-              .array(z.string().min(1, "fallbackModels entries must be non-empty strings"))
+              .array(z.string().trim().min(1, "fallbackModels entries must be non-empty strings"))
               .max(5, "fallbackModels must not exceed 5 entries")
               .refine((arr) => new Set(arr).size === arr.length, {
                 message: "fallbackModels must not contain duplicate entries",

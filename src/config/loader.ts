@@ -1,7 +1,7 @@
 import * as fs from "node:fs/promises";
-import * as os from "node:os";
 import * as path from "node:path";
 import { createLogger } from "../shared/logger.js";
+import { getAgentHome } from "../shared/session-state.js";
 import { type BlackbytesConfig, parseBlackbytesConfig } from "./schema.js";
 
 const logger = createLogger();
@@ -14,11 +14,7 @@ let cachedConfig: BlackbytesConfig | undefined;
 let cachedConfigAt = 0;
 let cachedConfigPath: string | undefined;
 function resolveSettingsPath(): string {
-  const agentDir = process.env.PI_AGENT_DIR;
-  if (agentDir) {
-    return path.join(agentDir, "settings.json");
-  }
-  return path.join(os.homedir(), ".pi", "agent", "settings.json");
+  return path.join(getAgentHome().path, "settings.json");
 }
 
 function getDefaults(): BlackbytesConfig {
@@ -39,7 +35,7 @@ export async function loadBlackbytesConfig(): Promise<BlackbytesConfig> {
   const settingsPath = resolveSettingsPath();
 
   // Serve from cache if still within TTL (disabled in test mode for isolation).
-  // The cache is keyed by settings path so callers that swap PI_AGENT_DIR don't
+  // The cache is keyed by settings path so callers that select another home don't
   // observe stale config from a different agent directory.
   if (
     cachedConfig &&

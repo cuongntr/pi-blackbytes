@@ -1,14 +1,15 @@
 import * as fs from "node:fs";
 import * as fsPromises from "node:fs/promises";
-import * as os from "node:os";
 import * as path from "node:path";
 import type { ExtensionAPI, ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
+import { clearConfigCache } from "../config/loader.js";
 import {
   SUB_AGENTS,
   type SubAgentMeta,
   getRegisteredSubAgents,
 } from "../config/resource-metadata.js";
 import { createLogger } from "../shared/logger.js";
+import { getAgentHome } from "../shared/session-state.js";
 import { type AgentSnapshot, getAgentSnapshot } from "../sub-agents/snapshot.js";
 
 const logger = createLogger();
@@ -75,11 +76,7 @@ interface ModelChoice {
 }
 
 function resolveSettingsPath(): string {
-  const agentDir = process.env.PI_AGENT_DIR;
-  if (agentDir) {
-    return path.join(agentDir, "settings.json");
-  }
-  return path.join(os.homedir(), ".pi", "agent", "settings.json");
+  return path.join(getAgentHome().path, "settings.json");
 }
 
 async function readSettingsFile(
@@ -798,7 +795,7 @@ export function registerSetupModelsCommand(pi: ExtensionAPI): void {
 
       if (models.length === 0) {
         notify(
-          "Pi has no available configured models. You can still clear existing Blackbytes model overrides, but configure models with Pi first (for example /model, /login, or ~/.pi/agent/models.json) before assigning new mappings.",
+          "Pi has no available configured models. You can still clear existing Blackbytes model overrides, but configure models with Pi first (for example /model, /login, or models.json in the selected Pi home) before assigning new mappings.",
           "warning",
         );
       }
@@ -1101,6 +1098,7 @@ export function registerSetupModelsCommand(pi: ExtensionAPI): void {
         fs.mkdirSync(dir, { recursive: true });
 
         atomicWriteJson(settingsPath, newSettings);
+        clearConfigCache();
 
         logger.info("setup-models: model mappings written", {
           path: settingsPath,

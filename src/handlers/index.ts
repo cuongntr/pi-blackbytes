@@ -10,12 +10,13 @@ import type {
 } from "@earendil-works/pi-coding-agent";
 import { setupBranding } from "../branding.js";
 import { getEnabledSet, initEnabledSet } from "../config/enabled-set.js";
-import { loadBlackbytesConfig } from "../config/loader.js";
+import { clearConfigCache, loadBlackbytesConfig } from "../config/loader.js";
 import { registerSubAgentMeta } from "../config/resource-metadata.js";
 import { getHashlineEditConfig, getUiConfig } from "../config/schema.js";
+import { getAgentHomeGuidance } from "../shared/agent-home-guidance.js";
 import { getLogger } from "../shared/logger.js";
 import { setModelFamily } from "../shared/model-capability.js";
-import { resetSessionRuntimeState } from "../shared/session-state.js";
+import { initSessionAgentHome, resetSessionRuntimeState } from "../shared/session-state.js";
 import {
   captureAgentStartSystemPrompt,
   captureProviderSystemPrompts,
@@ -74,7 +75,15 @@ export async function handleSessionStart(
   // in the same process (e.g. tests, restarts) and against a previous
   // partial/failed startup leaving stale singletons.
   resetSessionRuntimeState();
+  clearConfigCache();
+  const agentHome = initSessionAgentHome();
+  if (agentHome.diagnostic) logger.warn(agentHome.diagnostic);
   const config = await loadBlackbytesConfig();
+  const homeGuidance = getAgentHomeGuidance(agentHome);
+  if (homeGuidance) {
+    logger.warn(homeGuidance);
+    if (_ctx.hasUI) _ctx.ui.notify(homeGuidance, "warning");
+  }
 
   // Load YAML declarations and combine with builtins
   // Builtin names are reserved — YAML files claiming the same name are skipped with diagnostics.

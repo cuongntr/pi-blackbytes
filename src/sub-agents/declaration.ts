@@ -1,4 +1,9 @@
 import type { TObject } from "typebox";
+import {
+  normalizeFallbackModels,
+  normalizeModelSelector,
+  normalizeReasoningEffort,
+} from "../config/model-settings.js";
 import type { SubAgentMeta } from "../config/resource-metadata.js";
 import type { ModelFamily } from "../shared/model-capability.js";
 import type { AgentMutability, FinalizeMode } from "./delegable-tools.js";
@@ -86,7 +91,7 @@ export interface SubAgentDeclaration<
 
   /**
    * Origin of the declaration. `"builtin"` for code-defined agents, `"yaml"`
-   * for declarations loaded from `$PI_AGENT_DIR/sub-agents/*.yaml`. Used by
+   * for declarations loaded from `<selected agent home>/sub-agents/*.yaml`. Used by
    * the snapshot + `/blackbytes-status` so users can see where each agent
    * comes from. Defaults to `"builtin"` when omitted.
    */
@@ -155,7 +160,17 @@ export interface SubAgentDeclaration<
 export function defineSubAgent<TParams extends Record<string, unknown>>(
   declaration: SubAgentDeclaration<TParams>,
 ): SubAgentDeclaration<TParams> {
-  return Object.freeze(declaration);
+  return Object.freeze({
+    ...declaration,
+    staticOverrides: declaration.staticOverrides
+      ? Object.freeze({
+          ...declaration.staticOverrides,
+          model: normalizeModelSelector(declaration.staticOverrides.model),
+          reasoningEffort: normalizeReasoningEffort(declaration.staticOverrides.reasoningEffort),
+          fallbackModels: normalizeFallbackModels(declaration.staticOverrides.fallbackModels),
+        })
+      : undefined,
+  });
 }
 
 /** Derives a {@link SubAgentMeta} from a declaration for runtime registration. */

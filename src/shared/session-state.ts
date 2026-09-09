@@ -16,13 +16,28 @@ import { _resetSubAgentRegistry } from "../config/resource-metadata.js";
 import { resetDelegationLog } from "../sub-agents/delegation-log.js";
 import { _resetYamlDiagnostics } from "../sub-agents/diagnostics.js";
 import { _resetAgentSnapshot } from "../sub-agents/snapshot.js";
+import { type AgentHome, resolveStartupAgentHome } from "./agent-home.js";
 import { _resetModelFamily } from "./model-capability.js";
+
+let agentHome: AgentHome | undefined;
+
+/** Stable during a session; pre-session callers share the startup-cwd resolver. */
+export function getAgentHome(): AgentHome {
+  return agentHome ?? resolveStartupAgentHome();
+}
+
+/** Called once after the session reset, before any asynchronous startup work. */
+export function initSessionAgentHome(): AgentHome {
+  agentHome ??= resolveStartupAgentHome();
+  return agentHome;
+}
 
 /**
  * Resets all in-memory session-scoped runtime state. Idempotent; safe to call
  * even when nothing has been initialized yet.
  *
  * Cleared:
+ *   - Selected agent-home snapshot (startup cwd remains process-scoped)
  *   - EnabledSet (tools / sub-agents / skills / disabledTools)
  *   - Per-agent runtime snapshot (model/reasoning/reserved/extra)
  *   - Sub-agent metadata registry (consumed by prompt feature flags)
@@ -34,6 +49,7 @@ import { _resetModelFamily } from "./model-capability.js";
  *   - Beads database, JSONL session logs
  */
 export function resetSessionRuntimeState(): void {
+  agentHome = undefined;
   _resetEnabledSet();
   _resetAgentSnapshot();
   _resetSubAgentRegistry();

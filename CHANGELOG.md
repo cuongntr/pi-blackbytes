@@ -1,5 +1,16 @@
 # Changelog
 
+## 3.1.1 (2026-10-07)
+
+### Fixed
+
+- `/blackbytes-status` Sub-Agent Diagnostics now explains why the nested Pi
+  availability probe did not run in seat mode (`seat mode: nested pi probing
+  disabled`) instead of showing a bare `unknown`.
+- Publish workflow upgrades npm before `npm publish` so OIDC trusted publishing
+  works on the Node 22 runner (npm 10.x cannot mint the OIDC token), and can be
+  re-run manually via `workflow_dispatch`.
+
 ## 3.1.0 (2026-10-07) — Seat Mode & Pi 1.x Compatibility
 
 ### Added

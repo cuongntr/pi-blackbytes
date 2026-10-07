@@ -11,6 +11,12 @@ export interface PiAvailabilityResult {
 
 export type PiAvailabilityProbe = () => Promise<{ available: boolean; error?: string }>;
 
+/** Fixed result for seat mode: the probe never runs, so the answer is always "unknown". */
+const SEAT_MODE_RESULT: PiAvailabilityResult = Object.freeze({
+  status: "unknown",
+  hint: "seat mode: nested pi probing disabled",
+});
+
 let cachedResult: PiAvailabilityResult | undefined;
 let inflightProbe: Promise<PiAvailabilityResult> | undefined;
 
@@ -24,9 +30,7 @@ export async function checkPiAvailability(
   probeFn: PiAvailabilityProbe = defaultProbe,
 ): Promise<PiAvailabilityResult> {
   if (cachedResult) return cachedResult;
-  if (isSeatMode()) {
-    return { status: "unknown", hint: "seat mode: nested pi probing disabled" };
-  }
+  if (isSeatMode()) return SEAT_MODE_RESULT;
 
   inflightProbe ??= runPiAvailabilityProbe(probeFn).finally(() => {
     inflightProbe = undefined;
@@ -55,7 +59,8 @@ async function runPiAvailabilityProbe(probeFn: PiAvailabilityProbe): Promise<PiA
  * Return cached result without probing. Returns "unknown" if no probe has run.
  */
 export function getCachedPiAvailability(): PiAvailabilityResult {
-  return cachedResult ?? { status: "unknown" };
+  if (cachedResult) return cachedResult;
+  return isSeatMode() ? SEAT_MODE_RESULT : { status: "unknown" };
 }
 
 /**

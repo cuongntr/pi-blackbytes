@@ -9,7 +9,11 @@ import { _resetEnabledSet, getEnabledSet } from "../../config/enabled-set.js";
 import { clearConfigCache } from "../../config/loader.js";
 import { _resetSubAgentRegistry } from "../../config/resource-metadata.js";
 import { captureArtifact, cleanupArtifacts } from "../../sub-agents/artifacts.js";
-import { _resetPiAvailability, checkPiAvailability } from "../../sub-agents/pi-availability.js";
+import {
+  _resetPiAvailability,
+  checkPiAvailability,
+  getCachedPiAvailability,
+} from "../../sub-agents/pi-availability.js";
 import type { SpawnFn } from "../../sub-agents/runner.js";
 import { runNestedPi } from "../../sub-agents/runner.js";
 import { createMockPi } from "../../test-utils/pi-mock.js";
@@ -174,6 +178,8 @@ describe("integration: seat mode (PASEO_ROOM_ROLE set)", () => {
     });
     assert.equal(probeCalls, 0, "availability probe must not run");
     assert.equal(probe.status, "unknown");
+    assert.match(probe.hint ?? "", /seat mode/);
+    assert.match(getCachedPiAvailability().hint ?? "", /seat mode/);
   });
 
   it("does not write or clean artifacts", async () => {

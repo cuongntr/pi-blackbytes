@@ -4,7 +4,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import type { BlackbytesConfig } from "../config/schema.js";
-import { getLogger } from "./logger.js";
+import { getLogger, resolveDefaultLogDir } from "./logger.js";
 
 export interface SystemPromptLogConfig {
   readonly enabled: boolean;
@@ -34,12 +34,11 @@ interface SystemPromptLogEntry {
   readonly prompt: string;
 }
 
-const DEFAULT_LOG_PATH = path.join(
-  os.homedir(),
-  ".pi",
-  "logs",
-  "pi-blackbytes-system-prompts.jsonl",
-);
+const LOG_FILE_NAME = "pi-blackbytes-system-prompts.jsonl";
+
+function defaultLogPath(): string {
+  return path.join(resolveDefaultLogDir(), LOG_FILE_NAME);
+}
 
 const DEFAULT_CONFIG: SystemPromptLogConfig = {
   enabled: false,
@@ -74,7 +73,7 @@ export function resolveSystemPromptLogPath(
   configuredPath: string | undefined,
   cwd: string,
 ): string {
-  if (!configuredPath) return DEFAULT_LOG_PATH;
+  if (!configuredPath) return defaultLogPath();
   const expanded = expandHome(configuredPath);
   return path.isAbsolute(expanded) ? expanded : path.resolve(cwd, expanded);
 }

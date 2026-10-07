@@ -13,7 +13,7 @@ Blackbytes extends Pi with:
 - **Four builtin sub-agents** — Explore (with Tour Mode for flow walk-throughs), Oracle (including difficult code, plan, and architecture review), Librarian, and General (implementation, self-review, and verification), each with typed declarations, routing metadata, runtime overlays, model fallback chains (read-only agents), per-model-family prompt variants, and per-agent configuration.
 - **Typed routing metadata** — each sub-agent declaration carries a `SubAgentRoutingMetadata` object with `category`, `cost`, `useWhen`, `avoidWhen`, and optional `keyTrigger` fields. This metadata drives the Bytes overlay routing matrix and the `/blackbytes-status` Sub-Agent Routing section, replacing hardcoded routing prose.
 - **Delegation ROI tracking** — in-memory session-scoped delegation log with per-agent metrics (call count, success rate, average duration, cost). Visible via `/blackbytes-status`.
-- **Redacted artifact capture** — opt-in per-agent persistence of large redacted sub-agent outputs to `$PI_AGENT_DIR/blackbytes/artifacts/sub-agents/<YYYY-MM-DD>/<agent>-<HHmmssSSS>.md` (512 KiB cap, 7-day retention). Surfaces the artifact directory, total count, and most recent artifact under `/blackbytes-status` Sub-Agent Diagnostics. Enable with `sub_agents.<name>.artifactCapture: true`.
+- **Redacted artifact capture** — opt-in per-agent persistence of large redacted sub-agent outputs to `<agent dir>/blackbytes/artifacts/sub-agents/<YYYY-MM-DD>/<agent>-<HHmmssSSS>.md` (512 KiB cap, 7-day retention). Surfaces the artifact directory, total count, and most recent artifact under `/blackbytes-status` Sub-Agent Diagnostics. Enable with `sub_agents.<name>.artifactCapture: true`.
 - **Sequential chain executor (internal-only)** — `src/sub-agents/chain.ts` runs 1–5 existing sub-agents in order, threading each step's output into the next under a `## Previous step output` heading. Reuses `runNestedPi()`, enforces a total timeout budget, and stops on first failure by default. **No public `delegate_chain` tool in Phase 2** — chains are constructed in code.
 - **`look_at` tool** — multimodal image inspector that loads a primary image plus up to 3 references (PNG/JPG/GIF/WebP/BMP/SVG, 10 MB each) and embeds them as `ImageContent` blocks alongside the analysis objective.
 - **Fluent `file://` links** — sub-agent output uses `[relpath#L-L](file:///abs/path#L-L)` links throughout.
@@ -47,7 +47,7 @@ Run the setup wizard after installation:
 /setup-models
 ```
 
-The wizard maps Blackbytes sub-agents to models that Pi already has available in its model registry. Provider credentials and model availability remain Pi-level concerns (for example `/model`, `/login`, or `~/.pi/agent/models.json`); Blackbytes only stores per-sub-agent overrides in `~/.pi/agent/settings.json` (or `$PI_AGENT_DIR/settings.json`).
+The wizard maps Blackbytes sub-agents to models that Pi already has available in its model registry. Provider credentials and model availability remain Pi-level concerns (for example `/model`, `/login`, or `~/.pi/agent/models.json`); Blackbytes only stores per-sub-agent overrides in the current Pi agent directory's `settings.json` (see [Agent directory resolution](#agent-directory-resolution)).
 
 ## Pi commands
 
@@ -219,7 +219,7 @@ Blackbytes reads the top-level `blackbytes` object from the Pi settings file.
 | `context7.api_key` | `string` | Context7 credential |
 | `ui` | `{ bash_wrapper_enabled?: boolean; bash_max_preview_lines?: number; bash_max_expanded_lines?: number; bash_dim_output?: boolean; read_tool_display?: "compact" \| "preview" }` | Controls the built-in `bash` wrapper and built-in `read` display. Defaults: `bash_wrapper_enabled=true`, `bash_max_preview_lines=5`, `bash_max_expanded_lines=200`, `bash_dim_output=false`, `read_tool_display="compact"`. |
 | `system_prompt_log.enabled` | `boolean` | Opt-in full system-prompt capture to a JSONL file. Defaults to `false` because prompts may contain project context or secrets. |
-| `system_prompt_log.path` | `string` | Optional log file path. Defaults to `~/.pi/logs/pi-blackbytes-system-prompts.jsonl`; relative paths resolve against the current working directory. |
+| `system_prompt_log.path` | `string` | Optional log file path. Defaults to `~/.pi/logs/pi-blackbytes-system-prompts.jsonl` (or `<agent dir>/logs/…` in seat mode); relative paths resolve against the current working directory. |
 | `system_prompt_log.capture_agent_start` | `boolean` | Capture Pi's final effective system prompt at `agent_start` (after `before_agent_start` chaining). Defaults to `true`. |
 | `system_prompt_log.capture_provider_system` | `boolean` | Also capture provider-serialized system/developer/systemInstruction fields at `before_provider_request`. Defaults to `false`; user messages are not logged by the extractor. |
 | `system_prompt_log.include_nested` | `boolean` | Include nested sub-agent Pi sessions (`PI_NESTED_DEPTH > 0`). Defaults to `false`. |
@@ -294,7 +294,7 @@ When `blackbytes.ui.bash_wrapper_enabled` is true, Pi's built-in `bash` tool ren
 
 ### YAML sub-agents
 
-User-defined sub-agents can be placed in `$PI_AGENT_DIR/sub-agents/*.{yaml,yml}` (defaulting to `~/.pi/agent/sub-agents/`). Each file must define `name`, `description`, and `system_prompt`. Tool access is optional via either `allowed_tools` or `denied_tools` (mutually exclusive); when neither is provided the agent receives the default read/search/docs tool set.
+User-defined sub-agents can be placed in `<agent dir>/sub-agents/*.{yaml,yml}` (defaulting to `~/.pi/agent/sub-agents/`; see [Agent directory resolution](#agent-directory-resolution)). Each file must define `name`, `description`, and `system_prompt`. Tool access is optional via either `allowed_tools` or `denied_tools` (mutually exclusive); when neither is provided the agent receives the default read/search/docs tool set.
 
 Additional optional YAML fields: `model`, `reasoning_effort`, `timeout_ms`, `mutability`, `prompt_mode`, `fallback_models`, `execution_mode`, `routing`.
 
@@ -553,6 +553,33 @@ Each delegation is logged to an in-memory, session-scoped log tracking:
 - Estimated cost (when available from usage tracking)
 
 The log resets on each session restart. View the current session's delegation metrics via `/blackbytes-status` → **Delegation ROI**, which shows per-agent aggregates: call count, success rate, average duration, and accumulated cost.
+
+## Agent directory resolution
+
+Blackbytes resolves the Pi agent directory once per lookup, in this order:
+
+1. `PI_CODING_AGENT_DIR` — the variable Pi 1.x itself reads
+2. `PI_AGENT_DIR` — legacy name, still honoured when it is the only one set
+3. `~/.pi/agent`
+
+Settings (`settings.json`), YAML sub-agents, artifact capture, the `read` renderer settings, and the environment passed to nested Pi sessions all use this resolved directory. If both variables are set and point to different places, `PI_CODING_AGENT_DIR` wins and `/blackbytes-status` shows a path-free conflict note.
+
+## Running inside paseo-room
+
+When Pi runs as a seat inside a paseo-room, the room is the orchestrator. Blackbytes detects this from a non-empty `PASEO_ROOM_ROLE` environment variable (every role is treated the same) and switches to **seat mode**:
+
+- **No sub-agents.** No `delegate_*` tool is registered, including YAML-defined agents. The nested-Pi runner, chain executor, and the `pi --version` availability probe all refuse in code, so a nested `pi` is never spawned regardless of prompt content.
+- **No system-prompt override.** `before_agent_start` returns `undefined`, so the Bytes identity, delegation guidance, and `<available_resources>` block are not injected and Pi keeps the host's prompt.
+- **No artifact I/O.** Sub-agent artifact capture and startup cleanup are skipped.
+- **Logs stay in the seat.** The extension log and the optional system-prompt log default to `<agent dir>/logs/` instead of `~/.pi/logs/`. Nothing is read or written outside the seat's Pi directory and the working repository.
+- **Everything else works.** `hashline_edit` (with `read` result rewriting), `ast_search`/`ast_replace`, `glob`, `look_at`, `web_search`/`web_fetch`, `docs_resolve`/`docs_query`, `gh_search`, and the `read`/`bash` wrappers are registered as usual, and `disabled_tools` is honoured. `/setup-models` writes only to the current agent directory's `settings.json`; `/blackbytes-status` shows `seat mode (role=<role>)` and lists what is disabled.
+
+There is intentionally no configuration option to re-enable sub-agents in seat mode. A typical seat launch:
+
+```bash
+PI_CODING_AGENT_DIR=/path/to/seat/agent PASEO_ROOM_ROLE=lead \
+  pi --mode rpc --no-session --no-extensions --extension ./dist/index.js --no-approve
+```
 
 ## Development
 

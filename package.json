@@ -3,7 +3,7 @@
   "keywords": [
     "pi-package"
   ],
-  "version": "3.0.0",
+  "version": "3.1.0",
   "type": "module",
   "engines": {
     "node": ">=22.19.0"
@@ -45,8 +45,8 @@
     "zod": "^4"
   },
   "peerDependencies": {
-    "@earendil-works/pi-coding-agent": ">=0.83.0 <1",
-    "@earendil-works/pi-tui": ">=0.83.0 <1",
+    "@earendil-works/pi-coding-agent": ">=0.83.0 <2",
+    "@earendil-works/pi-tui": ">=0.83.0 <2",
     "typebox": "*"
   },
   "overrides": {

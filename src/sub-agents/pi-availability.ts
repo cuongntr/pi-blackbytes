@@ -1,5 +1,6 @@
 import { spawn } from "node:child_process";
 import { redactSecrets } from "../shared/redact.js";
+import { isSeatMode } from "../shared/seat-mode.js";
 
 export type PiAvailability = "available" | "unavailable" | "unknown";
 
@@ -23,6 +24,9 @@ export async function checkPiAvailability(
   probeFn: PiAvailabilityProbe = defaultProbe,
 ): Promise<PiAvailabilityResult> {
   if (cachedResult) return cachedResult;
+  if (isSeatMode()) {
+    return { status: "unknown", hint: "seat mode: nested pi probing disabled" };
+  }
 
   inflightProbe ??= runPiAvailabilityProbe(probeFn).finally(() => {
     inflightProbe = undefined;

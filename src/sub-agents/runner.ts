@@ -1,6 +1,8 @@
 import { spawn as nodeSpawn } from "node:child_process";
 import type { SpawnOptions } from "node:child_process";
+import { getAgentHomePath } from "../shared/agent-home.js";
 import { redactSecrets } from "../shared/redact.js";
+import { isSeatMode } from "../shared/seat-mode.js";
 import { captureArtifact } from "./artifacts.js";
 import type { DelegateResult, PiSessionEvent, RunNestedPiOptions } from "./types.js";
 
@@ -13,15 +15,7 @@ export type SpawnFn = (
   options: SpawnOptions,
 ) => ReturnType<typeof nodeSpawn>;
 
-const SAFE_ENV_VARS = [
-  "PATH",
-  "HOME",
-  "USER",
-  "SHELL",
-  "TERM",
-  "PI_AGENT_DIR",
-  "NODE_ENV",
-] as const;
+const SAFE_ENV_VARS = ["PATH", "HOME", "USER", "SHELL", "TERM", "NODE_ENV"] as const;
 
 const MAX_STREAM_CHARS = 8_192;
 const MAX_DISPLAY_DETAIL_CHARS = 6_144;
@@ -122,6 +116,11 @@ function buildSafeEnv(): Record<string, string> {
       env[key] = val;
     }
   }
+  // Forward the resolved agent home under both names: Pi 1.x reads
+  // PI_CODING_AGENT_DIR; older Blackbytes-aware tooling may read PI_AGENT_DIR.
+  const home = getAgentHomePath();
+  env.PI_CODING_AGENT_DIR = home;
+  env.PI_AGENT_DIR = home;
   // Always set depth to 1 for the child
   env.PI_NESTED_DEPTH = "1";
   return env;
@@ -131,6 +130,15 @@ export async function runNestedPi(
   opts: RunNestedPiOptions,
   spawnFn: SpawnFn = nodeSpawn,
 ): Promise<DelegateResult> {
+  // Seat-mode guard: a paseo-room seat must never spawn a nested `pi`.
+  if (isSeatMode()) {
+    return {
+      success: false,
+      content: "Nested Pi invocation refused: seat mode (PASEO_ROOM_ROLE is set)",
+      failureKind: "recursion_refused",
+    };
+  }
+
   // Recursion guard
   const currentDepth = Number.parseInt(process.env.PI_NESTED_DEPTH ?? "0", 10);
   if (currentDepth >= 1) {

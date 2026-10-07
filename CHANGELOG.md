@@ -1,5 +1,32 @@
 # Changelog
 
+## 3.1.0 (2026-10-07) — Seat Mode & Pi 1.x Compatibility
+
+### Added
+
+- **Seat mode** for running inside a paseo-room: when `PASEO_ROOM_ROLE` is
+  non-empty (any role), Blackbytes registers no `delegate_*` tools (builtin or
+  YAML), never spawns a nested `pi` (runner, chain executor, and availability
+  probe all refuse in code), leaves the host system prompt untouched
+  (`before_agent_start` returns `undefined`), skips sub-agent artifact capture
+  and cleanup, and writes logs only under `<agent dir>/logs/`. Non-agent tools
+  (`hashline_edit`, `ast_*`, `glob`, `look_at`, `web_*`, `docs_*`, `gh_search`,
+  the `read`/`bash` wrappers) and `disabled_tools` keep working. `/blackbytes-status`
+  shows `seat mode (role=<role>)` and lists what is disabled.
+- Shared `getAgentHome()` resolver (`src/shared/agent-home.ts`) that honours
+  Pi 1.x's `PI_CODING_AGENT_DIR`, then the legacy `PI_AGENT_DIR`, then
+  `~/.pi/agent`, with a path-free conflict diagnostic when both are set and
+  differ. `/blackbytes-status` reports the resolved agent dir and its source.
+
+### Changed
+
+- All agent-directory lookups (settings loader, `/setup-models`, YAML sub-agent
+  loader, artifact store, `read` renderer settings, nested-Pi environment) now go
+  through `getAgentHome()`. Nested sessions receive the resolved directory under
+  both `PI_CODING_AGENT_DIR` and `PI_AGENT_DIR`.
+- `peerDependencies` on `@earendil-works/pi-coding-agent` and
+  `@earendil-works/pi-tui` widened to `>=0.83.0 <2`; verified against Pi 1.0.4.
+
 ## 3.0.0 (2026-08-03) — Four-Agent Delegation Model
 
 ### Changed

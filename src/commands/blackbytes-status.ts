@@ -1,6 +1,8 @@
 import { type EnabledSet, getEnabledSet } from "../config/enabled-set.js";
 import { loadBlackbytesConfig } from "../config/loader.js";
 import { getRegisteredSubAgents } from "../config/resource-metadata.js";
+import { getAgentHome } from "../shared/agent-home.js";
+import { SEAT_MODE_DISABLED_FEATURES, getSeatRole } from "../shared/seat-mode.js";
 import {
   getSystemPromptLogConfig,
   resolveSystemPromptLogPath,
@@ -343,11 +345,22 @@ async function buildStatusSections(
   const agentCount = enabledSet ? enabledSet.subAgents.size : 0;
   const skillCount = enabledSet ? enabledSet.skills.size : 0;
 
+  const seatRole = getSeatRole();
+  const agentHome = getAgentHome();
   const overviewLines = [
     "## Blackbytes Status",
     "",
     `Tools: **${toolCount}** enabled | Agents: **${agentCount}** enabled | Skills: **${skillCount}** enabled`,
+    `Agent dir: \`${agentHome.path}\` (from ${agentHome.source})${agentHome.conflict ? ` — ${agentHome.diagnostic}` : ""}`,
   ];
+  if (seatRole !== undefined) {
+    overviewLines.push(
+      `Mode: **seat mode (role=${seatRole})**`,
+      "",
+      "Disabled in seat mode:",
+      ...SEAT_MODE_DISABLED_FEATURES.map((f) => `- ${f}`),
+    );
+  }
 
   const routingLines: string[] = ["### Sub-Agent Routing"];
   if (enabledSet) {

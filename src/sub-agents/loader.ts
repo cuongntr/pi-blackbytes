@@ -1,10 +1,10 @@
 import * as fs from "node:fs/promises";
-import * as os from "node:os";
 import * as path from "node:path";
 import { Type } from "typebox";
 import { parse as parseYaml } from "yaml";
 import { z } from "zod";
 import { getEnabledSet } from "../config/enabled-set.js";
+import { getAgentHomePath } from "../shared/agent-home.js";
 import { getLogger } from "../shared/logger.js";
 import { type SubAgentDeclaration, defineSubAgent } from "./declaration.js";
 import {
@@ -103,11 +103,7 @@ type YamlSubAgentInput = z.infer<typeof YamlSubAgentSchema>;
 // ---------------------------------------------------------------------------
 
 function resolveSubAgentDir(): string {
-  const agentDir = process.env.PI_AGENT_DIR;
-  if (agentDir) {
-    return path.join(agentDir, "sub-agents");
-  }
-  return path.join(os.homedir(), ".pi", "agent", "sub-agents");
+  return path.join(getAgentHomePath(), "sub-agents");
 }
 
 // ---------------------------------------------------------------------------

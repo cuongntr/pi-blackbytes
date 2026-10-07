@@ -62,7 +62,7 @@ All tools and sub-agents are registered in `handleSessionStart()` (`src/handlers
 5. Add `routing` metadata to the declaration (category, cost, useWhen, avoidWhen, keyTrigger)
 6. Update the hardcoded agent-name lists in the affected test files (see `src/config/__tests__/enabled-set.test.ts` for the pattern)
 
-**User-defined sub-agents** are loaded from YAML files in `$PI_AGENT_DIR/sub-agents/*.{yaml,yml}` via `loadYamlDeclarations()`. Conflicts with builtins or earlier YAML files in the same directory are skipped with a diagnostic (not fatal); `/blackbytes-status` surfaces all skipped files and reasons.
+**User-defined sub-agents** are loaded from YAML files in `<agent dir>/sub-agents/*.{yaml,yml}` via `loadYamlDeclarations()`. Conflicts with builtins or earlier YAML files in the same directory are skipped with a diagnostic (not fatal); `/blackbytes-status` surfaces all skipped files and reasons.
 
 ### Tool name conventions
 
@@ -73,9 +73,15 @@ Tool names use `snake_case` everywhere (for example `web_search`, `docs_resolve`
 - prompt documentation
 - tests and config examples
 
+### Agent directory and seat mode
+
+The Pi agent directory is resolved by `getAgentHome()` in `src/shared/agent-home.ts`: `PI_CODING_AGENT_DIR` (what Pi 1.x reads) → `PI_AGENT_DIR` (legacy) → `~/.pi/agent`. Every path lookup (settings loader, `/setup-models`, YAML loader, artifacts, `read` renderer, nested-Pi env) must go through it; never read `process.env.PI_AGENT_DIR` directly.
+
+**Seat mode** (`src/shared/seat-mode.ts`, active when `PASEO_ROOM_ROLE` is non-empty) is enforced in code, not by prompt text: `handleSessionStart()` loads/registers no sub-agent declarations and skips artifact cleanup; `handleBeforeAgentStart()` returns `undefined`; `runNestedPi()`, `checkPiAvailability()`, `captureArtifact()`, and `cleanupArtifacts()` short-circuit; `resolveDefaultLogDir()` points at `<agent dir>/logs`. Non-agent tools and `disabled_tools` are unaffected. Do not add a config option that re-enables sub-agents in seat mode. Tests: `src/__tests__/integration/seat-mode.test.ts`, `src/shared/__tests__/{agent-home,seat-mode}.test.ts`.
+
 ### Config
 
-Config lives in `~/.pi/agent/settings.json` (or `$PI_AGENT_DIR/settings.json`) under the top-level `blackbytes` key. Schema: `src/config/schema.ts`.
+Config lives in `<agent dir>/settings.json` (see above; default `~/.pi/agent/settings.json`) under the top-level `blackbytes` key. Schema: `src/config/schema.ts`.
 
 Core settings:
 
@@ -94,7 +100,7 @@ Core settings:
 - `sub_agents.<name>.fallbackModels` (read-only agents only; string[], max 5, unique, non-empty; YAML uses `fallback_models`. `general` and mutating YAML agents are ineligible)
 - `sub_agents.<name>.executionMode` (`"sequential"` / `"parallel"`; YAML uses `execution_mode`)
 - `sub_agents.<name>.promptMode` (RESERVED — `"static"` is the only safe value; `"append"` throws at runtime ("not yet supported"); YAML uses `prompt_mode`)
-- `sub_agents.<name>.artifactCapture` (boolean, default `false`; opt-in persistence of large redacted sub-agent outputs to `$PI_AGENT_DIR/blackbytes/artifacts/sub-agents/<YYYY-MM-DD>/<agent>-<HHmmssSSS>.md`. Capped at 512 KiB per artifact (`MAX_ARTIFACT_BYTES`); outputs under 1 KiB after redaction are skipped; YAML uses `artifact_capture`)
+- `sub_agents.<name>.artifactCapture` (boolean, default `false`; opt-in persistence of large redacted sub-agent outputs to `<agent dir>/blackbytes/artifacts/sub-agents/<YYYY-MM-DD>/<agent>-<HHmmssSSS>.md`. Capped at 512 KiB per artifact (`MAX_ARTIFACT_BYTES`); outputs under 1 KiB after redaction are skipped; YAML uses `artifact_capture`)
 - `sub_agents.<name>.temperature` (RESERVED — accepted by schema for forward-compat but NOT passed to the nested Pi CLI; see `/blackbytes-status`)
 
 Tool rendering: all Blackbytes tools and sub-agents render through a single lightweight, borderless renderer (Claude-style `⏺` call line + `⎿` result indent). There is no on/off toggle. To leave Pi's built-in `bash` untouched, set `blackbytes.ui.bash_wrapper_enabled=false` (it defaults to `true`).
@@ -155,7 +161,7 @@ Tool icons are unique per tool to avoid visual ambiguity when scanning call line
 
 ## Key constraints
 
-- Peer dependencies: `@earendil-works/pi-coding-agent@>=0.74.0 <1`, `@earendil-works/pi-tui@>=0.74.0 <1`, `typebox@*`
+- Peer dependencies: `@earendil-works/pi-coding-agent@>=0.83.0 <2`, `@earendil-works/pi-tui@>=0.83.0 <2`, `typebox@*` (verified on Pi 0.83.0 and 1.0.4)
 - Node `>=20`
 - Package budget: `< 500KB` gzipped
 - Dependencies stay minimal: `zod`, `fast-glob`, `yaml`

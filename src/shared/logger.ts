@@ -2,6 +2,8 @@ import * as fsSync from "node:fs";
 import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
+import { getAgentHomePath } from "./agent-home.js";
+import { isSeatMode } from "./seat-mode.js";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -193,17 +195,27 @@ function todayString(): string {
   return new Date().toISOString().slice(0, 10); // "YYYY-MM-DD"
 }
 
+/**
+ * Default log directory.
+ *
+ * - Seat mode (`PASEO_ROOM_ROLE` set): `<agent dir>/logs`, so nothing is written
+ *   outside the seat's own Pi directory.
+ * - Otherwise: `~/.pi/logs` (legacy behaviour, unchanged).
+ */
+export function resolveDefaultLogDir(): string {
+  if (isSeatMode()) {
+    return path.join(getAgentHomePath(), "logs");
+  }
+  try {
+    return path.join(os.homedir(), ".pi", "logs");
+  } catch {
+    return os.tmpdir();
+  }
+}
+
 function resolveLogDir(opts?: LoggerOptions): string {
   if (opts?.logDir) return opts.logDir;
-
-  // Prefer ~/.pi/logs
-  try {
-    const preferred = path.join(os.homedir(), ".pi", "logs");
-    // Quick sync check: if parent is writable we'll use it (actual dir created on first flush)
-    return preferred;
-  } catch {
-    return path.join(os.tmpdir());
-  }
+  return resolveDefaultLogDir();
 }
 
 // ---------------------------------------------------------------------------

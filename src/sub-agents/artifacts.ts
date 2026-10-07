@@ -1,8 +1,9 @@
 import type { Dirent } from "node:fs";
 import { mkdir, readdir, rm, stat, writeFile } from "node:fs/promises";
-import { homedir } from "node:os";
 import { join } from "node:path";
+import { getAgentHomePath } from "../shared/agent-home.js";
 import { redactSecrets } from "../shared/redact.js";
+import { isSeatMode } from "../shared/seat-mode.js";
 import type { DelegateFailureKind } from "./types.js";
 
 export const MAX_ARTIFACT_BYTES = 512 * 1024;
@@ -39,7 +40,7 @@ export interface CapturedArtifact {
 }
 
 function getAgentDir(): string {
-  return process.env.PI_AGENT_DIR ?? join(homedir(), ".pi", "agent");
+  return getAgentHomePath();
 }
 
 function formatDateSegment(date: Date): string {
@@ -117,6 +118,7 @@ function boundArtifactText(header: string, content: string): { text: string; tru
 export async function captureArtifact(
   options: CaptureArtifactOptions,
 ): Promise<CapturedArtifact | undefined> {
+  if (isSeatMode()) return undefined;
   const redactedContent = redactSecrets(options.content);
   if (redactedContent.length < MIN_ARTIFACT_CHARS) return undefined;
 
@@ -265,6 +267,7 @@ export async function getArtifactStats(): Promise<ArtifactStats> {
 }
 
 export async function cleanupArtifacts(now = new Date()): Promise<number> {
+  if (isSeatMode()) return 0;
   const baseDir = join(getAgentDir(), "blackbytes", "artifacts", "sub-agents");
   const cutoffMs = now.getTime() - RETENTION_DAYS * 24 * 60 * 60 * 1000;
   let removed = 0;

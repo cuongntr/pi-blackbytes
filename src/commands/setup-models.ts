@@ -1,6 +1,5 @@
 import * as fs from "node:fs";
 import * as fsPromises from "node:fs/promises";
-import * as os from "node:os";
 import * as path from "node:path";
 import type { ExtensionAPI, ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
 import {
@@ -8,6 +7,7 @@ import {
   type SubAgentMeta,
   getRegisteredSubAgents,
 } from "../config/resource-metadata.js";
+import { getAgentHomePath } from "../shared/agent-home.js";
 import { createLogger } from "../shared/logger.js";
 import { type AgentSnapshot, getAgentSnapshot } from "../sub-agents/snapshot.js";
 
@@ -75,11 +75,7 @@ interface ModelChoice {
 }
 
 function resolveSettingsPath(): string {
-  const agentDir = process.env.PI_AGENT_DIR;
-  if (agentDir) {
-    return path.join(agentDir, "settings.json");
-  }
-  return path.join(os.homedir(), ".pi", "agent", "settings.json");
+  return path.join(getAgentHomePath(), "settings.json");
 }
 
 async function readSettingsFile(

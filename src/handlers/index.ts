@@ -15,6 +15,7 @@ import { registerSubAgentMeta } from "../config/resource-metadata.js";
 import { getHashlineEditConfig, getUiConfig } from "../config/schema.js";
 import { getLogger } from "../shared/logger.js";
 import { setModelFamily } from "../shared/model-capability.js";
+import { getSeatRole, isSeatMode } from "../shared/seat-mode.js";
 import { resetSessionRuntimeState } from "../shared/session-state.js";
 import {
   captureAgentStartSystemPrompt,
@@ -76,13 +77,23 @@ export async function handleSessionStart(
   resetSessionRuntimeState();
   const config = await loadBlackbytesConfig();
 
+  // Seat mode (paseo-room): Blackbytes must not create a second orchestration
+  // path. No sub-agent declarations are loaded or registered (builtin or YAML),
+  // no nested `pi` is ever spawned, and no artifact cleanup touches disk.
+  const seatMode = isSeatMode();
+  if (seatMode) {
+    logger.info("Seat mode active: sub-agents disabled", { role: getSeatRole() });
+  }
+
   // Load YAML declarations and combine with builtins
   // Builtin names are reserved — YAML files claiming the same name are skipped with diagnostics.
   assertUniqueNames(BUILTIN_DECLARATIONS.map((d) => d.name));
   const builtinNames = BUILTIN_DECLARATIONS.map((d) => d.name);
-  const { declarations: yamlDeclarations, diagnostics } = await loadYamlDeclarations(builtinNames);
-  setYamlDiagnostics(diagnostics);
-  const allDeclarations = [...BUILTIN_DECLARATIONS, ...yamlDeclarations];
+  const { declarations: yamlDeclarations, diagnostics } = seatMode
+    ? { declarations: [], diagnostics: undefined }
+    : await loadYamlDeclarations(builtinNames);
+  if (diagnostics) setYamlDiagnostics(diagnostics);
+  const allDeclarations = seatMode ? [] : [...BUILTIN_DECLARATIONS, ...yamlDeclarations];
   // allDeclarations is now guaranteed unique: builtins are unique (asserted above),
   // and loader already deduped yaml against builtins + earlier yaml files.
   const allNames = allDeclarations.map((d) => d.name);
@@ -98,11 +109,13 @@ export async function handleSessionStart(
   }
 
   const uiConfig = getUiConfig(config);
-  void cleanupArtifacts().catch((error: unknown) => {
-    logger.warn("Sub-agent artifact cleanup failed", {
-      error: error instanceof Error ? error.message : String(error),
+  if (!seatMode) {
+    void cleanupArtifacts().catch((error: unknown) => {
+      logger.warn("Sub-agent artifact cleanup failed", {
+        error: error instanceof Error ? error.message : String(error),
+      });
     });
-  });
+  }
 
   // Local tools
   registerHashlineEditTool(pi, { strictPatch: getHashlineEditConfig(config).strict_patch });
@@ -121,7 +134,8 @@ export async function handleSessionStart(
 
   registerBuiltinWrappers(pi, { cwd: _ctx.cwd ?? process.cwd(), ui: uiConfig });
 
-  // Sub-agent delegates — declaration-driven registration
+  // Sub-agent delegates — declaration-driven registration.
+  // In seat mode allDeclarations is empty, so no delegate_* tool is registered.
   for (const decl of allDeclarations) {
     registerSubAgentMeta(declarationToMeta(decl));
     registerSubAgent(pi, decl, { subAgentDisplay: uiConfig.sub_agent_display });
@@ -134,12 +148,21 @@ export async function handleSessionStart(
 export async function handleBeforeAgentStart(
   event: BeforeAgentStartEvent,
   ctx: ExtensionContext,
-): Promise<BeforeAgentStartResult> {
+): Promise<BeforeAgentStartResult | undefined> {
   const modelId = ctx.model?.id;
   if (modelId) {
     setModelFamily(modelId);
   }
-  return { systemPrompt: injectPromptAugmentation(event.systemPrompt, modelId) };
+  // Seat mode: leave the host's system prompt untouched. Returning undefined
+  // (not `{ systemPrompt }`) means Pi does not treat our value as mandatory.
+  if (isSeatMode()) {
+    return undefined;
+  }
+  const augmented = injectPromptAugmentation(event.systemPrompt, modelId);
+  if (augmented === event.systemPrompt) {
+    return undefined;
+  }
+  return { systemPrompt: augmented };
 }
 
 export async function handleAgentStart(
